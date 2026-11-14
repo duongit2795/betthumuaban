@@ -340,7 +340,7 @@ class BotHandler
             switch ($cmd) {
                 case 'help':
                     $line = fn(string $k) => Commands::names($k) ? $c($k) . ' – ' . tg_esc(Commands::config()[$k]['description']) : null;
-                    $t = "📖 <b>Lệnh thành viên</b>\n" . implode("\n", array_filter(array_map($line, ['rules', 'me', 'top', 'info', 'id'])));
+                    $t = "📖 <b>Lệnh thành viên</b>\n" . implode("\n", array_filter(array_map($line, ['rules', 'me', 'top', 'info', 'amnesty', 'id'])));
                     $custom = Rules::helpLines($gid, $isAdmin);
                     if ($custom) $t .= "\n\n✨ <b>Lệnh riêng của nhóm</b>\n" . implode("\n", $custom);
                     if ($isAdmin) {
@@ -365,6 +365,9 @@ class BotHandler
                         if ($tm) $target = $tm;
                     }
                     $this->reply($msg, $this->profileText($group, $s, $target));
+                    return;
+                case 'amnesty':
+                    $this->reply($msg, $this->amnestyText($group, $msg), $this->webButton('🕊 Mở trang Ân xá', '/amnesty'));
                     return;
                 case 'top':
                     $rows = DB::all("SELECT * FROM tg_members WHERE group_id = ? AND is_bot = 0 AND status <> 'banned' AND points > 0 ORDER BY points DESC, messages DESC LIMIT 10", [$gid]);
@@ -526,6 +529,23 @@ class BotHandler
             $this->reply($msg, '✅ Đã liên kết Telegram với tài khoản web <b>' . tg_esc($u['username']) . '</b>. Bây giờ bạn có thể xem điểm của mình trên web.');
             return;
         }
+        if ($key === 'balance') {
+            $u = DB::get('SELECT * FROM app_users WHERE tg_user_id = ? AND disabled = 0', [$from['id']]);
+            if (!$u) { $this->reply($msg, "💳 Bạn chưa có tài khoản web liên kết với Telegram.\nĐăng nhập web bằng Telegram (" . $c('login') . " MÃ) để có ví và nạp tiền."); return; }
+            $wc = Wallet::config();
+            $t = "💳 <b>Ví của bạn</b>\n💰 Số dư: <b>" . Wallet::money((int)$u['balance']) . '</b>';
+            if ($wc['enabled'] && $wc['account_no']) {
+                $t .= "\n\n🏦 <b>Nạp tiền</b> (" . tg_esc(Wallet::BANKS[$wc['bank']] ?? $wc['bank']) . ")\nSố TK: <code>{$wc['account_no']}</code>" . ($wc['account_name'] ? "\nChủ TK: " . tg_esc($wc['account_name']) : '')
+                    . "\nNội dung: <code>" . Wallet::code($u) . "</code>\nTối thiểu: " . Wallet::money($wc['min']) . ($wc['has_api'] ? "\n⚡ Tiền tự cộng sau 1–2 phút." : '');
+            }
+            $pun = [];
+            foreach (DB::all('SELECT m.*, g.title FROM tg_members m JOIN tg_groups g ON g.id = m.group_id WHERE g.active = 1 AND m.tg_user_id = ? AND ' . Amnesty::punishedSql('m'), [$from['id']]) as $m) {
+                foreach (Amnesty::punishments($m) as $k => $desc) $pun[] = '• ' . tg_esc($m['title']) . ': ' . tg_esc($desc) . ' — ân xá ' . Wallet::money(Amnesty::config()['prices'][$k]);
+            }
+            if ($pun && Amnesty::config()['enabled']) $t .= "\n\n🕊 <b>Có thể ân xá</b>\n" . implode("\n", $pun);
+            $this->reply($msg, $t, $this->webButton('💳 Mở ví trên web', '/wallet'));
+            return;
+        }
         if ($key === 'pme') {
             $rows = DB::all('SELECT m.*, g.title FROM tg_members m JOIN tg_groups g ON g.id = m.group_id WHERE m.tg_user_id = ? ORDER BY m.points DESC LIMIT 20', [$from['id']]);
             if (!$rows) { $this->reply($msg, 'Bạn chưa có dữ liệu trong nhóm nào.'); return; }
@@ -540,13 +560,43 @@ class BotHandler
             . (Commands::names('login') ? '🔐 Đăng nhập web: ' . $c('login') . " MÃ (lấy mã ở trang đăng nhập)\n" : '')
             . (Commands::names('link') ? '🔗 Liên kết tài khoản web: ' . $c('link') . " MÃ\n" : '')
             . (Commands::names('pme') ? '⭐ Xem điểm: ' . $c('pme') . "\n" : '')
+            . (Commands::names('balance') ? '💳 Số dư ví: ' . $c('balance') . "\n" : '')
             . "\nID của bạn: <code>{$from['id']}</code>");
     }
 
     // ---------- Tiện ích ----------
-    private function reply(array $msg, string $text): void
+    private function reply(array $msg, string $text, array $extra = []): void
     {
-        $this->api->trySend($msg['chat']['id'], $text, ['reply_parameters' => ['message_id' => $msg['message_id'], 'allow_sending_without_reply' => true]]);
+        $this->api->trySend($msg['chat']['id'], $text, ['reply_parameters' => ['message_id' => $msg['message_id'], 'allow_sending_without_reply' => true]] + $extra);
+    }
+
+    /** Nút mở 1 trang trên web (chỉ khi web có https, Telegram mới chấp nhận) */
+    private function webButton(string $label, string $path): array
+    {
+        $url = site_url();
+        if (!str_starts_with($url, 'https://')) return [];
+        return ['reply_markup' => ['inline_keyboard' => [[['text' => $label, 'url' => $url . '/#' . $path]]]]];
+    }
+
+    /** Nội dung lệnh /anxa trong nhóm */
+    private function amnestyText(array $group, array $msg): string
+    {
+        $cfg = Amnesty::config();
+        if (!$cfg['enabled']) return '🕊 Tính năng ân xá chưa được bật.';
+        $t = "🕊 <b>ÂN XÁ THÀNH VIÊN</b>\nDùng số dư ví trên web để gỡ hình phạt cho mình hoặc người khác.\n\n💰 <b>Bảng giá</b>";
+        foreach (Amnesty::KINDS as $k => [, $label, $icon]) {
+            if ($cfg['prices'][$k] > 0) $t .= "\n$icon $label: <b>" . Wallet::money($cfg['prices'][$k]) . '</b>';
+        }
+        $from = $msg['reply_to_message']['from'] ?? null;
+        if ($from && empty($from['is_bot'])) {
+            $m = Repo::member((int)$group['id'], $from['id']);
+            $p = $m ? Amnesty::punishments($m, $cfg) : [];
+            $t .= "\n\n👤 " . ($m ? Repo::mention($m) : tg_esc($from['first_name'] ?? '')) . ': ';
+            $t .= $p ? implode(', ', array_map(fn($k, $d) => tg_esc($d) . ' (' . Wallet::money($cfg['prices'][$k]) . ')', array_keys($p), $p)) : 'không có hình phạt nào.';
+        }
+        if ($cfg['note'] !== '') $t .= "\n\nℹ️ " . tg_esc($cfg['note']);
+        $t .= "\n\n💳 Nạp tiền & ân xá tại: " . tg_esc(site_url()) . '/#/amnesty';
+        return $t;
     }
 
     private function del($chatId, $messageId): void

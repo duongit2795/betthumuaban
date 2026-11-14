@@ -96,11 +96,24 @@ class Api
             'system/update' => 'doUpdate',
             'system/migrate' => 'migrate',
             'system/test-update-notice' => 'testUpdateNotice',
+            'wallet' => 'wallet',
+            'wallet/check' => 'walletCheck',
+            'amnesty' => 'amnesty',
+            'amnesty/search' => 'amnestySearch',
+            'amnesty/do' => 'amnestyDo',
+            'payments' => 'payments',
+            'payments/save' => 'paymentsSave',
+            'payments/test' => 'paymentsTest',
+            'payments/sync' => 'paymentsSync',
+            'payments/assign' => 'paymentsAssign',
+            'payments/ignore' => 'paymentsIgnore',
+            'users/balance' => 'userBalance',
+            'users/tx' => 'userTx',
         ];
         $writeRoutes = ['install', 'auth/login', 'auth/register', 'auth/logout', 'me/update', 'me/link-code', 'me/unlink'];
         if (!isset($map[$route])) fail('Không tìm thấy API', 404);
         $fn = $map[$route];
-        $isWrite = in_array($route, $writeRoutes, true) || str_contains($route, '/') && !in_array($route, ['system/check-update', 'chat/poll', 'ads/image'], true);
+        $isWrite = in_array($route, $writeRoutes, true) || str_contains($route, '/') && !in_array($route, ['system/check-update', 'chat/poll', 'ads/image', 'amnesty/search', 'users/tx'], true);
         if ($isWrite && $this->method !== 'POST') fail('Phương thức không hợp lệ', 405);
         json_out(['ok' => true, 'data' => $this->$fn()]);
     }
@@ -117,6 +130,7 @@ class Api
             'site_name' => $inst ? Settings::get('site_name') : 'Tele Manager',
             'allow_register' => $inst ? Settings::get('allow_register') === '1' : false,
             'tg_login' => $inst && TgLogin::enabled() ? ['bots' => TgLogin::bots(), 'cmd' => Commands::name('login')] : null,
+            'pay' => $inst ? ['wallet' => Wallet::config()['enabled'] && Wallet::config()['account_no'] !== '', 'amnesty' => Amnesty::config()['enabled']] : null,
             'version' => APP_VERSION,
             'php' => PHP_VERSION,
             'checks' => $inst ? null : [
@@ -1524,5 +1538,251 @@ class Api
         Auth::requireAdmin();
         DB::migrate();
         return ['schema' => DB::SCHEMA_VERSION];
+    }
+
+    // ================= Ví & nạp tiền =================
+    private function txRow(array $t): array
+    {
+        return [
+            'id' => (int)$t['id'],
+            'amount' => (int)$t['amount'],
+            'balance_after' => (int)$t['balance_after'],
+            'type' => $t['type'],
+            'type_label' => Wallet::TYPES[$t['type']] ?? $t['type'],
+            'note' => $t['note'],
+            'ref' => $t['ref'],
+            'created_at' => (int)$t['created_at'],
+        ];
+    }
+
+    private function wallet(): array
+    {
+        $u = Auth::requireUser();
+        $c = Wallet::config();
+        $before = $this->int('before');
+        $rows = DB::all('SELECT * FROM wallet_tx WHERE user_id = ?' . ($before ? ' AND id < ' . $before : '') . ' ORDER BY id DESC LIMIT 30', [$u['id']]);
+        $amount = max(0, $this->int('amount'));
+        return [
+            'balance' => Wallet::balance((int)$u['id']),
+            'enabled' => $c['enabled'] && $c['account_no'] !== '',
+            'auto' => $c['enabled'] && $c['has_api'],
+            'bank' => $c['bank'],
+            'bank_name' => Wallet::BANKS[$c['bank']] ?? $c['bank'],
+            'account_no' => $c['account_no'],
+            'account_name' => $c['account_name'],
+            'code' => Wallet::code($u),
+            'min' => $c['min'],
+            'qr' => Wallet::qrUrl($u, $amount),
+            'last_sync' => $c['last_sync'],
+            'history' => array_map([$this, 'txRow'], $rows),
+            'has_more' => count($rows) === 30,
+            'stats' => [
+                'deposit' => (int)DB::val("SELECT COALESCE(SUM(amount),0) FROM wallet_tx WHERE user_id = ? AND type = 'deposit'", [$u['id']]),
+                'spent' => -(int)DB::val("SELECT COALESCE(SUM(amount),0) FROM wallet_tx WHERE user_id = ? AND type = 'amnesty'", [$u['id']]),
+            ],
+        ];
+    }
+
+    /** "Tôi đã chuyển khoản": đồng bộ ngay (giới hạn 1 lần / 10 giây / người) */
+    private function walletCheck(): array
+    {
+        $u = Auth::requireUser();
+        $before = Wallet::balance((int)$u['id']);
+        $key = 'pay_check_' . $u['id'];
+        $last = (int)($_SESSION[$key] ?? 0);
+        if (now() - $last >= 10) {
+            $_SESSION[$key] = now();
+            if (now() - (int)Wallet::config()['last_sync'] >= 5) Wallet::sync(true);
+        }
+        $after = Wallet::balance((int)$u['id']);
+        return ['balance' => $after, 'added' => $after - $before];
+    }
+
+    // ================= Ân xá =================
+    private function amnestyMember(array $m, array $cfg, ?array $group = null): array
+    {
+        $row = $this->memberRow($m);
+        $row['group_title'] = $group['title'] ?? $m['title'] ?? null;
+        $row['punishments'] = [];
+        foreach (Amnesty::punishments($m, $cfg) as $k => $desc) {
+            $row['punishments'][] = ['kind' => $k, 'label' => Amnesty::KINDS[$k][1], 'icon' => Amnesty::KINDS[$k][2], 'desc' => $desc, 'price' => $cfg['prices'][$k]];
+        }
+        return $row;
+    }
+
+    private function amnesty(): array
+    {
+        $u = Auth::requireUser();
+        Repo::sweepMutes();
+        $cfg = Amnesty::config();
+        $mine = [];
+        if ($u['tg_user_id']) {
+            foreach (DB::all('SELECT m.*, g.title FROM tg_members m JOIN tg_groups g ON g.id = m.group_id WHERE g.active = 1 AND m.tg_user_id = ? AND ' . Amnesty::punishedSql('m'), [$u['tg_user_id']]) as $m) {
+                $r = $this->amnestyMember($m, $cfg);
+                if ($r['punishments']) $mine[] = $r;
+            }
+        }
+        $groups = [];
+        if ($cfg['allow_others'] || Access::isWebAdmin($u)) {
+            $ids = Amnesty::groupIds($u);
+            $groups = array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title'],
+                'punished' => (int)DB::val('SELECT COUNT(*) FROM tg_members WHERE is_bot = 0 AND group_id = ? AND ' . Amnesty::punishedSql(), [$g['id']])],
+                DB::all('SELECT id, title FROM tg_groups WHERE active = 1 AND ' . Access::sqlIn($ids, 'id') . ' ORDER BY title'));
+        }
+        $recent = DB::all("SELECT t.*, u.display_name, u.username FROM wallet_tx t JOIN app_users u ON u.id = t.user_id WHERE t.type = 'amnesty' ORDER BY t.id DESC LIMIT 10");
+        return [
+            'enabled' => $cfg['enabled'],
+            'prices' => $cfg['prices'],
+            'kinds' => array_map(fn($k) => ['label' => $k[1], 'icon' => $k[2]], Amnesty::KINDS),
+            'allow_others' => $cfg['allow_others'] || Access::isWebAdmin($u),
+            'note' => $cfg['note'],
+            'balance' => Wallet::balance((int)$u['id']),
+            'linked' => (bool)$u['tg_user_id'],
+            'mine' => $mine,
+            'groups' => $groups,
+            'recent' => array_map(fn($t) => ['payer' => $t['display_name'] ?: $t['username'], 'note' => preg_replace('/^Ân xá: /u', '', (string)$t['note']), 'amount' => -(int)$t['amount'], 'created_at' => (int)$t['created_at']], $recent),
+        ];
+    }
+
+    private function amnestySearch(): array
+    {
+        $u = Auth::requireUser();
+        $cfg = Amnesty::config();
+        $gid = $this->int('group_id');
+        if (!$cfg['allow_others'] && !Access::isWebAdmin($u)) fail('Admin chưa cho phép ân xá người khác', 403);
+        $ids = Amnesty::groupIds($u);
+        if ($ids !== null && !in_array($gid, $ids, true)) fail('Bạn không thuộc nhóm này', 403);
+        $g = Repo::group($gid) ?: fail('Không tìm thấy nhóm', 404);
+        Repo::sweepMutes();
+        $q = trim((string)$this->in('q', ''));
+        $where = 'group_id = ? AND is_bot = 0 AND ' . Amnesty::punishedSql();
+        $p = [$gid];
+        if ($q !== '') {
+            $where .= ' AND (LOWER(first_name) LIKE ? OR LOWER(last_name) LIKE ? OR LOWER(username) LIKE ? OR CAST(tg_user_id AS CHAR) LIKE ?)';
+            $like = '%' . mb_strtolower(ltrim($q, '@')) . '%';
+            array_push($p, $like, $like, $like, $like);
+        }
+        $rows = DB::all("SELECT * FROM tg_members WHERE $where ORDER BY CASE status WHEN 'banned' THEN 0 WHEN 'muted' THEN 1 ELSE 2 END, last_active DESC LIMIT 50", $p);
+        return ['group' => ['id' => (int)$g['id'], 'title' => $g['title']], 'rows' => array_values(array_filter(array_map(fn($m) => $this->amnestyMember($m, $cfg, $g), $rows), fn($r) => $r['punishments']))];
+    }
+
+    private function amnestyDo(): array
+    {
+        $u = Auth::requireUser();
+        $r = Amnesty::perform($u, $this->int('member_id'), (string)$this->in('kind'));
+        return ['balance' => $r['balance'], 'price' => $r['price'], 'label' => $r['label'], 'invite_link' => $r['invite_link'], 'member' => $this->memberRow($r['member'])];
+    }
+
+    // ================= Quản trị thanh toán (admin web) =================
+    private function bankRow(array $t): array
+    {
+        return [
+            'id' => (int)$t['id'], 'txid' => $t['txid'], 'amount' => (int)$t['amount'], 'description' => $t['description'],
+            'tx_date' => $t['tx_date'], 'status' => $t['status'], 'created_at' => (int)$t['created_at'],
+            'user' => $t['user_id'] ? ['id' => (int)$t['user_id'], 'name' => $t['display_name'] ?: $t['username']] : null,
+        ];
+    }
+
+    private function payments(): array
+    {
+        Auth::requireAdmin();
+        $status = (string)$this->in('status', '');
+        $where = in_array($status, ['credited', 'unmatched', 'below_min', 'ignored'], true) ? 'WHERE b.status = ?' : '';
+        $rows = DB::all("SELECT b.*, u.display_name, u.username FROM bank_tx b LEFT JOIN app_users u ON u.id = b.user_id $where ORDER BY b.id DESC LIMIT 100", $where ? [$status] : []);
+        $sum = fn($type) => (int)DB::val('SELECT COALESCE(SUM(amount),0) FROM wallet_tx WHERE type = ?', [$type]);
+        return [
+            'wallet' => Wallet::config(),
+            'amnesty' => Amnesty::config() + ['default_message' => Amnesty::DEFAULT_MESSAGE],
+            'banks' => Wallet::BANKS,
+            'bank_tx' => array_map([$this, 'bankRow'], $rows),
+            'stats' => [
+                'deposit' => $sum('deposit'),
+                'amnesty' => -$sum('amnesty'),
+                'refund' => $sum('refund'),
+                'balances' => (int)DB::val('SELECT COALESCE(SUM(balance),0) FROM app_users'),
+                'unmatched' => (int)DB::val("SELECT COUNT(*) FROM bank_tx WHERE status IN ('unmatched','below_min')"),
+                'amnesty_count' => (int)DB::val("SELECT COUNT(*) FROM wallet_tx WHERE type = 'amnesty'"),
+            ],
+        ];
+    }
+
+    private function paymentsSave(): array
+    {
+        $me = Auth::requireAdmin();
+        if (is_array($this->in('wallet'))) Wallet::saveConfig($this->in('wallet'));
+        if (is_array($this->in('amnesty'))) Amnesty::saveConfig($this->in('amnesty'));
+        Repo::log(null, $me['username'], 'payments_settings', null, 'Cập nhật cài đặt nạp tiền / ân xá');
+        return ['wallet' => Wallet::config(), 'amnesty' => Amnesty::config()];
+    }
+
+    /** Gọi thử API ngân hàng: chỉ hiện số giao dịch đọc được và vài dòng mẫu, không cộng tiền */
+    private function paymentsTest(): array
+    {
+        Auth::requireAdmin();
+        try {
+            $list = Wallet::fetch();
+        } catch (HttpError $e) {
+            return ['ok' => false, 'error' => $e->getMessage()];
+        }
+        $in = array_values(array_filter($list, fn($t) => $t['in']));
+        return [
+            'ok' => true,
+            'total' => count($list),
+            'incoming' => count($in),
+            'sample' => array_map(fn($t) => $t + ['match' => ($m = Wallet::matchUser($t['description'])) ? ($m['display_name'] ?: $m['username']) : null], array_slice($in, 0, 5)),
+        ];
+    }
+
+    private function paymentsSync(): array
+    {
+        Auth::requireAdmin();
+        $r = Wallet::sync(true);
+        $c = Wallet::config();
+        return $r + ['error' => $c['last_error']];
+    }
+
+    private function findUser(): array
+    {
+        $id = $this->int('user_id');
+        $name = trim((string)$this->in('username', ''));
+        $u = $id ? DB::get('SELECT * FROM app_users WHERE id = ?', [$id]) : ($name !== '' ? DB::get('SELECT * FROM app_users WHERE LOWER(username) = LOWER(?)', [ltrim($name, '@')]) : null);
+        return $u ?: fail('Không tìm thấy tài khoản', 404);
+    }
+
+    private function paymentsAssign(): array
+    {
+        $me = Auth::requireAdmin();
+        $u = $this->findUser();
+        Wallet::assign($this->int('id'), (int)$u['id'], $me['username']);
+        Repo::log(null, $me['username'], 'wallet_assign', null, 'Gán giao dịch #' . $this->int('id') . ' cho ' . $u['username']);
+        return ['ok' => true];
+    }
+
+    private function paymentsIgnore(): array
+    {
+        Auth::requireAdmin();
+        DB::run("UPDATE bank_tx SET status = 'ignored' WHERE id = ? AND status <> 'credited'", [$this->int('id')]);
+        return ['ok' => true];
+    }
+
+    /** Admin cộng / trừ số dư */
+    private function userBalance(): array
+    {
+        $me = Auth::requireAdmin();
+        $u = $this->findUser();
+        $amount = $this->int('amount');
+        $note = trim((string)$this->in('note', '')) ?: 'Admin điều chỉnh';
+        if ($amount === 0) fail('Nhập số tiền (số âm để trừ)');
+        $note = "$note (bởi {$me['username']})";
+        $bal = $amount > 0 ? Wallet::credit((int)$u['id'], $amount, 'admin', $note) : Wallet::debit((int)$u['id'], -$amount, 'admin', $note);
+        Repo::log(null, $me['username'], 'wallet_adjust', null, ($amount > 0 ? '+' : '') . Wallet::money($amount) . " cho {$u['username']} · $note");
+        return ['balance' => $bal];
+    }
+
+    private function userTx(): array
+    {
+        Auth::requireAdmin();
+        $u = $this->findUser();
+        return ['balance' => (int)$u['balance'], 'rows' => array_map([$this, 'txRow'], DB::all('SELECT * FROM wallet_tx WHERE user_id = ? ORDER BY id DESC LIMIT 100', [$u['id']]))];
     }
 }

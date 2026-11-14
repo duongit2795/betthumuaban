@@ -34,6 +34,8 @@ ChatLog::cleanup();
 DB::run('DELETE FROM app_logs WHERE created_at < ?', [now() - 180 * 86400]);
 // Dọn file throttle cũ
 foreach (glob(DATA_DIR . '/throttle_*.json') ?: [] as $f) if (filemtime($f) < now() - 3600) @unlink($f);
+// Nạp tiền tự động: đọc lịch sử giao dịch ngân hàng, cộng tiền vào ví
+try { Wallet::sync(); } catch (Throwable $e) { Settings::set('pay_last_error', mb_substr($e->getMessage(), 0, 300)); }
 // Quảng cáo xoay vòng: chạy liên tục ~55 giây (cron gọi lại mỗi phút)
 Ads::run(55);
 echo "ok\n";

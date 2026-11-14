@@ -17,6 +17,7 @@ class Commands
         'me' => ['member', 'me', 'Thông tin & điểm của bạn', 'Xem thông tin của chính bạn trong nhóm: điểm, hạng, số tin nhắn, cảnh cáo, ngày vào nhóm.', '/me', ['/me'], ''],
         'top' => ['member', 'top', 'Bảng xếp hạng tương tác', 'Hiện 10 thành viên có điểm tương tác cao nhất nhóm.', '/top', ['/top'], ''],
         'info' => ['member', 'info', 'Thông tin thành viên', 'Xem thông tin một thành viên. Không chỉ định ai thì hiện thông tin của chính bạn.', '/info (reply) | /info @username | /info ID', ['Reply tin rồi gõ /info', '/info @lan99', '/info 123456789'], ''],
+        'amnesty' => ['member', 'anxa', 'Ân xá thành viên (trả phí)', 'Hiện bảng giá ân xá và nút mở trang Ân xá trên web. Reply tin của người bị phạt để xem họ đang bị gì và phí ân xá.', '/anxa | /anxa (reply)', ['/anxa', 'Reply tin rồi gõ /anxa'], 'Chỉ hoạt động khi admin web bật tính năng Ân xá.'],
         'id' => ['member', 'id', 'Xem ID', 'Hiện ID của nhóm, của bạn và của người được reply (nếu có).', '/id', ['/id', 'Reply tin rồi gõ /id'], ''],
         // ---- Quản trị (admin nhóm / admin web đã liên kết Telegram)
         'warn' => ['admin', 'warn', 'Cảnh cáo (reply)', 'Cảnh cáo thành viên. Đủ giới hạn cảnh cáo thì tự xử lý theo Cài đặt nhóm (cấm chat / đuổi / cấm).', '/warn [lý do]', ['Reply tin rồi gõ /warn Spam link', '/warn @lan99 Nói tục'], 'Nội dung tin được reply được lưu làm bằng chứng.'],
@@ -37,6 +38,7 @@ class Commands
         'start' => ['private', 'start', 'Bắt đầu', 'Lời chào, hướng dẫn và ID Telegram của bạn.', '/start', ['/start'], 'Không đổi tên được vì Telegram dùng /start khi mở bot lần đầu.'],
         'login' => ['private', 'login', 'Đăng nhập web: /login MÃ', 'Đăng nhập web bằng mã 6 ký tự lấy ở trang đăng nhập. Bot sẽ hỏi xác nhận.', '/login MÃ', ['/login K7QX4P', 'Hoặc chỉ gửi mã: K7QX4P'], '', ['dangnhap']],
         'link' => ['private', 'link', 'Liên kết tài khoản web: /link MÃ', 'Liên kết Telegram với tài khoản web đã có bằng mã tạo ở trang Tài khoản.', '/link MÃ', ['/link 8F3A2C1D'], ''],
+        'balance' => ['private', 'sodu', 'Số dư ví & cách nạp tiền', 'Xem số dư ví VND, nội dung chuyển khoản nạp tiền và các hình phạt có thể ân xá.', '/sodu', ['/sodu'], 'Cần liên kết Telegram với tài khoản web.', ['naptien']],
         'pme' => ['private', 'me', 'Điểm của tôi', 'Xem điểm và số tin nhắn của bạn ở tất cả các nhóm có bot.', '/me', ['/me'], ''],
     ];
     const FIXED = ['start']; // không đổi tên được

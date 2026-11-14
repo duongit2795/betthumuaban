@@ -563,3 +563,26 @@ tg-spoiler, .tg-spoiler { background: color-mix(in srgb, var(--text) 18%, transp
 .rich.html-mode .rich-btn:not(.rich-mode) { opacity: .35; pointer-events: none; }
 .rich.disabled { opacity: .7; }
 .rich.disabled .rich-bar { pointer-events: none; }
+
+/* ===== Ví & ân xá ===== */
+.wallet-hero { background: linear-gradient(135deg, #0f9d58, #0b7a8f); }
+.amnesty-hero { background: linear-gradient(135deg, #7c3aed, #db2777); }
+.pay-box { display: grid; grid-template-columns: 180px 1fr; gap: 16px; align-items: center; }
+.qr-wrap { background: #fff; border-radius: 14px; padding: 8px; border: 1px solid var(--border); }
+.qr-wrap img { width: 100%; aspect-ratio: 1 / 1.1; object-fit: contain; display: block; }
+.qr-wrap .muted { color: #667; padding-bottom: 2px; }
+.pay-kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; font-size: 14px; align-items: center; }
+.pay-kv dt { color: var(--muted); }
+.pay-kv dd { margin: 0; display: flex; align-items: center; justify-content: flex-end; gap: 2px; font-weight: 500; min-width: 0; overflow-wrap: anywhere; text-align: right; }
+.pay-code { font-family: ui-monospace, monospace; font-weight: 700; color: var(--primary); background: var(--primary-soft); padding: 3px 8px; border-radius: 8px; letter-spacing: .04em; }
+.tx-amt { font-weight: 700; font-variant-numeric: tabular-nums; }
+.tx-amt.in { color: var(--success); }
+.tx-amt.out { color: var(--danger); }
+.punish-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); }
+.punish-row .p-ico { font-size: 20px; width: 28px; text-align: center; flex: none; }
+.price-pill { font-size: 12.5px; padding: 5px 10px; border-radius: 999px; background: rgba(255, 255, 255, .18); color: #fff; }
+.dot.amber { background: var(--warning); box-shadow: 0 0 0 3px var(--warning-soft); }
+@media (max-width: 560px) {
+  .pay-box { grid-template-columns: 1fr; }
+  .qr-wrap { max-width: 240px; margin: 0 auto; width: 100%; }
+}
