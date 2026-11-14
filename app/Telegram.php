@@ -97,34 +97,13 @@ class Telegram
         }
     }
 
-    /** @return array{0: array, 1: array} [lệnh thành viên, lệnh admin] */
+    /** @return array{0: array, 1: array} [lệnh thành viên, lệnh admin] (theo tên đặt ở trang Lệnh mặc định) */
     public static function baseCommands(): array
     {
-        $member = [
-            ['command' => 'help', 'description' => 'Danh sách lệnh'],
-            ['command' => 'rules', 'description' => 'Nội quy nhóm'],
-            ['command' => 'me', 'description' => 'Thông tin & điểm của bạn'],
-            ['command' => 'top', 'description' => 'Bảng xếp hạng tương tác'],
-            ['command' => 'info', 'description' => 'Thông tin thành viên (reply)'],
-            ['command' => 'id', 'description' => 'Xem ID'],
-        ];
-        $admin = array_merge($member, [
-            ['command' => 'warn', 'description' => 'Cảnh cáo (reply)'],
-            ['command' => 'unwarn', 'description' => 'Gỡ 1 cảnh cáo'],
-            ['command' => 'mute', 'description' => 'Cấm chat: /mute 30 (phút)'],
-            ['command' => 'unmute', 'description' => 'Bỏ cấm chat'],
-            ['command' => 'kick', 'description' => 'Đuổi khỏi nhóm'],
-            ['command' => 'ban', 'description' => 'Cấm vĩnh viễn'],
-            ['command' => 'unban', 'description' => 'Gỡ cấm: /unban ID'],
-            ['command' => 'del', 'description' => 'Xoá tin nhắn (reply)'],
-            ['command' => 'pin', 'description' => 'Ghim tin nhắn (reply)'],
-            ['command' => 'addpoints', 'description' => 'Cộng/trừ điểm: /addpoints 10'],
-            ['command' => 'setrules', 'description' => 'Đặt nội quy nhóm'],
-        ]);
+        [$member, $admin] = Commands::menus();
         return [$member, $admin];
     }
 
-    /** Đăng ký menu lệnh; $memberExtra/$adminExtra là lệnh tự tạo dùng chung mọi nhóm */
     /** Menu "/" chỉ hiện cho quản trị viên nhóm? (cài đặt toàn hệ thống) */
     public static function menuAdminOnly(): bool
     {
@@ -148,11 +127,6 @@ class Telegram
             $this->tryCall('setMyCommands', ['commands' => $merge($member, $memberExtra), 'scope' => ['type' => 'all_group_chats']]);
         }
         $this->tryCall('setMyCommands', ['commands' => $merge($admin, $adminExtra), 'scope' => ['type' => 'all_chat_administrators']]);
-        $this->tryCall('setMyCommands', ['commands' => [
-            ['command' => 'start', 'description' => 'Bắt đầu'],
-            ['command' => 'login', 'description' => 'Đăng nhập web: /login MÃ'],
-            ['command' => 'link', 'description' => 'Liên kết tài khoản web: /link MÃ'],
-            ['command' => 'me', 'description' => 'Điểm của tôi'],
-        ], 'scope' => ['type' => 'all_private_chats']]);
+        $this->tryCall('setMyCommands', ['commands' => Commands::menus()[2], 'scope' => ['type' => 'all_private_chats']]);
     }
 }
