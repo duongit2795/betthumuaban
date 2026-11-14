@@ -587,3 +587,4 @@ tg-spoiler, .tg-spoiler { background: color-mix(in srgb, var(--text) 18%, transp
   .pay-box { grid-template-columns: 1fr; }
   .qr-wrap { max-width: 240px; margin: 0 auto; width: 100%; }
 }
+.punish-row.combo { background: linear-gradient(135deg, color-mix(in srgb, #7c3aed 12%, var(--surface)), color-mix(in srgb, #db2777 10%, var(--surface))); border: 1px solid color-mix(in srgb, #7c3aed 30%, transparent); }
