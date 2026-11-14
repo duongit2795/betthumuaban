@@ -541,6 +541,7 @@ class BotHandler
             $pun = [];
             foreach (DB::all('SELECT m.*, g.title FROM tg_members m JOIN tg_groups g ON g.id = m.group_id WHERE g.active = 1 AND m.tg_user_id = ? AND ' . Amnesty::punishedSql('m'), [$from['id']]) as $m) {
                 foreach (Amnesty::punishments($m) as $k => $desc) $pun[] = '• ' . tg_esc($m['title']) . ': ' . tg_esc($desc) . ' — ân xá ' . Wallet::money(Amnesty::config()['prices'][$k]);
+                if ($cb = Amnesty::combo($m)) $pun[] = '• ' . tg_esc($m['title']) . ': 🕊 <b>Ân xá toàn bộ</b> — ' . Wallet::money($cb['price']);
             }
             if ($pun && Amnesty::config()['enabled']) $t .= "\n\n🕊 <b>Có thể ân xá</b>\n" . implode("\n", $pun);
             $this->reply($msg, $t, $this->webButton('💳 Mở ví trên web', '/wallet'));
@@ -587,12 +588,14 @@ class BotHandler
         foreach (Amnesty::KINDS as $k => [, $label, $icon]) {
             if ($cfg['prices'][$k] > 0) $t .= "\n$icon $label: <b>" . Wallet::money($cfg['prices'][$k]) . '</b>';
         }
+        if ($cfg['combo']) $t .= "\n🕊 <b>Ân xá toàn bộ</b> (gỡ tất cả 1 lần)" . ($cfg['combo_discount'] ? ': giảm <b>' . $cfg['combo_discount'] . '%</b>' : '');
         $from = $msg['reply_to_message']['from'] ?? null;
         if ($from && empty($from['is_bot'])) {
             $m = Repo::member((int)$group['id'], $from['id']);
             $p = $m ? Amnesty::punishments($m, $cfg) : [];
             $t .= "\n\n👤 " . ($m ? Repo::mention($m) : tg_esc($from['first_name'] ?? '')) . ': ';
             $t .= $p ? implode(', ', array_map(fn($k, $d) => tg_esc($d) . ' (' . Wallet::money($cfg['prices'][$k]) . ')', array_keys($p), $p)) : 'không có hình phạt nào.';
+            if ($m && ($cb = Amnesty::combo($m, $cfg))) $t .= "\n🕊 Ân xá toàn bộ: <b>" . Wallet::money($cb['price']) . '</b>' . ($cb['price'] < $cb['full'] ? ' <s>' . Wallet::money($cb['full']) . '</s>' : '');
         }
         if ($cfg['note'] !== '') $t .= "\n\nℹ️ " . tg_esc($cfg['note']);
         $t .= "\n\n💳 Nạp tiền & ân xá tại: " . tg_esc(site_url()) . '/#/amnesty';

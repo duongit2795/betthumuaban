@@ -2923,7 +2923,7 @@
   const punishCard = (m, showGroup, byId = false) => `<div class="card card-pad amnesty-card">
     <div class="row">${avatar(m.name, m.tg_user_id)}<div class="grow" style="min-width:0"><div class="ellipsis" style="font-weight:600">${esc(m.name)}${m.username ? ` <span class="xs muted">@${esc(m.username)}</span>` : ''}</div>
       <div class="xs muted ellipsis">${showGroup ? esc(m.group_title || '') + ' · ' : ''}<span class="mono">${esc(m.tg_user_id)}</span></div></div>${statusBadge(m)}</div>
-    <div class="stack" style="gap:8px;margin-top:12px">${m.punishments.map((p) => `<div class="punish-row"><span class="p-ico">${p.icon}</span><div class="grow" style="min-width:0"><div class="small" style="font-weight:600">${esc(p.label)}</div><div class="xs muted">${esc(p.desc)}</div></div>
+    <div class="stack" style="gap:8px;margin-top:12px">${m.punishments.map((p) => `<div class="punish-row ${p.combo ? 'combo' : ''}"><span class="p-ico">${p.icon}</span><div class="grow" style="min-width:0"><div class="small" style="font-weight:600">${esc(p.label)}${p.combo && p.full > p.price ? ` <span class="badge green">−${money(p.full - p.price)}</span>` : ''}</div><div class="xs muted">${esc(p.desc)}${p.combo && p.full > p.price ? ` · <s>${money(p.full)}</s>` : ''}</div></div>
       <button class="btn sm primary nowrap" data-amnesty='${esc(JSON.stringify({ id: m.id, kind: p.kind, price: p.price, label: p.label, icon: p.icon, desc: p.desc, name: m.name, group: m.group_title, by_id: byId }))}'>${icon('heart', 'sm')}${money(p.price)}</button></div>`).join('')}</div></div>`;
 
   route('/amnesty', async () => {
@@ -2936,7 +2936,7 @@
       <div class="hero amnesty-hero">
         <div class="row between" style="align-items:flex-start"><div><div class="muted small">🕊 Ân xá thành viên</div><div class="big" style="font-size:28px" data-bal>${money(balance)}</div><div class="muted xs">Số dư ví</div></div>
         <a class="btn sm" href="#/wallet" style="background:rgba(255,255,255,.18);color:#fff;border-color:transparent">${icon('plus', 'sm')}Nạp tiền</a></div>
-        <div class="row wrap" style="gap:8px;margin-top:12px">${priceList.map(([k, v]) => `<span class="price-pill">${v.icon} ${esc(v.label)} · <b>${money(d.prices[k])}</b></span>`).join('')}</div>
+        <div class="row wrap" style="gap:8px;margin-top:12px">${priceList.map(([k, v]) => `<span class="price-pill">${v.icon} ${esc(v.label)} · <b>${money(d.prices[k])}</b></span>`).join('')}${d.combo ? `<span class="price-pill">🕊 Ân xá toàn bộ${d.combo.discount ? ` · <b>giảm ${d.combo.discount}%</b>` : ''}</span>` : ''}</div>
       </div>
       ${!d.enabled ? `<div class="alert info" style="margin-top:12px">${icon('info')}<div class="small">Tính năng ân xá đang tắt. ${isWebAdmin() ? 'Bật ở <a href="#/payments">Nạp tiền & ân xá</a>.' : ''}</div></div>` : ''}
       ${d.note ? `<div class="alert info" style="margin-top:12px">${icon('info')}<div class="small">${esc(d.note)}</div></div>` : ''}
@@ -3077,10 +3077,12 @@
         <div class="card">${sw('enabled', am.enabled, 'Bật ân xá thành viên', 'Thành viên dùng số dư ví để gỡ hình phạt')}
           ${sw('allow_others', am.allow_others, 'Cho ân xá người khác', 'Thành viên trong nhóm trả tiền ân xá giúp bạn bè')}
           ${sw('notify', am.notify, 'Thông báo trong nhóm', 'Bot gửi thông báo ân xá vào nhóm')}
-          ${sw('invite', am.invite, 'Gửi link mời khi gỡ cấm', 'Tạo link vào lại nhóm dùng 1 lần (hạn 3 ngày) cho người được gỡ cấm')}</div>
+          ${sw('invite', am.invite, 'Gửi link mời khi gỡ cấm', 'Tạo link vào lại nhóm dùng 1 lần (hạn 3 ngày) cho người được gỡ cấm')}
+          ${sw('combo', am.combo, '🕊 Gói "Ân xá toàn bộ"', 'Gỡ cấm chat / gỡ cấm khỏi nhóm + xoá toàn bộ cảnh cáo trong 1 lần, trừ tiền 1 lần (hiện khi có từ 2 hình phạt)')}</div>
         <div class="card card-pad stack">
           <h3>Bảng giá (đ) <span class="xs muted" style="font-weight:400">— đặt 0 để tắt loại đó</span></h3>
           ${Object.entries({ unmute: '🔊 Gỡ cấm chat', unban: '✅ Gỡ cấm khỏi nhóm', unwarn: '🧹 Xoá toàn bộ cảnh cáo' }).map(([k, l]) => `<label class="field"><span class="lbl">${l}</span><input class="input" name="price_${k}" inputmode="numeric" value="${am.prices[k]}"></label>`).join('')}
+          <label class="field"><span class="lbl">🕊 Ân xá toàn bộ: giảm (%)</span><input class="input" name="combo_discount" inputmode="numeric" value="${am.combo_discount}"><div class="hint">Giá gói = tổng giá các hình phạt đang có − % giảm (làm tròn nghìn). VD bị cấm chat + 2 cảnh cáo: (${money(am.prices.unmute)} + ${money(am.prices.unwarn)}) − ${am.combo_discount}%.</div></label>
         </div>
         <div class="card card-pad stack">
           <h3>Nội dung thông báo trong nhóm</h3>
@@ -3110,7 +3112,7 @@
           e.preventDefault();
           const f = formData(e.target);
           try {
-            await api('payments/save', { amnesty: { enabled: f.enabled, allow_others: f.allow_others, notify: f.notify, invite: f.invite, message: f.message, note: f.note, prices: { unmute: +f.price_unmute || 0, unban: +f.price_unban || 0, unwarn: +f.price_unwarn || 0 } } });
+            await api('payments/save', { amnesty: { enabled: f.enabled, allow_others: f.allow_others, notify: f.notify, invite: f.invite, combo: f.combo, combo_discount: +f.combo_discount || 0, message: f.message, note: f.note, prices: { unmute: +f.price_unmute || 0, unban: +f.price_unban || 0, unwarn: +f.price_unwarn || 0 } } });
             toast('Đã lưu'); await boot(); render();
           } catch (err) { toast(err.message, 'err'); }
         };
