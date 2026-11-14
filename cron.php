@@ -1,9 +1,19 @@
 <?php
 /**
- * Tác vụ định kỳ (tuỳ chọn). Thêm vào aaPanel > Cron > "Truy cập URL" mỗi 1 phút (để tự động xoá tin đúng giờ):
- *   https://domain/cron.php?key=CRON_KEY
- * hoặc "Shell script":  php /www/wwwroot/domain/cron.php
+ * Tác vụ định kỳ. aaPanel > Cron > Shell Script, mỗi 1 phút:
+ *   /www/server/php/83/bin/php /www/wwwroot/domain/cron.php   (dùng PHP cùng phiên bản với web, xem trang Hệ thống)
+ * hoặc Access URL: https://domain/cron.php?key=CRON_KEY
  */
+// Bản PHP dòng lệnh thiếu extension cần thiết → báo rõ cách sửa
+$missing = array_values(array_filter(['curl', 'pdo', 'json'], fn($e) => !extension_loaded($e)));
+if (!extension_loaded('pdo_sqlite') && !extension_loaded('pdo_mysql')) $missing[] = 'pdo_sqlite / pdo_mysql';
+if ($missing) {
+    $ver = PHP_MAJOR_VERSION . PHP_MINOR_VERSION;
+    exit("LỖI: PHP đang chạy cron (" . PHP_BINARY . ", PHP " . PHP_VERSION . ") thiếu extension: " . implode(', ', $missing) . "\n"
+        . "Cách sửa: trong aaPanel > Cron, đổi lệnh thành đường dẫn PHP của website, ví dụ:\n"
+        . "  /www/server/php/$ver/bin/php " . __FILE__ . "\n"
+        . "(thay $ver bằng phiên bản PHP của site; đường dẫn chính xác có ở web: Hệ thống > Tác vụ định kỳ)\n");
+}
 require __DIR__ . '/app/bootstrap.php';
 if (!installed()) exit("not installed\n");
 DB::connect();
@@ -12,6 +22,7 @@ if (PHP_SAPI !== 'cli' && !hash_equals((string)Settings::get('cron_key'), (strin
     http_response_code(403);
     exit('forbidden');
 }
+Settings::set('cron_last_run', (string)now());
 Repo::sweepMutes();
 // Xoá tin nhắn hẹn giờ
 DelQueue::process(500);
