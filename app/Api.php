@@ -1241,7 +1241,7 @@ class Api
         $a = DB::get('SELECT image FROM tg_ads WHERE id = ?', [$this->int('id')]);
         $path = $a ? Ads::imagePath($a['image']) : null;
         if (!$path) fail('Không có ảnh', 404);
-        header('Content-Type: ' . (mime_content_type($path) ?: 'image/jpeg'));
+        header('Content-Type: ' . file_mime($path));
         header('Cache-Control: private, max-age=86400');
         readfile($path);
         exit;

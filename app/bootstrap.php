@@ -80,3 +80,16 @@ function site_url(): string
     $dir = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/');
     return ($https ? 'https' : 'http') . '://' . $host . $dir;
 }
+
+/** Loại tệp (MIME) không cần extension fileinfo: dựa vào getimagesize, rồi đuôi tệp */
+function file_mime(string $path): string
+{
+    if (function_exists('mime_content_type')) {
+        $m = @mime_content_type($path);
+        if ($m) return $m;
+    }
+    $info = @getimagesize($path);
+    if (!empty($info['mime'])) return $info['mime'];
+    $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+    return ['png' => 'image/png', 'webp' => 'image/webp', 'gif' => 'image/gif', 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg'][$ext] ?? 'application/octet-stream';
+}
