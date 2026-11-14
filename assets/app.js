@@ -943,6 +943,7 @@
     ban: ['⛔ Cấm', true],
     unban: ['✅ Gỡ cấm', true],
   };
+  const AD_PRESETS = [[0, 'Ngay lập tức'], [5, 'Sau 5 giây'], [10, 'Sau 10 giây'], [20, 'Sau 20 giây'], [30, 'Sau 30 giây'], [60, 'Sau 1 phút'], [120, 'Sau 2 phút'], [300, 'Sau 5 phút'], [600, 'Sau 10 phút'], [1800, 'Sau 30 phút'], [3600, 'Sau 1 giờ'], [21600, 'Sau 6 giờ'], [86400, 'Sau 1 ngày'], [172800, 'Sau 2 ngày']];
   const VARS = ['{mention}', '{name}', '{username}', '{id}', '{points}', '{rank}', '{messages}', '{warns}', '{args}', '{target_mention}', '{target_name}', '{target_points}', '{group}', '{member_count}', '{rules}', '{count}', '{random}', '{random:1-6}', '{date}', '{time}'];
   // Mẫu lệnh có sẵn (cat: nhóm hiển thị)
   const RULE_TEMPLATES = [
@@ -1015,6 +1016,14 @@
       rule: { name: 'Xoá tin nhắn', trigger_type: 'command', trigger_value: 'xoa', show_in_menu: 1, conditions: { who: 'admin', require_reply: true, autodel: true, autodel_after: 0, autodel_trigger: true, autodel_reply: true, autodel_target: true },
         actions: [{ type: 'delete', who: 'target' }] } },
   ];
+  // Mẫu: người gửi xoá ngay, bot/tin được reply xoá theo thời gian của mẫu
+  RULE_TEMPLATES.forEach(({ rule: { conditions: c } }) => {
+    if (!c.autodel) return;
+    c.autodel_trigger_after = c.autodel_reply ? 0 : c.autodel_after;
+    c.autodel_reply_after = c.autodel_after;
+    c.autodel_target_after = c.autodel_after;
+    delete c.autodel_after;
+  });
 
   const triggerChip = (r) => r.trigger_type === 'command'
     ? `<span class="badge blue mono">/${esc(r.trigger_value)}</span>`
@@ -1031,8 +1040,9 @@
     if (c.chance && c.chance < 100) ifs.push(c.chance + '% may mắn');
     let tail = '';
     if (c.autodel) {
-      const k = [c.autodel_trigger && 'người gửi', c.autodel_reply && 'bot', c.autodel_target && 'tin được reply'].filter(Boolean).join(' + ');
-      tail = ` · 🧹 xoá ${k} ${c.autodel_after ? 'sau ' + humanSec(c.autodel_after) : 'ngay'}`;
+      const when = (k) => { const v = c['autodel_' + k + '_after'] ?? c.autodel_after ?? 0; return v ? 'sau ' + humanSec(v) : 'ngay'; };
+      const parts = [['trigger', 'người gửi'], ['reply', 'bot'], ['target', 'tin được reply']].filter(([k]) => c['autodel_' + k]).map(([k, l]) => `${l} ${when(k)}`);
+      tail = ` · 🧹 xoá ${parts.join(', ')}`;
     }
     const thens = (r.actions || []).map((a) => {
       const t = (RACT[a.type] || [a.type])[0].replace(/^\S+\s/, '');
@@ -1137,7 +1147,14 @@
 
   function ruleEditor(rule, groups, onSaved) {
     const r = JSON.parse(JSON.stringify(rule));
-    r.conditions = { who: 'all', min_points: 0, require_reply: false, cooldown: 0, chance: 100, autodel: false, autodel_after: 30, autodel_trigger: true, autodel_reply: true, autodel_target: false, ...(r.conditions || {}) };
+    r.conditions = { who: 'all', min_points: 0, require_reply: false, cooldown: 0, chance: 100, autodel: false, autodel_trigger: true, autodel_reply: true, autodel_target: false, ...(r.conditions || {}) };
+    // Thời gian xoá riêng từng loại (rule cũ chỉ có autodel_after chung)
+    ['trigger', 'reply', 'target'].forEach((k) => {
+      const key = 'autodel_' + k + '_after';
+      if (r.conditions[key] === undefined) r.conditions[key] = k === 'trigger' ? 0 : (r.conditions.autodel_after ?? 20);
+    });
+    const adCustom = {};
+    ['trigger', 'reply', 'target'].forEach((k) => { adCustom[k] = !AD_PRESETS.some(([v]) => v === r.conditions['autodel_' + k + '_after']); });
     const cd = r.conditions.cooldown || 0;
     const unit = cd && cd % 86400 === 0 ? 86400 : cd && cd % 3600 === 0 ? 3600 : cd && cd % 60 === 0 ? 60 : 1;
     let lastText = null;
@@ -1196,26 +1213,36 @@
           <div class="card" style="box-shadow:none">
             ${sw('autodel', c.autodel, 'Tự động xoá tin nhắn', c.autodel ? 'Giữ nhóm gọn gàng sau khi dùng lệnh' : 'Đang tắt: tin nhắn được giữ lại')}
             ${c.autodel ? (() => {
-              const after = Number(c.autodel_after) || 0;
-              const u = after && after % 86400 === 0 ? 86400 : after && after % 3600 === 0 ? 3600 : after && after % 60 === 0 ? 60 : 1;
-              const kinds = [['autodel_trigger', '🙋 Tin người gửi'], ['autodel_reply', '🤖 Tin bot trả lời'], ['autodel_target', '↩️ Tin được reply']];
-              const sel = kinds.filter(([k]) => c[k]).length;
-              return `<div class="form-group stack">
-                <div class="field"><span class="lbl">Xoá sau</span>
-                  <div class="chips" style="flex-wrap:wrap">${[[0, 'Ngay lập tức'], [5, '5 giây'], [10, '10 giây'], [30, '30 giây'], [60, '1 phút'], [300, '5 phút'], [3600, '1 giờ'], [86400, '1 ngày']].map(([v, t]) => `<button type="button" class="chip ${v === after ? 'active' : ''}" data-ad="${v}">${t}</button>`).join('')}</div>
-                  <div class="row" style="margin-top:8px"><input class="input" type="number" min="0" name="ad_val" value="${after / u}"><select class="input" name="ad_unit" style="width:auto">${[[1, 'giây'], [60, 'phút'], [3600, 'giờ'], [86400, 'ngày']].map(([v, t]) => `<option value="${v}" ${v === u ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
-                  <div class="hint">Tối đa 2 ngày (giới hạn của Telegram)</div></div>
-                <div class="field"><span class="lbl">Xoá tin nào (chọn nhiều)</span>
-                  <div class="chips" style="flex-wrap:wrap">${kinds.map(([k, t]) => `<button type="button" class="chip ${c[k] ? 'active' : ''}" data-adk="${k}">${c[k] ? '✓ ' : ''}${t}</button>`).join('')}</div>
-                  <div class="row wrap" style="gap:6px;margin-top:8px"><span class="xs muted">Chọn nhanh:</span>
-                    ${(() => {
-                      const cur = [c.autodel_trigger, c.autodel_reply, c.autodel_target].map((x) => (x ? 1 : 0)).join('');
-                      return [['sender', '100', 'Chỉ người gửi'], ['bot', '010', 'Chỉ bot'], ['both', '110', 'Cả 2'], ['all', '111', 'Tất cả']]
-                        .map(([k, code, t]) => `<button type="button" class="btn sm ${cur === code ? 'soft' : 'ghost'}" data-adp="${k}">${t}</button>`).join('');
-                    })()}</div>
-                  ${sel ? '' : `<div class="hint" style="color:var(--danger)">Chọn ít nhất 1 loại tin</div>`}</div>
-                <div class="alert info">${icon('info')}<div class="xs">Bot cần quyền <b>Xoá tin nhắn</b>. Hẹn trên 20 giây nên đặt Cron mỗi 1 phút (trang Hệ thống) để xoá đúng giờ.</div></div>
-              </div>`;
+              const kinds = [['trigger', '🙋 Tin người gửi', 'Tin gõ lệnh / từ khoá'], ['reply', '🤖 Tin bot trả lời', 'Gồm cả tin báo lỗi, VD "Bạn cần đợi…"'], ['target', '↩️ Tin được reply', 'Tin của người nhận']];
+              const sel = kinds.filter(([k]) => c['autodel_' + k]).length;
+              const row = ([k, t, d]) => {
+                const on = !!c['autodel_' + k];
+                const after = Number(c['autodel_' + k + '_after']) || 0;
+                const preset = AD_PRESETS.some(([v]) => v === after) && !adCustom[k];
+                const u = after && after % 86400 === 0 ? 86400 : after && after % 3600 === 0 ? 3600 : after && after % 60 === 0 ? 60 : 1;
+                return `<div class="form-group">
+                  <label class="row" style="cursor:pointer"><div class="grow"><b style="font-size:14.5px">${t}</b><div class="xs muted">${d}</div></div>
+                    <div class="switch"><input type="checkbox" name="autodel_${k}" ${on ? 'checked' : ''}><span></span></div></label>
+                  ${on ? `<div class="row" style="margin-top:10px"><span class="small muted nowrap">Xoá</span>
+                    <select class="input" name="ad_${k}_sel" style="height:40px">${AD_PRESETS.map(([v, l]) => `<option value="${v}" ${preset && v === after ? 'selected' : ''}>${l}</option>`).join('')}<option value="custom" ${preset ? '' : 'selected'}>Tuỳ chỉnh…</option></select></div>
+                    ${preset ? '' : `<div class="row" style="margin-top:8px"><span class="small muted nowrap">Sau</span><input class="input" type="number" min="0" name="ad_${k}_val" value="${after / u}" style="height:40px"><select class="input" name="ad_${k}_unit" style="width:auto;height:40px">${[[1, 'giây'], [60, 'phút'], [3600, 'giờ'], [86400, 'ngày']].map(([v, l]) => `<option value="${v}" ${v === u ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`}` : ''}
+                </div>`;
+              };
+              const combos = [
+                ['Người gửi ngay · bot 20 giây', { trigger: 0, reply: 20 }],
+                ['Người gửi ngay · bot 1 phút', { trigger: 0, reply: 60 }],
+                ['Cả 2 sau 30 giây', { trigger: 30, reply: 30 }],
+                ['Chỉ xoá lệnh ngay', { trigger: 0 }],
+                ['Xoá tất cả ngay', { trigger: 0, reply: 0, target: 0 }],
+              ];
+              return `<div class="form-group"><div class="xs muted" style="margin-bottom:6px">Chọn nhanh</div>
+                  <div class="chips" style="flex-wrap:wrap">${combos.map(([l, v], i) => {
+                    const match = kinds.every(([k]) => (k in v) === !!c['autodel_' + k] && (!(k in v) || v[k] === Number(c['autodel_' + k + '_after'])));
+                    return `<button type="button" class="chip ${match ? 'active' : ''}" data-adc="${i}" style="height:32px;font-size:12.5px">${l}</button>`;
+                  }).join('')}</div></div>
+                ${kinds.map(row).join('')}
+                ${sel ? '' : `<div class="form-group"><div class="hint" style="color:var(--danger);margin:0">Bật ít nhất 1 loại tin cần xoá</div></div>`}
+                <div class="form-group"><div class="alert info" style="margin:0">${icon('info')}<div class="xs">Bot cần quyền <b>Xoá tin nhắn</b>. Tối đa 2 ngày (giới hạn Telegram). Hẹn trên 20 giây nên đặt Cron mỗi 1 phút (trang Hệ thống) để xoá đúng giờ.</div></div></div>`;
             })() : ''}
           </div>
         </div>
@@ -1241,7 +1268,18 @@
       r.conditions.cooldown = (Number(f.cd_val.value) || 0) * Number(f.cd_unit.value);
       r.conditions.require_reply = f.require_reply.checked;
       r.conditions.autodel = f.autodel.checked;
-      if (f.ad_val) r.conditions.autodel_after = Math.min(172800, (Number(f.ad_val.value) || 0) * Number(f.ad_unit.value));
+      ['trigger', 'reply', 'target'].forEach((k) => {
+        if (f['autodel_' + k]) r.conditions['autodel_' + k] = f['autodel_' + k].checked;
+        const sel = f['ad_' + k + '_sel'];
+        if (!sel) return;
+        if (sel.value === 'custom') {
+          adCustom[k] = true;
+          if (f['ad_' + k + '_val']) r.conditions['autodel_' + k + '_after'] = Math.min(172800, (Number(f['ad_' + k + '_val'].value) || 0) * Number(f['ad_' + k + '_unit'].value));
+        } else {
+          adCustom[k] = false;
+          r.conditions['autodel_' + k + '_after'] = Number(sel.value);
+        }
+      });
       r.enabled = f.enabled.checked ? 1 : 0;
       if (f.show_in_menu) r.show_in_menu = f.show_in_menu.checked ? 1 : 0;
       $$('[data-af]', el).forEach((x) => { const a = r.actions[x.dataset.af]; a[x.dataset.k] = x.type === 'number' ? Number(x.value) : x.value; });
@@ -1256,18 +1294,20 @@
       el.addEventListener('change', (e) => {
         const t = e.target.closest('[data-at]');
         if (t) { collect(el); const a = r.actions[t.dataset.at]; a.type = t.value; if (!RACT[a.type][1]) a.who = 'sender'; draw(); }
-        if (e.target.name === 'autodel') { collect(el); draw(); }
+        if (/^(autodel(_trigger|_reply|_target)?|ad_\w+_sel)$/.test(e.target.name || '')) { collect(el); draw(); }
       });
       el.addEventListener('click', async (e) => {
         const b = e.target.closest('button');
         if (!b) return;
         if (b.dataset.tt) { collect(el); r.trigger_type = b.dataset.tt; if (r.trigger_type === 'command') r.trigger_value = r.trigger_value.replace(/[^a-z0-9_]/gi, '').toLowerCase(); draw(); }
-        else if (b.dataset.ad !== undefined) { collect(el); r.conditions.autodel_after = Number(b.dataset.ad); draw(); }
-        else if (b.dataset.adk) { collect(el); r.conditions[b.dataset.adk] = !r.conditions[b.dataset.adk]; draw(); }
-        else if (b.dataset.adp) {
+        else if (b.dataset.adc !== undefined) {
           collect(el);
-          const m = { sender: [1, 0, 0], bot: [0, 1, 0], both: [1, 1, 0], all: [1, 1, 1] }[b.dataset.adp];
-          [r.conditions.autodel_trigger, r.conditions.autodel_reply, r.conditions.autodel_target] = m.map(Boolean);
+          const v = [{ trigger: 0, reply: 20 }, { trigger: 0, reply: 60 }, { trigger: 30, reply: 30 }, { trigger: 0 }, { trigger: 0, reply: 0, target: 0 }][b.dataset.adc];
+          ['trigger', 'reply', 'target'].forEach((k) => {
+            r.conditions['autodel_' + k] = k in v;
+            if (k in v) r.conditions['autodel_' + k + '_after'] = v[k];
+            adCustom[k] = false;
+          });
           draw();
         }
         else if (b.dataset.who) { collect(el); r.conditions.who = b.dataset.who; draw(); }

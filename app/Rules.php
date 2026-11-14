@@ -35,11 +35,15 @@ class Rules
             'chance' => max(1, min(100, (int)($c['chance'] ?? 100))),
             // Tự động xoá
             'autodel' => !empty($c['autodel']),
-            'autodel_after' => max(0, min(172800, (int)($c['autodel_after'] ?? 30))),
             'autodel_trigger' => !empty($c['autodel_trigger']),
             'autodel_reply' => !empty($c['autodel_reply']),
             'autodel_target' => !empty($c['autodel_target']),
         ];
+        // Thời gian xoá riêng cho từng loại tin (giây, tối đa 2 ngày)
+        $common = (int)($c['autodel_after'] ?? 30);
+        foreach (['trigger', 'reply', 'target'] as $k) {
+            $cond["autodel_{$k}_after"] = max(0, min(172800, (int)($c["autodel_{$k}_after"] ?? $common)));
+        }
         if ($cond['autodel'] && !$cond['autodel_trigger'] && !$cond['autodel_reply'] && !$cond['autodel_target']) {
             throw new HttpError('Tự động xoá: chọn ít nhất 1 loại tin cần xoá');
         }
@@ -172,14 +176,17 @@ class Rules
         // 🧹 Tự động xoá: lệnh /… luôn dọn (kể cả khi báo lỗi điều kiện); từ khoá chỉ dọn khi đã chạy
         $c = json_decode($r['conditions'] ?: '{}', true) ?: [];
         if (!empty($c['autodel']) && !$state['skip'] && ($isCmd || $state['ran'])) {
-            $after = (int)($c['autodel_after'] ?? 30);
+            $common = (int)($c['autodel_after'] ?? 30);
+            $after = fn(string $k) => (int)($c["autodel_{$k}_after"] ?? $common);
             $chatId = $msg['chat']['id'];
-            $ids = [];
-            if (!empty($c['autodel_trigger']) && !$deleted) $ids[] = $msg['message_id'];
-            if (!empty($c['autodel_reply'])) $ids = array_merge($ids, $sent);
-            if (!empty($c['autodel_target']) && isset($msg['reply_to_message']['message_id'])) $ids[] = $msg['reply_to_message']['message_id'];
-            DelQueue::add($api, $botId, $chatId, array_unique($ids), $after);
-            if (!empty($c['autodel_trigger']) && $after === 0) $deleted = true;
+            if (!empty($c['autodel_trigger']) && !$deleted) {
+                DelQueue::add($api, $botId, $chatId, [$msg['message_id']], $after('trigger'));
+                if ($after('trigger') === 0) $deleted = true;
+            }
+            if (!empty($c['autodel_reply'])) DelQueue::add($api, $botId, $chatId, $sent, $after('reply'));
+            if (!empty($c['autodel_target']) && isset($msg['reply_to_message']['message_id'])) {
+                DelQueue::add($api, $botId, $chatId, [$msg['reply_to_message']['message_id']], $after('target'));
+            }
         }
         return $deleted;
     }
