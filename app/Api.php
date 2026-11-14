@@ -81,6 +81,15 @@ class Api
             'commands/save' => 'commandSave',
             'commands/reset' => 'commandReset',
             'commands/feature' => 'commandFeature',
+            'ads' => 'ads',
+            'ads/image' => 'adImage',
+            'ads/campaign/save' => 'adCampaignSave',
+            'ads/campaign/delete' => 'adCampaignDelete',
+            'ads/campaign/run' => 'adCampaignRun',
+            'ads/campaign/stop' => 'adCampaignStop',
+            'ads/ad/save' => 'adSave',
+            'ads/ad/delete' => 'adDelete',
+            'ads/ad/move' => 'adMove',
             'system' => 'system',
             'system/settings' => 'systemSettings',
             'system/check-update' => 'checkUpdate',
@@ -91,7 +100,7 @@ class Api
         $writeRoutes = ['install', 'auth/login', 'auth/register', 'auth/logout', 'me/update', 'me/link-code', 'me/unlink'];
         if (!isset($map[$route])) fail('Không tìm thấy API', 404);
         $fn = $map[$route];
-        $isWrite = in_array($route, $writeRoutes, true) || str_contains($route, '/') && !in_array($route, ['system/check-update', 'chat/poll'], true);
+        $isWrite = in_array($route, $writeRoutes, true) || str_contains($route, '/') && !in_array($route, ['system/check-update', 'chat/poll', 'ads/image'], true);
         if ($isWrite && $this->method !== 'POST') fail('Phương thức không hợp lệ', 405);
         json_out(['ok' => true, 'data' => $this->$fn()]);
     }
@@ -1196,6 +1205,212 @@ class Api
         $r = $this->loadRuleForEdit($u);
         DB::run('UPDATE tg_rules SET enabled = ? WHERE id = ?', [$this->in('enabled') ? 1 : 0, $r['id']]);
         Rules::syncMenus();
+        return [];
+    }
+
+    // ---- Quảng cáo xoay vòng (chỉ admin web) ----
+    private function ads(): array
+    {
+        Auth::requireAdmin();
+        $camps = [];
+        foreach (DB::all('SELECT * FROM tg_ad_campaigns ORDER BY id') as $c) {
+            $row = Ads::campaignRow($c);
+            $row['ads'] = array_map([Ads::class, 'adRow'], DB::all('SELECT * FROM tg_ads WHERE campaign_id = ? ORDER BY sort, id', [$c['id']]));
+            $row['posts'] = array_map(fn($p) => [
+                'group' => $p['title'], 'message_id' => (int)$p['message_id'], 'ad_id' => (int)$p['ad_id'],
+                'created_at' => (int)$p['created_at'], 'last_rotate_at' => (int)$p['last_rotate_at'],
+                'link' => Moderation::link($p, (int)$p['message_id']),
+            ], DB::all('SELECT p.*, g.title, g.username, g.chat_id FROM tg_ad_posts p JOIN tg_groups g ON g.id = p.group_id WHERE p.campaign_id = ? AND p.active = 1', [$c['id']]));
+            $camps[] = $row;
+        }
+        return [
+            'campaigns' => $camps,
+            'groups' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title'], 'bot' => $g['bot_username']],
+                DB::all('SELECT g.id, g.title, b.username AS bot_username FROM tg_groups g LEFT JOIN tg_bots b ON b.id = g.bot_id WHERE g.active = 1 ORDER BY g.title')),
+            'last_tick' => (int)Settings::get('ads_last_tick') ?: null,
+            'cron_url' => site_url() . '/cron.php?key=' . Settings::get('cron_key'),
+            'cron_path' => ROOT . '/cron.php',
+            'intervals' => Ads::INTERVALS,
+        ];
+    }
+
+    /** Ảnh quảng cáo (xem trước trên web) */
+    private function adImage(): array
+    {
+        Auth::requireAdmin();
+        $a = DB::get('SELECT image FROM tg_ads WHERE id = ?', [$this->int('id')]);
+        $path = $a ? Ads::imagePath($a['image']) : null;
+        if (!$path) fail('Không có ảnh', 404);
+        header('Content-Type: ' . (mime_content_type($path) ?: 'image/jpeg'));
+        header('Cache-Control: private, max-age=86400');
+        readfile($path);
+        exit;
+    }
+
+    private function loadCampaign(): array
+    {
+        return DB::get('SELECT * FROM tg_ad_campaigns WHERE id = ?', [$this->int('id') ?: $this->int('campaign_id')]) ?: fail('Không tìm thấy chiến dịch', 404);
+    }
+
+    private function adCampaignSave(): array
+    {
+        $u = Auth::requireAdmin();
+        $id = $this->int('id');
+        $old = $id ? $this->loadCampaign() : null;
+        $name = trim(mb_substr((string)$this->in('name', ''), 0, 120));
+        if ($name === '') fail('Nhập tên chiến dịch');
+        $groups = array_values(array_unique(array_map('intval', array_filter((array)$this->in('group_ids', []), 'is_numeric'))));
+        $interval = (int)$this->in('interval_sec', 10);
+        if (!in_array($interval, Ads::INTERVALS, true)) $interval = 10;
+        $time = (string)$this->in('daily_time', '00:00');
+        if (!preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $time)) fail('Giờ đăng bài mới không hợp lệ (HH:MM)');
+        $data = [
+            'name' => $name,
+            'enabled' => $this->in('enabled', true) ? 1 : 0,
+            'group_ids' => json_encode($groups),
+            'bot_mode' => $this->in('bot_mode') === 'custom' ? 'custom' : 'default',
+            'interval_sec' => $interval,
+            'rotate_order' => $this->in('rotate_order') === 'random' ? 'random' : 'sequence',
+            'daily_new' => $this->in('daily_new', true) ? 1 : 0,
+            'daily_time' => $time,
+            'pin' => $this->in('pin', true) ? 1 : 0,
+            'pin_silent' => $this->in('pin_silent', true) ? 1 : 0,
+            'delete_old' => $this->in('delete_old') ? 1 : 0,
+            'updated_at' => now(),
+        ];
+        // Bot quảng cáo riêng: kiểm tra token
+        $token = trim((string)$this->in('bot_token', ''));
+        if ($data['bot_mode'] === 'custom') {
+            if ($token !== '') {
+                if (!preg_match('/^\d+:[\w-]{30,}$/', $token)) fail('Token bot quảng cáo không đúng định dạng');
+                try { $me = (new Telegram($token))->call('getMe'); } catch (TelegramException $e) { fail('Token bot quảng cáo không hợp lệ: ' . $e->getMessage()); }
+                $data['bot_token'] = $token;
+                $data['bot_username'] = $me['username'];
+            } elseif (!$old || !$old['bot_token']) {
+                fail('Nhập token của bot quảng cáo (lấy từ @BotFather)');
+            }
+        }
+        if ($id) {
+            $botChanged = ($old['bot_mode'] !== $data['bot_mode']) || isset($data['bot_token']);
+            DB::update('tg_ad_campaigns', $data, 'id = ?', [$id]);
+            if ($botChanged) Ads::stop($old); // đổi bot → đăng lại bằng bot mới
+            // Bỏ nhóm khỏi chiến dịch → gỡ ghim bài ở nhóm đó
+            foreach (DB::all('SELECT * FROM tg_ad_posts WHERE campaign_id = ? AND active = 1', [$id]) as $p) {
+                if (!in_array((int)$p['group_id'], $groups, true)) DB::run('UPDATE tg_ad_posts SET active = 0 WHERE id = ?', [$p['id']]);
+            }
+        } else {
+            $data['created_at'] = now();
+            $id = DB::insert('tg_ad_campaigns', $data);
+        }
+        Repo::log(null, $u['username'], 'system', null, 'Lưu chiến dịch quảng cáo: ' . $name);
+        return ['campaign' => Ads::campaignRow(DB::get('SELECT * FROM tg_ad_campaigns WHERE id = ?', [$id]))];
+    }
+
+    private function adCampaignDelete(): array
+    {
+        $u = Auth::requireAdmin();
+        $c = $this->loadCampaign();
+        Ads::stop($c);
+        foreach (DB::all('SELECT image FROM tg_ads WHERE campaign_id = ?', [$c['id']]) as $a) if ($a['image']) @unlink(Ads::IMG_DIR . '/' . basename($a['image']));
+        DB::run('DELETE FROM tg_ads WHERE campaign_id = ?', [$c['id']]);
+        DB::run('DELETE FROM tg_ad_posts WHERE campaign_id = ?', [$c['id']]);
+        DB::run('DELETE FROM tg_ad_campaigns WHERE id = ?', [$c['id']]);
+        Repo::log(null, $u['username'], 'system', null, 'Xoá chiến dịch quảng cáo: ' . $c['name']);
+        return [];
+    }
+
+    /** Đăng bài mới & ghim ngay (không đợi tới giờ) */
+    private function adCampaignRun(): array
+    {
+        $u = Auth::requireAdmin();
+        $c = $this->loadCampaign();
+        $ads = DB::all('SELECT * FROM tg_ads WHERE campaign_id = ? AND enabled = 1 AND image IS NOT NULL ORDER BY sort, id', [$c['id']]);
+        if (!$ads) fail('Chiến dịch chưa có bài quảng cáo nào đang bật');
+        $gids = json_decode((string)$c['group_ids'], true) ?: [];
+        if (!$gids) fail('Chưa chọn nhóm để đăng');
+        DB::run('UPDATE tg_ad_campaigns SET enabled = 1 WHERE id = ?', [$c['id']]);
+        $c['enabled'] = 1;
+        $done = [];
+        $errors = [];
+        foreach ($gids as $gid) {
+            $g = DB::get('SELECT * FROM tg_groups WHERE id = ? AND active = 1', [$gid]);
+            if (!$g) continue;
+            $old = DB::get('SELECT * FROM tg_ad_posts WHERE campaign_id = ? AND group_id = ? AND active = 1', [$c['id'], $gid]);
+            try {
+                Ads::post($c, $g, $old, $ads, $old ? (int)$old['ad_id'] : null);
+                $done[] = $g['title'];
+            } catch (Throwable $e) {
+                $msg = $e->getMessage();
+                if (stripos($msg, 'not enough rights') !== false || stripos($msg, 'chat not found') !== false || stripos($msg, 'not a member') !== false) {
+                    $msg = 'Bot ' . ($c['bot_mode'] === 'custom' ? '@' . $c['bot_username'] : 'của nhóm') . ' chưa ở trong nhóm hoặc thiếu quyền gửi ảnh / ghim tin';
+                }
+                $errors[] = $g['title'] . ': ' . $msg;
+            }
+        }
+        Repo::log(null, $u['username'], 'system', null, 'Phát quảng cáo ngay: ' . $c['name']);
+        return ['done' => $done, 'errors' => $errors];
+    }
+
+    private function adCampaignStop(): array
+    {
+        $u = Auth::requireAdmin();
+        $c = $this->loadCampaign();
+        Ads::stop($c);
+        DB::run('UPDATE tg_ad_campaigns SET enabled = 0 WHERE id = ?', [$c['id']]);
+        Repo::log(null, $u['username'], 'system', null, 'Dừng quảng cáo: ' . $c['name']);
+        return [];
+    }
+
+    private function adSave(): array
+    {
+        Auth::requireAdmin();
+        $id = $this->int('id');
+        $old = $id ? (DB::get('SELECT * FROM tg_ads WHERE id = ?', [$id]) ?: fail('Không tìm thấy bài', 404)) : null;
+        $c = DB::get('SELECT * FROM tg_ad_campaigns WHERE id = ?', [$old ? $old['campaign_id'] : $this->int('campaign_id')]) ?: fail('Không tìm thấy chiến dịch', 404);
+        $caption = trim((string)$this->in('caption', ''));
+        if (mb_strlen($caption) > Ads::CAPTION_MAX) fail('Nội dung tối đa ' . Ads::CAPTION_MAX . ' ký tự (giới hạn chú thích ảnh của Telegram)');
+        $data = [
+            'title' => trim(mb_substr((string)$this->in('title', ''), 0, 120)),
+            'caption' => $caption,
+            'buttons' => json_encode(Ads::cleanButtons($this->in('buttons', [])), JSON_UNESCAPED_UNICODE),
+            'enabled' => $this->in('enabled', true) ? 1 : 0,
+            'updated_at' => now(),
+        ];
+        $img = (string)$this->in('image', '');
+        if ($img !== '') {
+            $data['image'] = Ads::saveImage($img, $old['image'] ?? null);
+            $data['file_ids'] = null; // ảnh mới → tải lại lên Telegram
+        } elseif (!$old || !$old['image']) {
+            fail('Chọn ảnh cho bài quảng cáo');
+        }
+        if ($old) DB::update('tg_ads', $data, 'id = ?', [$id]);
+        else {
+            $data += ['campaign_id' => $c['id'], 'sort' => (int)DB::val('SELECT COALESCE(MAX(sort), 0) + 1 FROM tg_ads WHERE campaign_id = ?', [$c['id']]), 'created_at' => now()];
+            $id = DB::insert('tg_ads', $data);
+        }
+        return ['ad' => Ads::adRow(DB::get('SELECT * FROM tg_ads WHERE id = ?', [$id]))];
+    }
+
+    private function adDelete(): array
+    {
+        Auth::requireAdmin();
+        $a = DB::get('SELECT * FROM tg_ads WHERE id = ?', [$this->int('id')]) ?: fail('Không tìm thấy bài', 404);
+        if ($a['image']) @unlink(Ads::IMG_DIR . '/' . basename($a['image']));
+        DB::run('DELETE FROM tg_ads WHERE id = ?', [$a['id']]);
+        return [];
+    }
+
+    /** Đổi thứ tự bài: dir = -1 (lên) / 1 (xuống) */
+    private function adMove(): array
+    {
+        Auth::requireAdmin();
+        $a = DB::get('SELECT * FROM tg_ads WHERE id = ?', [$this->int('id')]) ?: fail('Không tìm thấy bài', 404);
+        $list = DB::all('SELECT id FROM tg_ads WHERE campaign_id = ? ORDER BY sort, id', [$a['campaign_id']]);
+        $ids = array_map(fn($r) => (int)$r['id'], $list);
+        $i = array_search((int)$a['id'], $ids, true);
+        $j = $i + ($this->int('dir') < 0 ? -1 : 1);
+        if ($j >= 0 && $j < count($ids)) { [$ids[$i], $ids[$j]] = [$ids[$j], $ids[$i]]; }
+        foreach ($ids as $k => $aid) DB::run('UPDATE tg_ads SET sort = ? WHERE id = ?', [$k + 1, $aid]);
         return [];
     }
 

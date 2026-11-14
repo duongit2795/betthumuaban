@@ -68,6 +68,23 @@ class Telegram
         }
     }
 
+    /** Gọi API có kèm tệp (multipart): $files = ['photo' => '/đường/dẫn/ảnh.jpg'] */
+    public function callMultipart(string $method, array $params, array $files, int $timeout = 60)
+    {
+        $post = [];
+        foreach ($params as $k => $v) $post[$k] = is_array($v) ? json_encode($v, JSON_UNESCAPED_UNICODE) : (is_bool($v) ? ($v ? 'true' : 'false') : (string)$v);
+        foreach ($files as $k => $path) $post[$k] = new CURLFile($path, mime_content_type($path) ?: 'image/jpeg', basename($path));
+        $ch = curl_init('https://api.telegram.org/bot' . $this->token . '/' . $method);
+        curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => $post, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => $timeout, CURLOPT_CONNECTTIMEOUT => 8]);
+        $body = curl_exec($ch);
+        $err = curl_error($ch);
+        curl_close($ch);
+        if ($body === false) throw new TelegramException('Không kết nối được Telegram: ' . $err);
+        $data = json_decode($body, true);
+        if (!is_array($data) || empty($data['ok'])) throw new TelegramException($data['description'] ?? 'Telegram lỗi', $data['error_code'] ?? null);
+        return $data['result'];
+    }
+
     public function send($chatId, string $text, array $extra = [])
     {
         return $this->call('sendMessage', array_merge([

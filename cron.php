@@ -23,4 +23,6 @@ ChatLog::cleanup();
 DB::run('DELETE FROM app_logs WHERE created_at < ?', [now() - 180 * 86400]);
 // Dọn file throttle cũ
 foreach (glob(DATA_DIR . '/throttle_*.json') ?: [] as $f) if (filemtime($f) < now() - 3600) @unlink($f);
+// Quảng cáo xoay vòng: chạy liên tục ~55 giây (cron gọi lại mỗi phút)
+Ads::run(55);
 echo "ok\n";
