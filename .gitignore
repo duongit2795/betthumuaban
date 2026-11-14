@@ -1,0 +1,6 @@
+data/*
+!data/.gitkeep
+!data/.htaccess
+!data/index.html
+.DS_Store
+*.log

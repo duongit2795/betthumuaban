@@ -1,0 +1,5 @@
+# Apache: chặn truy cập thư mục nội bộ
+RewriteEngine On
+RewriteRule ^(data|app)(/|$) - [F,L]
+RewriteRule ^\.git - [F,L]
+Options -Indexes

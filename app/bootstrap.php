@@ -1,0 +1,82 @@
+<?php
+declare(strict_types=1);
+
+define('APP', true);
+define('ROOT', dirname(__DIR__));
+define('DATA_DIR', ROOT . '/data');
+define('CONFIG_FILE', DATA_DIR . '/config.php');
+define('APP_VERSION', trim((string)@file_get_contents(ROOT . '/VERSION')) ?: '1.0.0');
+
+error_reporting(E_ALL);
+ini_set('display_errors', '0');
+date_default_timezone_set('Asia/Ho_Chi_Minh');
+mb_internal_encoding('UTF-8');
+
+spl_autoload_register(function (string $cls) {
+    $f = __DIR__ . '/' . $cls . '.php';
+    if (is_file($f)) require $f;
+});
+
+function cfg(?string $key = null, $default = null)
+{
+    static $c = null;
+    if ($c === null) $c = is_file(CONFIG_FILE) ? (require CONFIG_FILE) : [];
+    if ($key === null) return $c;
+    return $c[$key] ?? $default;
+}
+
+function installed(): bool
+{
+    return is_file(CONFIG_FILE);
+}
+
+function now(): int
+{
+    return time();
+}
+
+function e($s): string
+{
+    return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+}
+
+/** Escape cho parse_mode HTML của Telegram */
+function tg_esc($s): string
+{
+    return str_replace(['&', '<', '>'], ['&amp;', '&lt;', '&gt;'], (string)$s);
+}
+
+function json_out($data, int $code = 200): void
+{
+    http_response_code($code);
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store');
+    echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+class HttpError extends Exception
+{
+    public int $status;
+    public function __construct(string $msg, int $status = 400)
+    {
+        parent::__construct($msg);
+        $this->status = $status;
+    }
+}
+
+function fail(string $msg, int $status = 400): void
+{
+    throw new HttpError($msg, $status);
+}
+
+function site_url(): string
+{
+    $u = Settings::get('site_url');
+    if ($u) return rtrim($u, '/');
+    $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
+    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    $dir = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/');
+    return ($https ? 'https' : 'http') . '://' . $host . $dir;
+}
