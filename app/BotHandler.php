@@ -24,7 +24,8 @@ class BotHandler
         elseif (isset($u['message'])) $this->onMessage($u['message']);
         elseif (isset($u['edited_message'])) $this->onMessage($u['edited_message'], true);
         elseif (isset($u['callback_query'])) {
-            if (!UpdateNotifier::onCallback($this->api, $u['callback_query'])) TgLogin::onCallback($this->api, $u['callback_query']);
+            $cbq = $u['callback_query'];
+            if (!UsernameGuard::onCallback($this->api, $cbq) && !UpdateNotifier::onCallback($this->api, $cbq)) TgLogin::onCallback($this->api, $cbq);
         }
     }
 
@@ -161,6 +162,9 @@ class BotHandler
 
         if ($edited) return;
 
+        // Yêu cầu đặt Username Telegram (Lệnh mặc định → Tính năng mặc định)
+        if (empty($msg['sender_chat']) && UsernameGuard::check($this->api, (int)$this->bot['id'], $group, $from, $msg, $isAdmin)) return;
+
         // Chống flood
         $t = now();
         if ($s['anti_flood'] && !$isAdmin && empty($from['is_bot']) && $s['flood_limit'] > 0) {
@@ -233,6 +237,10 @@ class BotHandler
             foreach ($names as $m) {
                 $this->api->trySend($msg['chat']['id'], $this->tpl($s['welcome_text'], $m, $group));
             }
+        }
+        // Thành viên mới chưa có username → xử lý theo cài đặt "Yêu cầu đặt Username"
+        foreach ($msg['new_chat_members'] as $u) {
+            if ($u['id'] != $this->botTgId) UsernameGuard::check($this->api, (int)$this->bot['id'], $group, $u, null, false, true);
         }
     }
 

@@ -111,7 +111,7 @@
     join: ['Vào nhóm', 'plus', 'green'], leave: ['Rời nhóm', 'minus', ''], send: ['Gửi tin', 'send', 'blue'],
     settings: ['Cài đặt', 'settings', ''], bot_added: ['Thêm bot vào nhóm', 'bot', 'green'], bot_removed: ['Bot rời nhóm', 'bot', 'red'],
     bot_add: ['Thêm bot', 'bot', 'blue'], bot_delete: ['Xoá bot', 'bot', 'red'], bot_on: ['Bật bot', 'power', 'green'], bot_off: ['Tắt bot', 'power', ''],
-    rule: ['Lệnh tự tạo', 'terminal', 'blue'], login: ['Đăng nhập', 'key', 'green'], update: ['Cập nhật hệ thống', 'download', 'blue'], system: ['Hệ thống', 'settings', ''], pin: ['Ghim tin', 'pin', 'blue'], unpin: ['Bỏ ghim', 'pin', ''],
+    rule: ['Lệnh tự tạo', 'terminal', 'blue'], username: ['Nhắc đặt username', 'user', 'amber'], login: ['Đăng nhập', 'key', 'green'], update: ['Cập nhật hệ thống', 'download', 'blue'], system: ['Hệ thống', 'settings', ''], pin: ['Ghim tin', 'pin', 'blue'], unpin: ['Bỏ ghim', 'pin', ''],
   };
 
   // ================= State & API =================
@@ -1917,10 +1917,21 @@
       title: 'Lệnh',
       html: cmdTabs('commands') + `
         <div class="alert info" style="margin-bottom:12px">${icon('info')}<div class="small">Bấm vào lệnh để xem <b>chi tiết, cú pháp, ví dụ</b>${d.can_edit ? ' và <b>đổi tên</b> (VD <code>/me</code> → <code>/canhan</code>), bật/tắt, sửa mô tả trong menu Telegram' : ''}.</div></div>
+        ${(() => {
+          const ru = d.features.require_username;
+          const scope = ru.groups.length ? `${ru.groups.length} nhóm` : 'tất cả nhóm';
+          return `<div class="section-title"><h2>⚙️ Tính năng mặc định</h2></div>
+          <div class="list"><button type="button" class="list-item cmd-row" data-feature="require_username">
+            <div class="feat-ico">🔖</div>
+            <div class="grow"><div class="row wrap" style="gap:6px"><b>Yêu cầu đặt Username</b>${ru.enabled ? '<span class="badge green">Đang bật</span>' : '<span class="badge">Tắt</span>'}</div>
+            <div class="xs text-2" style="margin-top:3px">${ru.enabled ? `${esc(ru.actions[ru.action])} · ${scope}${ru.on_join ? ' · kiểm tra khi vào nhóm' : ''}` : 'Bắt thành viên phải có @username Telegram mới được nhắn tin'}</div></div>
+            <span class="chev">${icon('chevron')}</span></button></div>`;
+        })()}
         ${groups.map(([k, t]) => `<div class="section-title"><h2>${t}</h2></div><div class="list">${d.commands.filter((c) => c.scope === k).map(row).join('')}</div>`).join('')}
         ${d.can_edit ? `<button class="btn soft-danger block" data-resetall style="margin-top:16px">${icon('refresh', 'sm')}Đặt lại tất cả lệnh về mặc định</button>` : ''}`,
       mount: (root) => {
         root.addEventListener('click', async (e) => {
+          if (e.target.closest('[data-feature="require_username"]')) return usernameSheet(d, () => render());
           const b = e.target.closest('[data-cmd]');
           if (b) commandSheet(d.commands.find((c) => c.key === b.dataset.cmd), d.can_edit, () => render());
           if (e.target.closest('[data-resetall]')) {
@@ -1931,6 +1942,72 @@
       },
     };
   }, { manage: true, title: 'Lệnh' });
+
+  // Tính năng mặc định: yêu cầu đặt Username Telegram
+  function usernameSheet(d, onSaved) {
+    const ru = d.features.require_username;
+    const can = d.can_edit;
+    const dis = can ? '' : 'disabled';
+    const autodelOpts = [[0, 'Không xoá'], [30, '30 giây'], [60, '1 phút'], [120, '2 phút'], [300, '5 phút'], [600, '10 phút']];
+    const cdOpts = [[0, 'Lần nào cũng nhắc'], [60, '1 phút'], [300, '5 phút'], [1800, '30 phút'], [3600, '1 giờ'], [86400, '1 ngày']];
+    const hints = { remind: 'Bot nhắc, tin nhắn vẫn giữ', delete: 'Xoá tin vừa gửi rồi nhắc', mute: 'Xoá tin, cấm chat; đặt username xong bấm nút để được mở', kick: 'Xoá tin và mời ra khỏi nhóm' };
+    sheet(`<div class="sheet-head"><div class="feat-ico">🔖</div><h2>Yêu cầu đặt Username</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
+      <div class="alert info" style="margin-bottom:12px">${icon('info')}<div class="small">Thành viên <b>chưa có @username</b> Telegram khi nhắn tin (hoặc vừa vào nhóm) sẽ bị xử lý theo cài đặt dưới đây. Tin nhắc có nút <b>✅ Tôi đã đặt username</b>: bấm vào bot kiểm tra lại và tự bỏ cấm chat.</div></div>
+      <form id="fu" class="stack">
+        <div class="card" style="box-shadow:none">
+          ${sw('enabled', ru.enabled, 'Bật yêu cầu đặt Username')}
+          ${sw('on_join', ru.on_join, 'Kiểm tra ngay khi vào nhóm', 'Không cần đợi họ nhắn tin')}
+          ${sw('exempt_admins', ru.exempt_admins, 'Bỏ qua quản trị viên')}
+        </div>
+        <div class="field"><span class="lbl">Khi thành viên chưa có username</span>
+          <div class="stack" style="gap:6px">${Object.entries(ru.actions).map(([k, t]) => `<label class="radio-row"><input type="radio" name="action" value="${k}" ${ru.action === k ? 'checked' : ''} ${dis}><span><b>${t}</b><small>${hints[k]}</small></span></label>`).join('')}</div></div>
+        <div class="field"><span class="lbl">Áp dụng cho</span>
+          <div class="chips" style="flex-wrap:wrap"><button type="button" class="chip ${ru.groups.length ? '' : 'active'}" data-allgroups ${dis}>Tất cả nhóm</button>
+          ${d.groups.map((g) => `<button type="button" class="chip ${ru.groups.includes(g.id) ? 'active' : ''}" data-gsel="${g.id}" ${dis}>${esc(g.title)}</button>`).join('')}</div></div>
+        <div class="grid grid-2">
+          <label class="field"><span class="lbl">Tự xoá tin nhắc</span><select class="input" name="autodel" ${dis}>${autodelOpts.map(([v, t]) => `<option value="${v}" ${v === ru.autodel ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+          <label class="field"><span class="lbl">Nhắc lại cùng người sau</span><select class="input" name="cooldown" ${dis}>${cdOpts.map(([v, t]) => `<option value="${v}" ${v === ru.cooldown ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+        </div>
+        <label class="field"><span class="lbl">Nội dung tin nhắc</span><textarea class="input" name="text" style="min-height:120px" ${dis}>${esc(ru.text)}</textarea>
+          <div class="hint">Biến: <code>{mention}</code> tag tên · <code>{name}</code> tên · <code>{id}</code> · <code>{group}</code> tên nhóm. Hỗ trợ &lt;b&gt; &lt;i&gt;.</div></label>
+        <div class="pv"><div class="pv-label">👁 Xem trước</div><div class="pv-body" id="upv"></div></div>
+        ${can ? `<div class="grid grid-2"><button type="button" class="btn" data-deftext>${icon('refresh', 'sm')}Nội dung mặc định</button><button class="btn primary">${icon('check', 'sm')}Lưu</button></div>`
+          : `<div class="alert info">${icon('lock')}<div class="xs">Chỉ admin web được thay đổi.</div></div>`}
+      </form>`, (el, close) => {
+      const f = $('#fu', el);
+      let groupsSel = [...ru.groups];
+      const preview = () => {
+        const act = f.querySelector('[name=action]:checked')?.value;
+        const extra = { mute: '\n\n🔇 Bạn đang bị <b>tạm cấm chat</b> cho tới khi đặt username.', kick: '\n\n👢 Bạn đã bị mời ra khỏi nhóm. Đặt username rồi vào lại nhé.' }[act] || '';
+        const t = (f.text.value + extra).replace(/\{mention\}/g, '\u0001Minh Anh\u0002').replace(/\{name\}/g, 'Minh Anh').replace(/\{id\}/g, '123456789').replace(/\{group\}/g, d.groups[0]?.title || 'Nhóm');
+        $('#upv', el).innerHTML = previewText(t) + (act !== 'kick' ? '<div style="margin-top:8px"><span class="badge blue">✅ Tôi đã đặt username</span></div>' : '');
+      };
+      preview();
+      el.addEventListener('input', preview);
+      el.addEventListener('change', preview);
+      el.addEventListener('click', (e) => {
+        const all = e.target.closest('[data-allgroups]');
+        const g = e.target.closest('[data-gsel]');
+        if (all) groupsSel = [];
+        if (g) { const id = Number(g.dataset.gsel); groupsSel = groupsSel.includes(id) ? groupsSel.filter((x) => x !== id) : [...groupsSel, id]; }
+        if (all || g) {
+          $$('[data-gsel]', el).forEach((b) => b.classList.toggle('active', groupsSel.includes(Number(b.dataset.gsel))));
+          $('[data-allgroups]', el).classList.toggle('active', !groupsSel.length);
+        }
+        if (e.target.closest('[data-deftext]')) { f.text.value = ru.default_text; preview(); }
+      });
+      f.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const v = formData(f);
+        await withBtn(f.querySelector('button.primary'), async () => {
+          try {
+            await api('commands/feature', { feature: 'require_username', config: { enabled: v.enabled, on_join: v.on_join, exempt_admins: v.exempt_admins, action: v.action, groups: groupsSel, autodel: Number(v.autodel), cooldown: Number(v.cooldown), text: v.text } });
+            close(); toast(v.enabled ? 'Đã bật yêu cầu đặt Username' : 'Đã lưu (đang tắt)'); onSaved();
+          } catch (err) { toast(err.message, 'err'); }
+        });
+      });
+    });
+  }
 
   function commandSheet(c, canEdit, onSaved) {
     const st = { aliases: [...c.aliases], keep: c.keep_original, enabled: c.enabled, desc: c.description };

@@ -69,6 +69,8 @@ Web PHP (chạy tốt trên **aaPanel**) để quản lý nhóm Telegram bằng 
 
 Chat riêng với bot: `/start`, `/login MÃ` (hoặc `/dangnhap`), `/link MÃ`, `/me`.
 
+**🔖 Yêu cầu đặt Username** (*Lệnh → Lệnh mặc định → Tính năng mặc định*): thành viên chưa có @username khi nhắn tin hoặc vừa vào nhóm sẽ bị *chỉ nhắc* / *xoá tin + nhắc* / *cấm chat cho tới khi đặt username* / *đuổi*. Tin nhắc có nút **✅ Tôi đã đặt username**: bot kiểm tra lại và tự bỏ cấm chat. Chọn nhóm áp dụng, bỏ qua admin, tự xoá tin nhắc, giới hạn tần suất, sửa nội dung (có xem trước).
+
 **Tuỳ chỉnh lệnh mặc định** (*Lệnh → 📚 Lệnh mặc định*): xem chi tiết, cú pháp, ví dụ của từng lệnh; admin web **đổi tên / thêm tên khác** (VD `/me` → `/canhan`, tối đa 5 tên), giữ hoặc tắt tên gốc, bật/tắt lệnh, sửa mô tả trong menu Telegram. Menu "/", `/help` và hướng dẫn của bot tự dùng tên mới. Lệnh tự tạo trùng tên được ưu tiên (trang lệnh sẽ cảnh báo).
 
 ## Yêu cầu

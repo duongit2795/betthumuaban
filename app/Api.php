@@ -80,6 +80,7 @@ class Api
             'commands' => 'commands',
             'commands/save' => 'commandSave',
             'commands/reset' => 'commandReset',
+            'commands/feature' => 'commandFeature',
             'system' => 'system',
             'system/settings' => 'systemSettings',
             'system/check-update' => 'checkUpdate',
@@ -1140,7 +1141,15 @@ class Api
             if ($c['scope'] !== 'private') foreach ($c['names'] as $n) if (isset($ruleNames[$n])) $c['overridden'][] = ['name' => $n, 'where' => $ruleNames[$n]];
             return $c;
         }, Commands::all());
-        return ['commands' => $rows, 'can_edit' => Access::isWebAdmin($u), 'bot' => TgLogin::bots()[0] ?? null];
+        return [
+            'commands' => $rows,
+            'can_edit' => Access::isWebAdmin($u),
+            'bot' => TgLogin::bots()[0] ?? null,
+            'features' => [
+                'require_username' => UsernameGuard::config() + ['actions' => UsernameGuard::ACTIONS, 'default_text' => UsernameGuard::DEFAULTS['text']],
+            ],
+            'groups' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title']], DB::all('SELECT id, title FROM tg_groups WHERE active = 1 ORDER BY title')),
+        ];
     }
 
     private function commandSave(): array
@@ -1150,6 +1159,16 @@ class Api
         $row = Commands::save($key, $this->in);
         Repo::log(null, $u['username'], 'system', null, 'Sửa lệnh mặc định /' . $row['original'] . ($row['aliases'] ? ' → /' . implode(', /', $row['aliases']) : '') . ($row['enabled'] ? '' : ' (tắt)'));
         return ['command' => $row, 'menu_errors' => Rules::syncMenus()];
+    }
+
+    /** Lưu tính năng mặc định (hiện có: yêu cầu đặt username) */
+    private function commandFeature(): array
+    {
+        $u = Auth::requireAdmin();
+        if ($this->in('feature') !== 'require_username') fail('Tính năng không hợp lệ');
+        $c = UsernameGuard::save((array)$this->in('config', []));
+        Repo::log(null, $u['username'], 'system', null, 'Yêu cầu đặt username: ' . ($c['enabled'] ? 'bật · ' . UsernameGuard::ACTIONS[$c['action']] : 'tắt'));
+        return ['config' => $c];
     }
 
     private function commandReset(): array
