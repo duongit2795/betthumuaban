@@ -50,6 +50,7 @@
     external: '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/>',
     key: '<circle cx="7.5" cy="15.5" r="4.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/>',
     database: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
+    reply: '<path d="M9 17 4 12l5-5"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/>',
     terminal: '<path d="m4 17 6-6-6-6M12 19h8"/>',
     globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
   };
@@ -83,6 +84,12 @@
     const ch = (String(name || '?').replace(/^@/, '').trim()[0] || '?');
     return `<div class="avatar ${cls}" style="background:${COLORS[h % COLORS.length]}">${esc(ch)}</div>`;
   };
+  // Bộ đếm giờ của trang hiện tại (tự dừng khi chuyển trang)
+  const timers = new Set();
+  const every = (fn, ms) => { const id = setInterval(fn, ms); timers.add(id); return id; };
+  const cleanups = [];
+  const onLeave = (fn) => cleanups.push(fn);
+  const stopTimers = () => { timers.forEach(clearInterval); timers.clear(); while (cleanups.length) { try { cleanups.pop()(); } catch {} } };
   const debounce = (fn, ms = 300) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 
   const STATUS = {
@@ -271,7 +278,12 @@
     if (r.admin && S.user.role !== 'admin') return go('/');
 
     shell(r.nav || '', r.title || '', r.back);
-    const main = $('#main');
+    // Thay #main bằng phần tử mới để gỡ toàn bộ sự kiện của trang trước
+    // (tránh một lần bấm chạy nhiều lần, mở nhiều cửa sổ chồng nhau)
+    const old = $('#main');
+    const main = old.cloneNode(false);
+    old.replaceWith(main);
+    stopTimers();
     main.innerHTML = loading();
     try {
       const out = await r.view(params);
@@ -338,6 +350,15 @@
     }
     const cp = e.target.closest('[data-copy]');
     if (cp) { navigator.clipboard?.writeText(cp.dataset.copy).then(() => toast('Đã sao chép')); }
+  });
+  // Esc đóng cửa sổ trên cùng
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const ovs = $$('.overlay');
+    const top = ovs[ovs.length - 1];
+    if (!top) return;
+    const btn = top.querySelector('[data-close]');
+    if (btn) btn.click(); else top.click();
   });
   function toggleTheme() {
     const cur = document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
@@ -516,7 +537,7 @@
   async function viewGroup(id, tab) {
     const d = await api('group', undefined, { query: { id } });
     const g = d.group;
-    const tabs = [['overview', 'Tổng quan'], ['members', 'Thành viên'], ['settings', 'Cài đặt'], ['rules', 'Lệnh'], ['send', 'Gửi tin'], ['logs', 'Nhật ký']];
+    const tabs = [['overview', 'Tổng quan'], ['chat', '💬 Chat'], ['members', 'Thành viên'], ['settings', 'Cài đặt'], ['rules', 'Lệnh'], ['send', 'Gửi tin'], ['logs', 'Nhật ký']];
     const tabsHtml = `<div class="tabs">${tabs.map(([k, t]) => `<button data-tab="${k}" class="${k === tab ? 'active' : ''}">${t}</button>`).join('')}</div>`;
     let body = '';
     let mount = () => {};
@@ -525,12 +546,14 @@
     else if (tab === 'send') ({ body, mount } = groupSend(d));
     else if (tab === 'logs') ({ body, mount } = groupLogs(d));
     else if (tab === 'rules') ({ body, mount } = rulesBlock(g.id));
+    else if (tab === 'chat') ({ body, mount } = groupChat(d));
     else ({ body, mount } = groupOverview(d));
     return {
       title: g.title,
       html: tabsHtml + `<div id="tabbody">${body}</div>`,
       mount: (root) => {
         $$('[data-tab]', root).forEach((b) => b.onclick = () => go(`/group/${id}/${b.dataset.tab}`));
+        $('[data-tab].active', root)?.scrollIntoView({ block: 'nearest', inline: 'center' });
         mount(root);
       },
     };
@@ -793,6 +816,247 @@
           try { await api('group/settings', { id: g.id, settings: data, bot_id }); toast('Đã lưu cài đặt'); } catch (err) { toast(err.message, 'err'); }
         });
       };
+    };
+    return { body, mount };
+  }
+
+
+  // ================= Chat nhóm =================
+  const linkify = (t) => esc(t).replace(/(https?:\/\/[^\s<]+|t\.me\/[^\s<]+)/g, (u) => `<a href="${u.startsWith('http') ? u : 'https://' + u}" target="_blank" rel="noopener noreferrer">${u}</a>`);
+  const hhmm = (t) => { const d = new Date(t * 1000); return pad(d.getHours()) + ':' + pad(d.getMinutes()); };
+  const dayLabel = (t) => {
+    const d = new Date(t * 1000), n = new Date();
+    const key = (x) => x.getFullYear() + '-' + x.getMonth() + '-' + x.getDate();
+    if (key(d) === key(n)) return 'Hôm nay';
+    const y = new Date(n); y.setDate(n.getDate() - 1);
+    if (key(d) === key(y)) return 'Hôm qua';
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+  };
+  const nameColor = (seed) => { let h = 0; for (const c of String(seed)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return COLORS[h % COLORS.length]; };
+
+  function groupChat(d) {
+    const g = d.group;
+    const body = `<div class="chat-wrap">
+      <div class="chat-top" id="ctop"></div>
+      <div class="chat" id="chat"><div class="stack"><div class="skeleton" style="height:56px;width:70%"></div><div class="skeleton" style="height:42px;width:55%"></div><div class="skeleton" style="height:64px;width:75%"></div></div></div>
+      <form class="composer" id="composer">
+        <div id="replybar"></div>
+        <div class="row"><textarea rows="1" name="text" placeholder="Nhắn vào nhóm với tư cách bot…" aria-label="Nội dung"></textarea>
+        <button class="btn primary icon" aria-label="Gửi">${icon('send')}</button></div>
+      </form>
+    </div>`;
+
+    const mount = (root) => {
+      const S2 = { msgs: [], byId: new Map(), hasMore: false, lastId: 0, since: 0, warnLimit: 3, replyTo: null, loadingMore: false, unseen: 0 };
+      const chatEl = $('#chat', root);
+      const nearBottom = () => window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 160;
+      const toBottom = (smooth) => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+
+      const tools = (m) => {
+        if (m.kind === 'service') return '';
+        const mb = m.member;
+        const b = (a, ic, title, cls = '') => `<button type="button" data-ca="${a}" data-id="${m.id}" class="${cls}" title="${title}" aria-label="${title}">${icon(ic)}</button>`;
+        let h = '';
+        if (!m.deleted) h += b('del', 'trash', 'Xoá tin', 'red');
+        if (mb && !m.is_bot && !mb.is_admin) {
+          h += b('warn', 'alert', 'Cảnh cáo', 'amber');
+          h += mb.status === 'muted' ? b('unmute', 'volume', 'Bỏ cấm chat') : b('mute', 'mute', 'Cấm chat', 'amber');
+          h += mb.status === 'banned' ? b('unban', 'check', 'Gỡ cấm') : b('ban', 'ban', 'Cấm khỏi nhóm', 'red');
+        }
+        h += b('more', 'more', 'Thêm');
+        return `<div class="tools">${h}</div>`;
+      };
+
+      const msgHtml = (m, prev) => {
+        if (m.kind === 'service') return `<div class="svc" data-mid="${m.id}">${esc(m.text)} · ${hhmm(m.created_at)}</div>`;
+        const first = !prev || prev.kind === 'service' || prev.tg_user_id !== m.tg_user_id || m.created_at - prev.created_at > 300 || dayLabel(prev.created_at) !== dayLabel(m.created_at);
+        const color = nameColor(m.tg_user_id);
+        const mb = m.member;
+        const badges = [
+          m.is_bot ? '<span class="badge blue" style="font-size:10px;padding:0 6px">BOT</span>' : '',
+          mb?.is_admin ? '<span class="badge blue" style="font-size:10px;padding:0 6px">Admin</span>' : '',
+          mb?.status === 'muted' ? '<span class="badge amber" style="font-size:10px;padding:0 6px">Cấm chat</span>' : '',
+          mb?.status === 'banned' ? '<span class="badge red" style="font-size:10px;padding:0 6px">Bị cấm</span>' : '',
+          mb?.warns ? `<span class="badge amber" style="font-size:10px;padding:0 6px">⚠ ${mb.warns}/${S2.warnLimit}</span>` : '',
+        ].join('');
+        const quote = m.reply_to ? `<div class="quote" data-jump="${m.reply_to}"><b>${esc(m.reply_name || '')}</b><span>${esc(m.reply_text || '…')}</span></div>` : '';
+        const media = m.media && m.kind !== 'text' ? `<div class="media">${esc(m.media)}</div>` : '';
+        const showText = m.text && !(m.kind !== 'text' && m.text === m.media);
+        return `<div class="msg ${first ? 'first' : ''} ${m.is_bot ? 'bot' : ''} ${m.deleted ? 'deleted' : ''}" data-mid="${m.id}" data-tgmid="${m.message_id}">
+          <div class="av">${first ? (m.is_bot ? `<div class="avatar" style="background:linear-gradient(135deg,var(--primary),var(--primary-2))">${icon('bot', 'sm')}</div>` : avatar(m.name, m.tg_user_id)) : ''}</div>
+          <div class="body">
+            <div class="bubble">
+              ${first ? `<div class="who"><span class="n" style="color:${color}">${esc(m.name || 'Ẩn danh')}</span>${badges}</div>` : ''}
+              ${quote}${media}${showText ? `<div class="txt">${linkify(m.text)}</div>` : ''}
+              <div class="meta">${m.pinned ? '<span>📌</span>' : ''}${m.edited ? '<span>đã sửa</span>' : ''}<span>${hhmm(m.created_at)}</span></div>
+            </div>
+            ${m.deleted ? `<div class="del-note">🗑 Đã xoá${m.note ? ' · ' + esc(m.note) : ''}</div>` : ''}
+            ${tools(m)}
+          </div>
+        </div>`;
+      };
+
+      const render = (mode) => {
+        // Giữ vị trí cuộn: neo theo đáy trang (không giật khi thêm tin cũ/tin đổi)
+        const fromBottom = document.documentElement.scrollHeight - window.scrollY;
+        let html = '', prev = null, lastDay = '';
+        for (const m of S2.msgs) {
+          const day = dayLabel(m.created_at);
+          if (day !== lastDay) { html += `<div class="day-sep">${day}</div>`; lastDay = day; prev = null; }
+          html += msgHtml(m, prev);
+          prev = m;
+        }
+        chatEl.innerHTML = S2.msgs.length ? html : `<div class="chat-empty">${icon('msg')}<div style="margin-top:6px">Chưa có tin nhắn nào được ghi nhận.<br><span class="xs">Tin nhắn mới trong nhóm sẽ hiện ở đây.</span></div></div>`;
+        $('#ctop', root).innerHTML = S2.hasMore ? `<button class="btn sm soft" data-more>⬆ Xem thêm 30 tin cũ hơn</button>` : (S2.msgs.length ? '<span class="xs muted">— Đầu lịch sử chat (lưu 30 ngày) —</span>' : '');
+        if (mode === 'bottom') toBottom(false);
+        else window.scrollTo(0, document.documentElement.scrollHeight - fromBottom);
+      };
+
+      const add = (list) => { for (const m of list) { if (!S2.byId.has(m.id)) S2.msgs.push(m); S2.byId.set(m.id, m); } };
+      const replaceIn = (list) => { for (const m of list) { const i = S2.msgs.findIndex((x) => x.id === m.id); if (i >= 0) S2.msgs[i] = m; S2.byId.set(m.id, m); } };
+
+      const pill = () => {
+        let p = $('#newpill');
+        if (!S2.unseen) { p?.remove(); return; }
+        if (!p) { p = document.createElement('button'); p.id = 'newpill'; p.className = 'btn primary sm new-pill'; p.onclick = () => { S2.unseen = 0; pill(); toBottom(true); }; root.appendChild(p); }
+        p.innerHTML = `↓ ${S2.unseen} tin mới`;
+      };
+      const onScroll = () => { if (S2.unseen && nearBottom()) { S2.unseen = 0; pill(); } };
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onLeave(() => { window.removeEventListener('scroll', onScroll); $('#newpill')?.remove(); });
+
+      const load = async () => {
+        try {
+          const r = await api('chat', undefined, { query: { group_id: g.id } });
+          S2.warnLimit = r.warn_limit; S2.hasMore = r.has_more; S2.since = r.server_time;
+          add(r.messages);
+          S2.lastId = S2.msgs.length ? S2.msgs[S2.msgs.length - 1].id : 0;
+          render('bottom');
+        } catch (e) { chatEl.innerHTML = `<div class="alert err">${icon('alert')}<div>${esc(e.message)}</div></div>`; }
+      };
+
+      const loadMore = async (btn) => {
+        if (S2.loadingMore || !S2.msgs.length) return;
+        S2.loadingMore = true;
+        await withBtn(btn, async () => {
+          try {
+            const r = await api('chat', undefined, { query: { group_id: g.id, before_id: S2.msgs[0].id } });
+            S2.hasMore = r.has_more;
+            for (const m of r.messages) S2.byId.set(m.id, m);
+            S2.msgs = r.messages.filter((m) => !S2.msgs.some((x) => x.id === m.id)).concat(S2.msgs);
+            render('keep');
+          } catch (e) { toast(e.message, 'err'); }
+        });
+        S2.loadingMore = false;
+      };
+
+      let polling = false;
+      const poll = async () => {
+        if (polling || document.hidden) return;
+        polling = true;
+        try {
+          const r = await api('chat/poll', undefined, { query: { group_id: g.id, after_id: S2.lastId, since: S2.since } });
+          const stick = nearBottom();
+          S2.since = r.server_time;
+          if (r.changed.length) replaceIn(r.changed);
+          if (r.messages.length) {
+            add(r.messages);
+            S2.lastId = S2.msgs[S2.msgs.length - 1].id;
+            if (!stick) S2.unseen += r.messages.filter((m) => m.kind !== 'service').length;
+          }
+          if (r.changed.length || r.messages.length) { render(stick && r.messages.length ? 'bottom' : 'keep'); pill(); }
+        } catch {}
+        polling = false;
+      };
+      every(poll, 4000);
+
+      // Cập nhật trạng thái thành viên sau khi xử lý (badge, nút)
+      const refreshMember = async (memberId) => {
+        try {
+          const r = await api('member', undefined, { query: { id: memberId } });
+          const mm = r.member;
+          for (const m of S2.msgs) if (m.member && m.member.id === mm.id) m.member = { id: mm.id, status: mm.status, is_admin: mm.is_admin, warns: mm.warns, points: mm.points };
+          render('keep');
+        } catch {}
+      };
+
+      const memberFor = (m) => ({ id: m.member.id, name: m.name, tg_user_id: m.tg_user_id, points: m.member.points, warns: m.member.warns, note: null });
+
+      const setReply = (m) => {
+        S2.replyTo = m;
+        $('#replybar', root).innerHTML = m ? `<div class="reply-bar">${icon('reply', 'sm')}<div class="q"><b>Trả lời ${esc(m.name)}</b><span>${esc(m.text || m.media || '')}</span></div><button type="button" class="btn icon sm ghost" data-unreply>${icon('x', 'sm')}</button></div>` : '';
+        if (m) $('#composer textarea', root).focus({ preventScroll: true });
+      };
+
+      const moreSheet = (m) => {
+        const mb = m.member;
+        const it = (a, ic, t, danger) => `<button class="list-item" data-sa="${a}" ${danger ? 'style="color:var(--danger)"' : ''}>${icon(ic)}<div class="grow">${t}</div></button>`;
+        sheet(`<div class="sheet-head"><h2 class="ellipsis">${esc(m.name || 'Tin nhắn')}</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
+          <div class="card card-pad small text-2" style="margin-bottom:12px;max-height:120px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere">${esc(m.text || m.media || '')}</div>
+          <div class="list">
+            ${it('reply', 'reply', 'Trả lời tin này')}
+            ${it(m.pinned ? 'unpin' : 'pin', 'pin', m.pinned ? 'Bỏ ghim' : 'Ghim tin')}
+            ${it('copy', 'copy', 'Sao chép nội dung')}
+            ${mb ? it('profile', 'user', 'Xem hồ sơ thành viên') : ''}
+            ${mb && !m.is_bot ? it('points', 'star', 'Cộng / trừ điểm') : ''}
+            ${mb && !m.is_bot && !mb.is_admin ? it('kick', 'kick', 'Đuổi khỏi nhóm', true) : ''}
+            ${!m.deleted ? it('del', 'trash', 'Xoá tin nhắn', true) : ''}
+          </div>`, (el, close) => el.addEventListener('click', async (e) => {
+          const b = e.target.closest('[data-sa]');
+          if (!b) return;
+          close();
+          doAction(b.dataset.sa, m);
+        }));
+      };
+
+      const doAction = async (a, m) => {
+        if (a === 'del') {
+          try { await api('chat/delete', { id: m.id }); m.deleted = 1; render('keep'); toast('Đã xoá tin nhắn'); } catch (e) { toast(e.message, 'err'); }
+        } else if (a === 'pin' || a === 'unpin') {
+          try { await api('chat/pin', { id: m.id, unpin: a === 'unpin' }); m.pinned = a === 'pin' ? 1 : 0; render('keep'); toast(a === 'pin' ? 'Đã ghim tin' : 'Đã bỏ ghim'); } catch (e) { toast(e.message, 'err'); }
+        } else if (a === 'reply') setReply(m);
+        else if (a === 'copy') { navigator.clipboard?.writeText(m.text || ''); toast('Đã sao chép'); }
+        else if (a === 'profile') openMember(m.member.id, () => refreshMember(m.member.id));
+        else if (a === 'more') moreSheet(m);
+        else if (m.member) actionForm(a, memberFor(m), { warn_limit: S2.warnLimit }, () => refreshMember(m.member.id));
+      };
+
+      root.addEventListener('click', (e) => {
+        const ca = e.target.closest('[data-ca]');
+        if (ca) { const m = S2.byId.get(Number(ca.dataset.id)); if (m) doAction(ca.dataset.ca, m); return; }
+        const more = e.target.closest('[data-more]');
+        if (more) { loadMore(more); return; }
+        if (e.target.closest('[data-unreply]')) { setReply(null); return; }
+        const j = e.target.closest('[data-jump]');
+        if (j) {
+          const el = $(`[data-tgmid="${j.dataset.jump}"]`, root);
+          if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('hl'); setTimeout(() => el.classList.remove('hl'), 1400); }
+          else toast('Tin gốc nằm ngoài phần đang hiển thị');
+        }
+      });
+
+      // Ô soạn tin: tự giãn, Enter để gửi (Shift+Enter xuống dòng trên máy tính)
+      const form = $('#composer', root);
+      const ta = form.querySelector('textarea');
+      const grow = () => { ta.style.height = 'auto'; ta.style.height = Math.min(140, ta.scrollHeight) + 'px'; };
+      ta.addEventListener('input', grow);
+      ta.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && matchMedia('(hover: hover)').matches) { e.preventDefault(); form.requestSubmit(); } });
+      form.onsubmit = async (e) => {
+        e.preventDefault();
+        const text = ta.value.trim();
+        if (!text) return;
+        const btn = form.querySelector('button.primary');
+        await withBtn(btn, async () => {
+          try {
+            await api('chat/send', { group_id: g.id, text, reply_to: S2.replyTo ? Number(S2.replyTo.message_id) : 0 });
+            ta.value = ''; grow(); setReply(null);
+            await poll();
+            toBottom(true);
+          } catch (err) { toast(err.message, 'err'); }
+        });
+      };
+
+      load();
     };
     return { body, mount };
   }

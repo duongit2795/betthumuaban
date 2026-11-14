@@ -55,6 +55,11 @@ class Api
             'group/leave' => 'groupLeave',
             'group/delete' => 'groupDelete',
             'group/reset-points' => 'groupResetPoints',
+            'chat' => 'chat',
+            'chat/poll' => 'chatPoll',
+            'chat/send' => 'chatSend',
+            'chat/delete' => 'chatDelete',
+            'chat/pin' => 'chatPin',
             'members' => 'members',
             'member' => 'member',
             'member/action' => 'memberAction',
@@ -79,7 +84,7 @@ class Api
         $writeRoutes = ['install', 'auth/login', 'auth/register', 'auth/logout', 'me/update', 'me/link-code', 'me/unlink'];
         if (!isset($map[$route])) fail('Không tìm thấy API', 404);
         $fn = $map[$route];
-        $isWrite = in_array($route, $writeRoutes, true) || str_contains($route, '/') && !in_array($route, ['system/check-update'], true);
+        $isWrite = in_array($route, $writeRoutes, true) || str_contains($route, '/') && !in_array($route, ['system/check-update', 'chat/poll'], true);
         if ($isWrite && $this->method !== 'POST') fail('Phương thức không hợp lệ', 405);
         json_out(['ok' => true, 'data' => $this->$fn()]);
     }
@@ -596,6 +601,139 @@ class Api
         $g = $this->loadGroup();
         DB::run('UPDATE tg_members SET points = 0 WHERE group_id = ?', [$g['id']]);
         Repo::log((int)$g['id'], $u['username'], 'reset_points', null, 'Đặt lại điểm toàn nhóm');
+        return [];
+    }
+
+    // ---- Chat nhóm ----
+    private const CHAT_SQL = 'SELECT c.*, mb.id AS member_id, mb.status, mb.is_admin, mb.warns, mb.points, mb.first_name AS m_first, mb.last_name AS m_last
+        FROM tg_messages c LEFT JOIN tg_members mb ON mb.group_id = c.group_id AND mb.tg_user_id = c.tg_user_id';
+
+    private function chatRow(array $r): array
+    {
+        return [
+            'id' => (int)$r['id'],
+            'message_id' => (string)$r['message_id'],
+            'tg_user_id' => (string)$r['tg_user_id'],
+            'name' => $r['name'],
+            'username' => $r['username'],
+            'is_bot' => (int)$r['is_bot'],
+            'kind' => $r['kind'],
+            'media' => $r['media'],
+            'text' => $r['text'],
+            'reply_to' => $r['reply_to'] ? (string)$r['reply_to'] : null,
+            'reply_name' => $r['reply_name'],
+            'reply_text' => $r['reply_text'],
+            'deleted' => (int)$r['deleted'],
+            'note' => $r['note'],
+            'edited' => (int)$r['edited'],
+            'pinned' => (int)$r['pinned'],
+            'created_at' => (int)$r['created_at'],
+            'member' => $r['member_id'] ? [
+                'id' => (int)$r['member_id'],
+                'status' => $r['status'],
+                'is_admin' => (int)$r['is_admin'],
+                'warns' => (int)$r['warns'],
+                'points' => (int)$r['points'],
+            ] : null,
+        ];
+    }
+
+    /** 30 tin gần nhất, hoặc 30 tin cũ hơn before_id */
+    private function chat(): array
+    {
+        Auth::requireAdmin();
+        Repo::sweepMutes();
+        $g = $this->loadGroup();
+        $before = $this->int('before_id');
+        $limit = max(10, min(100, $this->int('limit', 30)));
+        $rows = $before
+            ? DB::all(self::CHAT_SQL . " WHERE c.group_id = ? AND c.id < ? ORDER BY c.id DESC LIMIT $limit", [$g['id'], $before])
+            : DB::all(self::CHAT_SQL . " WHERE c.group_id = ? ORDER BY c.id DESC LIMIT $limit", [$g['id']]);
+        $rows = array_reverse($rows);
+        $oldest = $rows ? (int)$rows[0]['id'] : 0;
+        return [
+            'messages' => array_map([$this, 'chatRow'], $rows),
+            'has_more' => $oldest ? (bool)DB::val('SELECT 1 FROM tg_messages WHERE group_id = ? AND id < ? LIMIT 1', [$g['id'], $oldest]) : false,
+            'warn_limit' => (int)Repo::settings($g)['warn_limit'],
+            'server_time' => now(),
+            'total' => (int)DB::val('SELECT COUNT(*) FROM tg_messages WHERE group_id = ?', [$g['id']]),
+        ];
+    }
+
+    /** Tin mới sau after_id + tin đã thay đổi (xoá/sửa/ghim) từ since */
+    private function chatPoll(): array
+    {
+        Auth::requireAdmin();
+        $g = $this->loadGroup();
+        $after = $this->int('after_id');
+        $since = $this->int('since');
+        $new = DB::all(self::CHAT_SQL . ' WHERE c.group_id = ? AND c.id > ? ORDER BY c.id ASC LIMIT 100', [$g['id'], $after]);
+        $changed = $since ? DB::all(self::CHAT_SQL . ' WHERE c.group_id = ? AND c.id <= ? AND c.updated_at >= ? ORDER BY c.id LIMIT 100', [$g['id'], $after, $since]) : [];
+        return [
+            'messages' => array_map([$this, 'chatRow'], $new),
+            'changed' => array_map([$this, 'chatRow'], $changed),
+            'server_time' => now(),
+        ];
+    }
+
+    private function chatMsg(): array
+    {
+        $c = DB::get('SELECT * FROM tg_messages WHERE id = ?', [$this->int('id')]) ?: fail('Không tìm thấy tin nhắn', 404);
+        $g = Repo::group((int)$c['group_id']) ?: fail('Không tìm thấy nhóm', 404);
+        $api = Repo::apiForGroup($g) ?: fail('Nhóm chưa có bot');
+        return [$c, $g, $api];
+    }
+
+    private function chatSend(): array
+    {
+        $u = Auth::requireAdmin();
+        $g = $this->loadGroup();
+        $text = trim((string)$this->in('text'));
+        if ($text === '') fail('Nội dung trống');
+        $api = Repo::apiForGroup($g) ?: fail('Nhóm chưa có bot');
+        $params = ['chat_id' => $g['chat_id'], 'text' => mb_substr($text, 0, 4096), 'link_preview_options' => ['is_disabled' => true]];
+        if ($this->in('html')) $params['parse_mode'] = 'HTML';
+        if ($rid = $this->int('reply_to')) $params['reply_parameters'] = ['message_id' => $rid, 'allow_sending_without_reply' => true];
+        try {
+            $r = $api->call('sendMessage', $params);
+        } catch (TelegramException $e) {
+            fail('Gửi thất bại: ' . $e->getMessage());
+        }
+        Repo::log((int)$g['id'], $u['username'], 'send', null, mb_substr($text, 0, 200));
+        return ['message_id' => $r['message_id']];
+    }
+
+    private function chatDelete(): array
+    {
+        $u = Auth::requireAdmin();
+        [$c, $g, $api] = $this->chatMsg();
+        try {
+            $api->call('deleteMessage', ['chat_id' => $g['chat_id'], 'message_id' => $c['message_id']]);
+        } catch (TelegramException $e) {
+            $m = $e->getMessage();
+            if (stripos($m, 'not found') !== false || stripos($m, "can't be deleted") !== false) {
+                ChatLog::markDeleted($g['chat_id'], $c['message_id'], 'Không còn trên Telegram');
+            } else {
+                fail('Không xoá được: ' . (stripos($m, 'rights') !== false ? 'bot chưa có quyền xoá tin' : $m));
+            }
+        }
+        DB::run('UPDATE tg_messages SET note = ? WHERE id = ?', ['Xoá bởi ' . $u['username'] . ' (Web)', $c['id']]);
+        Repo::log((int)$g['id'], $u['username'] . ' (Web)', 'delete', ['tg_user_id' => $c['tg_user_id'], 'first_name' => $c['name']], mb_substr((string)$c['text'], 0, 120));
+        return [];
+    }
+
+    private function chatPin(): array
+    {
+        $u = Auth::requireAdmin();
+        [$c, $g, $api] = $this->chatMsg();
+        $unpin = (bool)$this->in('unpin');
+        try {
+            $api->call($unpin ? 'unpinChatMessage' : 'pinChatMessage', ['chat_id' => $g['chat_id'], 'message_id' => $c['message_id'], 'disable_notification' => true]);
+        } catch (TelegramException $e) {
+            fail('Không thực hiện được: ' . $e->getMessage());
+        }
+        DB::run('UPDATE tg_messages SET pinned = ?, updated_at = ? WHERE id = ?', [$unpin ? 0 : 1, now(), $c['id']]);
+        Repo::log((int)$g['id'], $u['username'] . ' (Web)', $unpin ? 'unpin' : 'pin', null, mb_substr((string)$c['text'], 0, 120));
         return [];
     }
 
