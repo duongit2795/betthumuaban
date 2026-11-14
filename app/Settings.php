@@ -12,6 +12,8 @@ class Settings
         'update_token' => '',
         'cron_key' => '',
         'menu_admin_only' => '0',
+        'group_admin_access' => '1',
+        'group_admin_perms' => '',
     ];
     private static array $cache = [];
 
@@ -38,6 +40,7 @@ class Settings
         $out = [];
         foreach (array_keys(self::DEFAULTS) as $k) $out[$k] = self::get($k);
         $out['update_token'] = $out['update_token'] ? '••••••' : '';
+        unset($out['group_admin_perms']);
         return $out;
     }
 }

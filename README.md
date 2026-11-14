@@ -4,6 +4,14 @@ Web PHP (chạy tốt trên **aaPanel**) để quản lý nhóm Telegram bằng 
 
 ## Tính năng
 
+**Phân quyền 3 cấp**
+| Vai trò | Ai | Được làm |
+|---|---|---|
+| **Admin web** | Tài khoản có vai trò *Admin web* | Toàn quyền, gồm các mục chỉ admin web: Bot, Tài khoản web, Hệ thống & cập nhật, lệnh dùng chung mọi nhóm, chế độ menu lệnh, đổi bot quản lý nhóm |
+| **Quản trị viên nhóm** | Thành viên web đã liên kết Telegram **và** là admin của nhóm trên Telegram (tự nhận diện) | Chỉ các nhóm của mình, theo quyền admin web cấp ở **Hệ thống → Phân quyền**: xem chat, xử lý thành viên, chỉnh điểm, cài đặt nhóm, lệnh riêng của nhóm, gửi tin, xem nhật ký, thao tác nguy hiểm (mặc định tắt) |
+| **Thành viên** | Tài khoản web thường | Xem điểm, hạng, trạng thái của mình và bảng xếp hạng |
+
+
 **Quản trị viên (admin)**
 - Tổng quan: thống kê tin nhắn 14 ngày, thành viên, số lượt xử lý, top tương tác, hoạt động gần đây
 - **Bot**: thêm nhiều bot bằng token, bật/tắt, kiểm tra webhook, nút "Thêm vào nhóm" (tự xin quyền admin)
