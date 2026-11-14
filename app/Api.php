@@ -1230,6 +1230,7 @@ class Api
             'last_tick' => (int)Settings::get('ads_last_tick') ?: null,
             'cron_url' => site_url() . '/cron.php?key=' . Settings::get('cron_key'),
             'cron_path' => ROOT . '/cron.php',
+            'cron_cmd' => cron_command(),
             'intervals' => Ads::INTERVALS,
         ];
     }
@@ -1442,6 +1443,8 @@ class Api
                 return ($https ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? '') . $dir;
             })(),
             'cron_url' => site_url() . '/cron.php?key=' . Settings::get('cron_key'),
+            'cron_cmd' => cron_command(),
+            'cron_last' => (int)Settings::get('cron_last_run') ?: null,
             'env' => [
                 'php' => PHP_VERSION,
                 'db' => DB::driver(),

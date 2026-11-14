@@ -2138,7 +2138,8 @@
       html: `
         ${cronOk ? `<div class="alert ok" style="margin-bottom:12px">${icon('check')}<div class="small">Bộ xoay vòng đang chạy · lần cuối ${ago(d.last_tick)}</div></div>`
           : `<div class="alert warn" style="margin-bottom:12px">${icon('alert')}<div class="small"><b>Cần đặt Cron mỗi 1 phút</b> để bot đổi bài & đăng bài mới tự động${d.last_tick ? ` (lần chạy cuối ${ago(d.last_tick)})` : ''}.<br>
-            aaPanel → <b>Cron</b> → Add → Type <b>Shell Script</b> → Period: <b>N Minutes = 1</b> → Script:<div class="row" style="margin:6px 0"><code class="cmd-code grow">php ${esc(d.cron_path)}</code><button class="btn icon sm" data-copy="php ${esc(d.cron_path)}">${icon('copy', 'sm')}</button></div>
+            aaPanel → <b>Cron</b> → Add → Type <b>Shell Script</b> → Period: <b>N Minutes = 1</b> → Script:<div class="row" style="margin:6px 0"><code class="cmd-code grow">${esc(d.cron_cmd)}</code><button class="btn icon sm" data-copy="${esc(d.cron_cmd)}">${icon('copy', 'sm')}</button></div>
+            <span class="xs">⚠️ Dùng đúng đường dẫn PHP ở trên (cùng phiên bản với web). Lệnh <code>php</code> trơn có thể gọi bản PHP khác thiếu extension.</span><br>
             <span class="xs">Hoặc Type <b>Access URL</b>: <code style="overflow-wrap:anywhere">${esc(d.cron_url)}</code></span></div></div>`}
         ${d.campaigns.length ? d.campaigns.map(card).join('') : `<div class="card">${empty('megaphone', 'Chưa có chiến dịch quảng cáo.<br>Bấm <b>+ Chiến dịch</b> để bắt đầu.')}</div>`}
         <div class="card card-pad xs text-2" style="margin-top:4px">💡 Bot đăng 1 bài (ảnh + nội dung + nút) và <b>ghim</b> lên nhóm, sau đó <b>tự sửa tin đã ghim</b> sang bài kế tiếp theo chu kỳ. Mỗi ngày đúng giờ cài đặt sẽ đăng & ghim bài mới. Bot đăng cần quyền <b>gửi ảnh</b> và <b>ghim tin</b> trong nhóm.</div>`,
@@ -2446,7 +2447,12 @@
       </form>
 
       <div class="section-title"><h2>Tác vụ định kỳ (Cron)</h2></div>
-      <div class="card card-pad stack"><div class="small text-2">aaPanel → <b>Cron</b> → Add → Type: <b>Access URL</b>, <b>mỗi 1 phút</b> (cần cho tự động xoá tin hẹn giờ):</div>
+      <div class="card card-pad stack">
+        <div class="small">${d.cron_last && Date.now() / 1000 - d.cron_last < 180 ? `<span style="color:var(--success)">${icon('check', 'sm')}</span> Cron đang chạy · lần cuối ${ago(d.cron_last)}` : `<span style="color:var(--warning)">${icon('alert', 'sm')}</span> ${d.cron_last ? 'Cron chạy lần cuối ' + ago(d.cron_last) : 'Cron chưa chạy lần nào'}`}</div>
+        <div class="small text-2">aaPanel → <b>Cron</b> → Add → Type <b>Shell Script</b> → Period <b>N Minutes = 1</b> → Script (khuyên dùng, cần cho quảng cáo xoay vòng):</div>
+        <div class="row"><input class="input mono" readonly value="${esc(d.cron_cmd)}"><button class="btn icon" data-copy="${esc(d.cron_cmd)}">${icon('copy')}</button></div>
+        <div class="xs muted">Dùng đúng đường dẫn PHP ở trên. Lệnh <code>php</code> trơn có thể gọi bản PHP khác thiếu extension (lỗi <i>undefined function mb_…</i>).</div>
+        <div class="small text-2">Hoặc Type <b>Access URL</b>:</div>
         <div class="row"><input class="input mono" readonly value="${esc(d.cron_url)}"><button class="btn icon" data-copy="${esc(d.cron_url)}">${icon('copy')}</button></div></div>
 
       <div class="section-title"><h2>Môi trường</h2></div>

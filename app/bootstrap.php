@@ -10,6 +10,7 @@ define('APP_VERSION', trim((string)@file_get_contents(ROOT . '/VERSION')) ?: '1.
 error_reporting(E_ALL);
 ini_set('display_errors', '0');
 date_default_timezone_set('Asia/Ho_Chi_Minh');
+require __DIR__ . '/polyfill.php'; // thay thế mbstring nếu PHP thiếu (thường gặp ở PHP dòng lệnh của cron)
 mb_internal_encoding('UTF-8');
 
 spl_autoload_register(function (string $cls) {
@@ -92,4 +93,22 @@ function file_mime(string $path): string
     if (!empty($info['mime'])) return $info['mime'];
     $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
     return ['png' => 'image/png', 'webp' => 'image/webp', 'gif' => 'image/gif', 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg'][$ext] ?? 'application/octet-stream';
+}
+
+/** Đường dẫn PHP dòng lệnh cùng phiên bản với website (dùng cho lệnh cron) */
+function php_cli_path(): string
+{
+    $bin = PHP_BINARY ?: '';
+    // PHP-FPM của aaPanel: /www/server/php/83/sbin/php-fpm → /www/server/php/83/bin/php
+    if ($bin && preg_match('~^(.*)/sbin/php-fpm[0-9.]*$~', $bin, $m) && is_file($m[1] . '/bin/php')) return $m[1] . '/bin/php';
+    if ($bin && preg_match('~/php[0-9.]*$~', $bin) && is_file($bin)) return $bin;
+    if (defined('PHP_BINDIR') && is_file(PHP_BINDIR . '/php')) return PHP_BINDIR . '/php';
+    $ver = PHP_MAJOR_VERSION . PHP_MINOR_VERSION;
+    if (is_file("/www/server/php/$ver/bin/php")) return "/www/server/php/$ver/bin/php";
+    return 'php';
+}
+
+function cron_command(): string
+{
+    return php_cli_path() . ' ' . ROOT . '/cron.php';
 }
