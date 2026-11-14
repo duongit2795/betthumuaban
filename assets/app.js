@@ -601,13 +601,64 @@
     };
   }
 
+  // ===== Nhật ký: dòng tóm tắt + bảng chi tiết đầy đủ =====
+  const LOGS = new Map();
+  const LOG_SRC = { telegram: ['qua Telegram', 'blue'], web: ['qua Web', 'green'], bot: ['Bot tự động', 'amber'], rule: ['Lệnh tự tạo', 'blue'], auto: ['Tự động', 'amber'] };
+  const actorName = (a) => String(a || '').replace(/\s*\((Telegram|Web|tự động|lệnh tự tạo)\)$/u, '');
+  const fmtFull = (t) => { const d = new Date(t * 1000); return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())} ${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`; };
+
   function logItem(l) {
+    LOGS.set(l.id, l);
     const [t, ic, c] = ACTION[l.action] || [l.action, 'info', ''];
-    return `<div class="log-item"><div class="log-ico ${c}">${icon(ic)}</div><div class="grow">
-      <div class="small"><b>${esc(t)}</b>${l.target_name ? ` · ${esc(l.target_name)}` : ''}</div>
+    const mt = l.meta || {};
+    const src = LOG_SRC[mt.source];
+    const ev = l.evidence;
+    const evText = ev ? ((ev.media && ev.kind !== 'text' ? ev.media + ' ' : '') + (ev.text && ev.text !== ev.media ? ev.text : '')).trim() : '';
+    return `<button type="button" class="log-item log-btn" data-log="${l.id}"><div class="log-ico ${c}">${icon(ic)}</div><div class="grow">
+      <div class="small"><b>${esc(t)}</b>${l.target_name ? ` · ${esc(l.target_name)}` : ''}${mt.escalated_from ? ' <span class="badge amber" style="font-size:10px">tự động</span>' : ''}</div>
       ${l.detail ? `<div class="xs text-2" style="overflow-wrap:anywhere">${esc(l.detail)}</div>` : ''}
-      <div class="xs muted">${esc(l.actor || '')}${l.group_title ? ' · ' + esc(l.group_title) : ''} · ${ago(l.created_at)}</div></div></div>`;
+      ${evText ? `<div class="log-ev">${esc(evText.length > 140 ? evText.slice(0, 140) + '…' : evText)}</div>` : ''}
+      <div class="xs muted log-meta">${l.actor ? `<span>👮 ${esc(actorName(l.actor))}</span>` : ''}${src ? `<span class="badge ${src[1]}" style="font-size:10px;padding:0 6px">${src[0]}</span>` : ''}${l.group_title ? `<span>${esc(l.group_title)}</span>` : ''}<span>${ago(l.created_at)}</span></div>
+      </div><span class="chev">${icon('chevron', 'sm')}</span></button>`;
   }
+
+  function logDetail(id) {
+    const l = LOGS.get(Number(id));
+    if (!l) return;
+    const [t, ic, c] = ACTION[l.action] || [l.action, 'info', ''];
+    const mt = l.meta || {};
+    const ev = l.evidence;
+    const src = LOG_SRC[mt.source];
+    const rows = [];
+    const row = (k, v) => v !== undefined && v !== null && v !== '' && rows.push(`<dt>${k}</dt><dd>${v}</dd>`);
+    row('Thành viên', l.target_name ? `${esc(l.target_name)}${l.target_tg_id ? `<div class="xs muted mono">${esc(l.target_tg_id)}</div>` : ''}` : '');
+    row('Nhóm', esc(l.group_title || ''));
+    if (mt.minutes !== undefined) row('Thời hạn', mt.minutes ? `${humanSec(mt.minutes * 60)}<div class="xs muted">đến ${fmtDate(mt.until, true)}</div>` : 'Vĩnh viễn');
+    if (mt.previous_until) row('Hạn cấm cũ', fmtDate(mt.previous_until, true));
+    if (mt.warns !== undefined) row('Cảnh cáo', `${mt.warns}/${mt.limit || '∞'}`);
+    if (mt.escalate_to) row('Kết quả', `Đủ cảnh cáo → ${esc((ACTION[mt.escalate_to] || [mt.escalate_to])[0].toLowerCase())}`);
+    if (mt.escalated_from) row('Kích hoạt', 'Tự động sau khi đủ số lần cảnh cáo');
+    if (mt.previous_warns !== undefined) row('Cảnh cáo', `${mt.previous_warns} → 0`);
+    if (mt.amount !== undefined) row('Điểm', `<b>${mt.amount > 0 ? '+' : ''}${mt.amount}</b> (${mt.before} → ${mt.after})`);
+    else if (mt.before !== undefined) row('Điểm', `${mt.before} → ${mt.after}`);
+    row('Lý do', esc(mt.reason || (['delete'].includes(l.action) ? l.detail : '') || ''));
+    row('Xử lý bởi', `${esc(actorName(l.actor) || '—')}${src ? ` <span class="badge ${src[1]}" style="font-size:10px">${src[0]}</span>` : ''}${mt.actor_tg_id ? `<div class="xs muted mono">TG ${esc(String(mt.actor_tg_id))}</div>` : ''}`);
+    row('Thời gian', fmtFull(l.created_at));
+    if (!rows.length || (!mt.reason && l.detail && !mt.minutes && mt.warns === undefined && mt.amount === undefined)) row('Chi tiết', esc(l.detail || ''));
+    sheet(`<div class="sheet-head"><div class="log-ico ${c}" style="width:40px;height:40px">${icon(ic)}</div><h2>${esc(t)}</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
+      <dl class="kv card card-pad" style="margin:0 0 14px">${rows.join('')}</dl>
+      ${ev ? `<h3 style="margin-bottom:8px">💬 ${['warn', 'mute', 'kick', 'ban', 'delete'].includes(l.action) ? 'Nội dung vi phạm' : 'Tin nhắn liên quan'}</h3>
+        <div class="card card-pad stack" style="margin-bottom:12px">
+          <div class="row xs muted">${ev.from ? `<b style="color:var(--text)">${esc(ev.from)}</b>` : ''}<span>${ev.date ? fmtFull(ev.date) : ''}</span>${ev.message_id ? `<span class="mono">#${ev.message_id}</span>` : ''}</div>
+          ${ev.media && ev.kind !== 'text' ? `<div><span class="badge">${esc(ev.media)}</span></div>` : ''}
+          ${ev.text && ev.text !== ev.media ? `<div class="ev-text">${esc(ev.text)}</div>` : ''}
+          <div class="row wrap" style="gap:8px">
+            ${ev.text ? `<button class="btn sm" data-copy="${esc(ev.text)}">${icon('copy', 'sm')}Sao chép</button>` : ''}
+            ${mt.link ? `<a class="btn sm soft" href="${esc(mt.link)}" target="_blank" rel="noopener">${icon('external', 'sm')}Mở trong Telegram</a>` : ''}
+          </div>
+        </div>` : mt.link ? `<a class="btn soft block" href="${esc(mt.link)}" target="_blank" rel="noopener">${icon('external', 'sm')}Mở tin trong Telegram</a>` : ''}`);
+  }
+  document.addEventListener('click', (e) => { const b = e.target.closest('[data-log]'); if (b) logDetail(b.dataset.log); });
 
   // ================= Admin: Groups =================
   route('/groups', async () => {
@@ -818,7 +869,7 @@
     });
   }
 
-  function actionForm(a, m, d, done) {
+  function actionForm(a, m, d, done, extra = {}) {
     const titles = { warn: 'Cảnh cáo', unwarn: 'Gỡ 1 cảnh cáo', resetwarn: 'Xoá toàn bộ cảnh cáo', mute: 'Cấm chat', unmute: 'Bỏ cấm chat', kick: 'Đuổi khỏi nhóm', ban: 'Cấm vĩnh viễn', unban: 'Gỡ cấm', points: 'Cộng / trừ điểm', setpoints: 'Đặt điểm' };
     const danger = ['ban', 'kick'].includes(a);
     let fields = '';
@@ -831,10 +882,11 @@
     if (a === 'setpoints') fields += `<label class="field"><span class="lbl">Điểm mới</span><input class="input" type="number" min="0" name="amount" value="${m.points}" required></label>`;
     if (['warn', 'mute', 'kick', 'ban', 'points'].includes(a)) fields += `<label class="field"><span class="lbl">Lý do (tuỳ chọn)</span><input class="input" name="reason" maxlength="200" placeholder="VD: Spam quảng cáo"></label>`;
     if (a !== 'setpoints') fields += `<label class="switch-row" style="padding:6px 0;border:0"><div class="txt"><b>Thông báo trong nhóm</b><span>Bot gửi tin nhắn thông báo vào nhóm</span></div><div class="switch"><input type="checkbox" name="notify" checked><span></span></div></label>`;
+    const evNote = d.evidence && (d.evidence.text || d.evidence.media) ? `<div class="field"><span class="lbl">💬 Tin nhắn vi phạm (sẽ ghi vào nhật ký & thông báo)</span><div class="log-ev" style="margin:0">${esc(((d.evidence.media && d.evidence.kind !== 'text' ? d.evidence.media + ' ' : '') + (d.evidence.text || '')).slice(0, 300))}</div></div>` : '';
     const warnNote = a === 'warn' && m.warns + 1 >= d.warn_limit ? `<div class="alert warn">${icon('alert')}<div>Lần cảnh cáo này sẽ đạt giới hạn ${d.warn_limit} và tự động xử lý theo cài đặt nhóm.</div></div>` : '';
     sheet(`<div class="sheet-head"><h2>${titles[a]}</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
       <div class="row" style="margin-bottom:14px">${avatar(m.name, m.tg_user_id)}<div><b>${esc(m.name)}</b><div class="xs muted">${m.tg_user_id}</div></div></div>
-      <form class="stack" id="fa">${warnNote}${fields}<button class="btn ${danger ? 'danger' : 'primary'} block" style="height:46px">${titles[a]}</button></form>`, (el, close) => {
+      <form class="stack" id="fa">${evNote}${warnNote}${fields}<button class="btn ${danger ? 'danger' : 'primary'} block" style="height:46px">${titles[a]}</button></form>`, (el, close) => {
       $$('[data-min]', el).forEach((c) => c.onclick = () => { $$('[data-min]', el).forEach((x) => x.classList.toggle('active', x === c)); $('[name=minutes]', el).value = c.dataset.min; $('#custom', el).value = ''; });
       const cu = $('#custom', el);
       if (cu) cu.oninput = () => { $$('[data-min]', el).forEach((x) => x.classList.remove('active')); $('[name=minutes]', el).value = cu.value; };
@@ -845,7 +897,7 @@
         e.preventDefault();
         await withBtn(e.target.querySelector('button:last-child'), async () => {
           try {
-            await api('member/action', { id: m.id, action: a, ...formData(e.target) });
+            await api('member/action', { id: m.id, action: a, ...formData(e.target), ...extra });
             close(); toast(titles[a] + ' thành công'); done();
           } catch (err) { toast(err.message, 'err'); }
         });
@@ -887,6 +939,15 @@
         <div class="card">
           ${sw('lock_photo', s.lock_photo, 'Ảnh')}${sw('lock_video', s.lock_video, 'Video')}${sw('lock_sticker', s.lock_sticker, 'Sticker')}${sw('lock_gif', s.lock_gif, 'GIF')}
           ${sw('lock_document', s.lock_document, 'Tệp tin')}${sw('lock_voice', s.lock_voice, 'Ghi âm / âm thanh')}${sw('lock_poll', s.lock_poll, 'Bình chọn')}
+        </div></div>
+
+        <div><div class="section-title"><h2>📣 Thông báo xử lý</h2></div>
+        <div class="card">
+          ${sw('mod_notify', s.mod_notify, 'Bot thông báo khi xử lý', 'Gửi tin vào nhóm khi cảnh cáo, cấm chat, cấm, đuổi, gỡ cấm…')}
+          ${sw('mod_notify_detail', s.mod_notify_detail, 'Thông báo chi tiết', 'Thành viên, thời hạn (đến mấy giờ), số cảnh cáo, lý do, thời gian. Tắt = 1–2 dòng ngắn gọn')}
+          ${sw('mod_show_admin', s.mod_show_admin, 'Hiện người xử lý', 'Ghi rõ admin nào xử lý, qua Telegram / Web / Bot tự động')}
+          ${sw('mod_show_evidence', s.mod_show_evidence, 'Trích nội dung vi phạm', 'Khi xử lý bằng cách reply tin nhắn, trích lại nội dung tin đó')}
+          ${sw('mod_delete_evidence', s.mod_delete_evidence, 'Tự xoá tin vi phạm', 'Khi cấm / cấm chat / đuổi bằng cách reply, xoá luôn tin bị reply (nội dung vẫn lưu ở Nhật ký web)')}
         </div></div>
 
         <div><div class="section-title"><h2>⚠️ Cảnh cáo</h2></div>
@@ -1123,7 +1184,7 @@
         else if (a === 'copy') { navigator.clipboard?.writeText(m.text || ''); toast('Đã sao chép'); }
         else if (a === 'profile') openMember(m.member.id, () => refreshMember(m.member.id));
         else if (a === 'more') moreSheet(m);
-        else if (m.member) actionForm(a, memberFor(m), { warn_limit: S2.warnLimit }, () => refreshMember(m.member.id));
+        else if (m.member) actionForm(a, memberFor(m), { warn_limit: S2.warnLimit, evidence: m }, () => refreshMember(m.member.id), { chat_msg_id: m.id });
       };
 
       root.addEventListener('click', (e) => {

@@ -6,7 +6,7 @@ class DB
 {
     private static ?PDO $pdo = null;
     private static string $driver = 'sqlite';
-    const SCHEMA_VERSION = 5;
+    const SCHEMA_VERSION = 6;
 
     public static function connect(?array $c = null): PDO
     {
@@ -268,6 +268,9 @@ class DB
             } catch (PDOException $e) { /* đã tồn tại */ }
         }
 
+        // v6: nhật ký lưu chi tiết + bằng chứng vi phạm
+        self::addColumn('app_logs', 'meta', 'TEXT');
+        self::addColumn('app_logs', 'evidence', 'TEXT');
         // Các migration theo phiên bản schema đặt ở đây trong tương lai
         $v = (int)(Settings::get('schema_version') ?? 0);
         if ($v < self::SCHEMA_VERSION) Settings::set('schema_version', (string)self::SCHEMA_VERSION);

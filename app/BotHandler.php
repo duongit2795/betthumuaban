@@ -146,9 +146,10 @@ class BotHandler
             if ($violation) {
                 $this->del($chat['id'], $msg['message_id']);
                 ChatLog::markDeleted($chat['id'], $msg['message_id'], $violation);
-                Repo::log($gid, 'Bot', 'delete', $member, $violation);
+                $ev = Moderation::evidence($msg);
+                Repo::log($gid, 'Bot', 'delete', $member, $violation, ['source' => 'bot', 'reason' => $violation, 'link' => Moderation::link($group, $msg['message_id'])], $ev);
                 if ($s['violation_warn']) {
-                    $this->safe(fn() => Moderation::perform('warn', $group, ['tgUserId' => $from['id'], 'actor' => 'Bot', 'reason' => $violation]));
+                    $this->safe(fn() => Moderation::perform('warn', $group, ['tgUserId' => $from['id'], 'actor' => 'Bot', 'source' => 'bot', 'reason' => $violation, 'evidence' => $ev]));
                 } else {
                     $this->api->trySend($chat['id'], '🚫 ' . Repo::mention($member) . ' — tin nhắn bị xoá: ' . tg_esc($violation));
                 }
@@ -171,7 +172,8 @@ class BotHandler
                     if ($member['status'] !== 'muted') {
                         DB::run('UPDATE tg_members SET flood_count = 0 WHERE id = ?', [$member['id']]);
                         $this->safe(fn() => Moderation::perform('mute', $group, [
-                            'tgUserId' => $from['id'], 'actor' => 'Bot', 'reason' => 'Spam tin nhắn (flood)', 'minutes' => $s['mute_minutes'],
+                            'tgUserId' => $from['id'], 'actor' => 'Bot', 'source' => 'bot', 'minutes' => $s['mute_minutes'],
+                            'reason' => "Spam: gửi hơn {$s['flood_limit']} tin trong {$s['flood_seconds']} giây", 'evidence' => Moderation::evidence($msg),
                         ]));
                     }
                     return;
@@ -400,7 +402,10 @@ class BotHandler
             $this->reply($msg, '⛔ Không thể xử lý quản trị viên.');
             return;
         }
-        $o = ['tgUserId' => $target['tg_user_id'], 'actor' => $actor, 'reason' => $rest];
+        // Bằng chứng: tin nhắn được reply (nếu lệnh dùng bằng cách reply)
+        $evMsg = isset($msg['reply_to_message']['from']) && $msg['reply_to_message']['from']['id'] == $target['tg_user_id'] ? $msg['reply_to_message'] : null;
+        $o = ['tgUserId' => $target['tg_user_id'], 'actor' => $actor, 'actorTgId' => $member['tg_user_id'], 'source' => 'telegram',
+            'reason' => $rest, 'evidence' => Moderation::evidence($evMsg)];
         if ($cmd === 'mute') {
             $parts = preg_split('/\s+/', $rest, 2);
             $mins = Moderation::parseMinutes($parts[0] ?? '');

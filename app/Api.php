@@ -752,7 +752,8 @@ class Api
             }
         }
         DB::run('UPDATE tg_messages SET note = ? WHERE id = ?', ['Xoá bởi ' . $u['username'] . ' (Web)', $c['id']]);
-        Repo::log((int)$g['id'], $u['username'] . ' (Web)', 'delete', ['tg_user_id' => $c['tg_user_id'], 'first_name' => $c['name']], mb_substr((string)$c['text'], 0, 120));
+        Repo::log((int)$g['id'], $u['username'] . ' (Web)', 'delete', ['tg_user_id' => $c['tg_user_id'], 'first_name' => $c['name']], 'Xoá tin nhắn',
+            ['source' => 'web', 'link' => Moderation::link($g, (int)$c['message_id'])], Moderation::evidenceFromChat($c));
         return [];
     }
 
@@ -852,9 +853,18 @@ class Api
         if (!Access::isWebAdmin($u) && $m['is_admin'] && in_array($action, ['ban', 'kick', 'mute', 'warn'], true)) fail('Quản trị viên nhóm không thể xử lý quản trị viên khác', 403);
         $g = Repo::group((int)$m['group_id']);
         try {
+            // Thao tác từ tab Chat: lấy tin nhắn đó làm bằng chứng
+            $ev = null;
+            if ($cid = $this->int('chat_msg_id')) {
+                $row = DB::get('SELECT * FROM tg_messages WHERE id = ? AND group_id = ?', [$cid, $g['id']]);
+                if ($row) $ev = Moderation::evidenceFromChat($row);
+            }
             $r = Moderation::perform($action, $g, [
                 'tgUserId' => $m['tg_user_id'],
                 'actor' => ($u['display_name'] ?: $u['username']) . ' (Web)',
+                'actorTgId' => $u['tg_user_id'],
+                'source' => 'web',
+                'evidence' => $ev,
                 'reason' => (string)$this->in('reason', ''),
                 'minutes' => $this->in('minutes') !== null && $this->in('minutes') !== '' ? (int)$this->in('minutes') : null,
                 'amount' => $this->in('amount'),
@@ -910,6 +920,8 @@ class Api
             'target_tg_id' => $l['target_tg_id'] ? (string)$l['target_tg_id'] : null,
             'target_name' => $l['target_name'],
             'detail' => $l['detail'],
+            'meta' => !empty($l['meta']) ? (json_decode($l['meta'], true) ?: null) : null,
+            'evidence' => !empty($l['evidence']) ? (json_decode($l['evidence'], true) ?: null) : null,
             'created_at' => (int)$l['created_at'],
         ], $rows);
     }

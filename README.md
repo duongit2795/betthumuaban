@@ -39,7 +39,8 @@ Web PHP (chạy tốt trên **aaPanel**) để quản lý nhóm Telegram bằng 
   - 21 mẫu dựng sẵn chia 3 nhóm: Điểm & giải trí (điểm danh, cảm ơn, quay số, xúc xắc, bói vui, thưởng điểm…), Thông tin & tự trả lời (nội quy, ID, chào lại, hỏi giá, liên hệ…), Quản trị (chặn từ khoá, chặn link mời, xử lý spam, cấm chat nhanh, cảnh cáo nhanh, ghim, dọn tin)
   - **Tự động xoá**: bật/tắt, đặt **thời gian riêng cho từng loại tin**: tin người gửi, tin bot trả lời, tin được reply (VD: người gửi xoá ngay, bot trả lời xoá sau 20 giây), từ ngay lập tức đến 2 ngày
   - Tự hiện trong menu lệnh của Telegram, lệnh tự tạo được ưu tiên hơn lệnh có sẵn nếu trùng tên
-- **Nhật ký** mọi hành động (từ web, từ lệnh bot, tự động)
+- **Thông báo xử lý chi tiết** trong nhóm: loại xử lý, thành viên + ID, thời hạn (đến mấy giờ), số cảnh cáo / còn bao nhiêu lần, lý do, **nội dung vi phạm** (tin bị reply hoặc tin bị bot xoá), **người xử lý** (qua Telegram / Web / Bot tự động / Lệnh tự tạo), thời gian. Tuỳ chỉnh ở *Cài đặt nhóm → Thông báo xử lý* (chi tiết/gọn, hiện người xử lý, trích nội dung, tự xoá tin vi phạm)
+- **Nhật ký** mọi hành động, lưu đầy đủ chi tiết và nội dung vi phạm; bấm vào từng dòng để xem chi tiết và mở tin gốc trong Telegram (từ web, từ lệnh bot, tự động)
 - **Tài khoản web**: tạo/sửa/khoá, phân quyền admin / thành viên
 - **Hệ thống**: cài đặt chung, **Kiểm tra & Cập nhật từ GitHub**, link cron
 
