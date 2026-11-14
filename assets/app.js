@@ -171,6 +171,7 @@
     ov.addEventListener('click', (e) => { if (e.target === ov || e.target.closest('[data-close]')) close(); });
     document.body.appendChild(ov);
     document.body.style.overflow = 'hidden';
+    enhanceRich(ov);
     mount?.(ov.querySelector('.sheet'), close);
     return close;
   }
@@ -302,6 +303,7 @@
       if (out.title !== undefined) $('#page-title').textContent = out.title;
       if (out.actions) $('#page-actions').innerHTML = out.actions;
       main.innerHTML = `<div class="fade-in">${out.html}</div>`;
+      enhanceRich(main);
       bindCharts(main);
       out.mount?.(main);
       window.scrollTo(0, 0);
@@ -917,7 +919,7 @@
         <div><div class="section-title" style="margin-top:0"><h2>👋 Chào mừng & tạm biệt</h2></div>
         <div class="card">
           ${sw('welcome_enabled', s.welcome_enabled, 'Gửi lời chào thành viên mới')}
-          <div class="form-group"><label class="field"><span class="lbl">Nội dung chào mừng</span><textarea class="input" name="welcome_text">${esc(s.welcome_text)}</textarea>
+          <div class="form-group"><label class="field"><span class="lbl">Nội dung chào mừng</span><textarea class="input" data-rich name="welcome_text">${esc(s.welcome_text)}</textarea>
           <div class="hint">Biến: <code>{mention}</code> <code>{name}</code> <code>{username}</code> <code>{group}</code> <code>{id}</code> · hỗ trợ HTML Telegram (&lt;b&gt;, &lt;i&gt;, &lt;a&gt;)</div></label></div>
           ${sw('goodbye_enabled', s.goodbye_enabled, 'Gửi lời tạm biệt khi rời nhóm')}
           <div class="form-group"><label class="field"><span class="lbl">Nội dung tạm biệt</span><input class="input" name="goodbye_text" value="${esc(s.goodbye_text)}"></label></div>
@@ -925,7 +927,7 @@
         </div></div>
 
         <div><div class="section-title"><h2>📜 Nội quy</h2></div>
-        <div class="card"><div class="form-group"><textarea class="input" name="rules_text" style="min-height:120px">${esc(s.rules_text)}</textarea><div class="hint">Hiển thị khi thành viên gõ /rules</div></div></div></div>
+        <div class="card"><div class="form-group"><textarea class="input" data-rich name="rules_text" style="min-height:120px">${esc(s.rules_text)}</textarea><div class="hint">Hiển thị khi thành viên gõ /rules</div></div></div></div>
 
         <div><div class="section-title"><h2>🛡 Bảo vệ nhóm</h2></div>
         <div class="card">
@@ -1235,7 +1237,7 @@
     const g = d.group;
     const body = `
       <form class="card card-pad stack" id="fm">
-        <label class="field"><span class="lbl">Nội dung gửi vào nhóm</span><textarea class="input" name="text" style="min-height:160px" required placeholder="Nhập thông báo…"></textarea></label>
+        <label class="field"><span class="lbl">Nội dung gửi vào nhóm</span><textarea class="input" data-rich name="text" style="min-height:160px" placeholder="Nhập thông báo…"></textarea></label>
         <div class="card" style="box-shadow:none">
           ${sw('html', true, 'Định dạng HTML', '&lt;b&gt;đậm&lt;/b&gt;, &lt;i&gt;nghiêng&lt;/i&gt;, &lt;a href=".."&gt;link&lt;/a&gt;')}
           ${sw('pin', false, 'Ghim tin nhắn')}
@@ -1378,6 +1380,203 @@
     unban: ['✅ Gỡ cấm', true],
   };
   const AD_PRESETS = [[0, 'Ngay lập tức'], [5, 'Sau 5 giây'], [10, 'Sau 10 giây'], [20, 'Sau 20 giây'], [30, 'Sau 30 giây'], [60, 'Sau 1 phút'], [120, 'Sau 2 phút'], [300, 'Sau 5 phút'], [600, 'Sau 10 phút'], [1800, 'Sau 30 phút'], [3600, 'Sau 1 giờ'], [21600, 'Sau 6 giờ'], [86400, 'Sau 1 ngày'], [172800, 'Sau 2 ngày']];
+
+  const stripTags = (h) => String(h || '').replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  // ================= Trình soạn thảo trực quan (xuất HTML Telegram) =================
+  // Dùng: <textarea data-rich> → enhanceRich(root). Textarea vẫn giữ giá trị HTML (ẩn đi), mọi code cũ đọc .value như trước.
+  const RICH_TOOLS = [
+    ['bold', '<b>B</b>', 'Đậm (Ctrl+B)'],
+    ['italic', '<i>I</i>', 'Nghiêng (Ctrl+I)'],
+    ['underline', '<u>U</u>', 'Gạch chân (Ctrl+U)'],
+    ['strike', '<s>S</s>', 'Gạch ngang (Ctrl+Shift+X)'],
+    ['code', '<span class="mono">&lt;/&gt;</span>', 'Mã / chữ đơn cách (Ctrl+Shift+M)'],
+    ['spoiler', '▒', 'Ẩn nội dung – spoiler (Ctrl+Shift+P)'],
+    ['link', '🔗', 'Chèn link (Ctrl+K)'],
+    ['clear', '🧹', 'Xoá định dạng'],
+  ];
+
+  // HTML Telegram → HTML hiển thị trong ô soạn thảo (chỉ giữ thẻ Telegram cho phép)
+  function tgToRich(html) {
+    const tpl = document.createElement('template');
+    tpl.innerHTML = String(html || '').replace(/<tg-spoiler>/g, '<span class="tg-spoiler">').replace(/<\/tg-spoiler>/g, '</span>');
+    const walk = (node) => {
+      let out = '';
+      node.childNodes.forEach((n) => {
+        if (n.nodeType === 3) { out += esc(n.textContent).replace(/\n/g, '<br>'); return; }
+        if (n.nodeType !== 1) return;
+        const tag = n.tagName.toLowerCase();
+        const inner = walk(n);
+        if (['b', 'strong'].includes(tag)) out += `<b>${inner}</b>`;
+        else if (['i', 'em'].includes(tag)) out += `<i>${inner}</i>`;
+        else if (['u', 'ins'].includes(tag)) out += `<u>${inner}</u>`;
+        else if (['s', 'strike', 'del'].includes(tag)) out += `<s>${inner}</s>`;
+        else if (['code', 'pre'].includes(tag)) out += `<code>${inner}</code>`;
+        else if (tag === 'a' && n.getAttribute('href')) out += `<a href="${esc(n.getAttribute('href'))}">${inner}</a>`;
+        else if (tag === 'span' && n.classList.contains('tg-spoiler')) out += `<span class="tg-spoiler">${inner}</span>`;
+        else if (tag === 'br') out += '<br>';
+        else out += inner;
+      });
+      return out;
+    };
+    return walk(tpl.content);
+  }
+
+  // HTML trong ô soạn thảo → HTML Telegram (b, i, u, s, code, a, tg-spoiler, xuống dòng = \n)
+  function richToTg(root) {
+    const block = /^(div|p|li|h[1-6]|blockquote)$/;
+    let out = '';
+    const nl = () => { if (out && !out.endsWith('\n')) out += '\n'; };
+    const walk = (node) => {
+      node.childNodes.forEach((n) => {
+        if (n.nodeType === 3) { out += n.textContent.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]).replace(/ /g, ' '); return; }
+        if (n.nodeType !== 1) return;
+        const tag = n.tagName.toLowerCase();
+        if (tag === 'br') { out += '\n'; return; }
+        const st = n.style || {};
+        const wrap = [];
+        if (['b', 'strong'].includes(tag) || Number(st.fontWeight) >= 600 || st.fontWeight === 'bold') wrap.push('b');
+        if (['i', 'em'].includes(tag) || st.fontStyle === 'italic') wrap.push('i');
+        if (['u', 'ins'].includes(tag) || (st.textDecoration || '').includes('underline')) wrap.push('u');
+        if (['s', 'strike', 'del'].includes(tag) || (st.textDecoration || '').includes('line-through')) wrap.push('s');
+        if (['code', 'pre'].includes(tag)) wrap.push('code');
+        if (tag === 'span' && n.classList.contains('tg-spoiler')) wrap.push('tg-spoiler');
+        if (block.test(tag)) nl();
+        if (tag === 'a' && n.getAttribute('href')) out += `<a href="${n.getAttribute('href').replace(/"/g, '&quot;')}">`;
+        wrap.forEach((w) => { out += `<${w}>`; });
+        walk(n);
+        wrap.slice().reverse().forEach((w) => { out += `</${w}>`; });
+        if (tag === 'a' && n.getAttribute('href')) out += '</a>';
+        if (block.test(tag)) nl();
+      });
+    };
+    walk(root);
+    // Dọn thẻ rỗng và xuống dòng thừa ở cuối
+    let prev;
+    do { prev = out; out = out.replace(/<(b|i|u|s|code|tg-spoiler)><\/\1>/g, ''); } while (out !== prev);
+    return out.replace(/\n+$/, '');
+  }
+
+  function richEditor(ta) {
+    if (ta._rich) return ta._rich;
+    // Không để ô soạn thảo nằm trong <label>: bấm vào label làm trình duyệt lấy kiểu chữ đậm của tiêu đề
+    const lab = ta.closest('label');
+    if (lab) {
+      const d = document.createElement('div');
+      d.className = lab.className;
+      while (lab.firstChild) d.appendChild(lab.firstChild);
+      lab.replaceWith(d);
+    }
+    const wrap = document.createElement('div');
+    wrap.className = 'rich';
+    wrap.innerHTML = `<div class="rich-bar">${RICH_TOOLS.map(([k, ic, t]) => `<button type="button" class="rich-btn" data-rc="${k}" title="${t}" aria-label="${t}">${ic}</button>`).join('')}
+      <span class="grow"></span><button type="button" class="rich-btn rich-mode" data-rc="html" title="Sửa bằng mã HTML">HTML</button></div>
+      <div class="rich-ed input" contenteditable="true" spellcheck="false" data-ph="${esc(ta.placeholder || '')}"></div>`;
+    ta.parentNode.insertBefore(wrap, ta);
+    wrap.appendChild(ta);
+    ta.classList.add('rich-src');
+    const ed = wrap.querySelector('.rich-ed');
+    ed.style.minHeight = ta.style.minHeight || '100px';
+    if (ta.disabled) { ed.contentEditable = 'false'; wrap.classList.add('disabled'); }
+    ed.innerHTML = tgToRich(ta.value);
+    let htmlMode = false;
+    const sync = () => {
+      ta.value = richToTg(ed);
+      wrap.classList.toggle('empty', !ed.textContent.trim());
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    const state = () => {
+      wrap.querySelectorAll('[data-rc]').forEach((b) => {
+        const k = b.dataset.rc;
+        let on = false;
+        try { on = ['bold', 'italic', 'underline'].includes(k) ? document.queryCommandState(k) : k === 'strike' ? document.queryCommandState('strikeThrough') : false; } catch {}
+        if (k === 'html') on = htmlMode;
+        b.classList.toggle('on', on);
+      });
+    };
+    const wrapSel = (tag, cls) => {
+      const sel = window.getSelection();
+      if (!sel.rangeCount || sel.isCollapsed) return toast('Bôi đen chữ cần định dạng trước', 'err');
+      const r = sel.getRangeAt(0);
+      if (!ed.contains(r.commonAncestorContainer)) return;
+      const el = document.createElement(tag);
+      if (cls) el.className = cls;
+      el.appendChild(r.extractContents());
+      r.insertNode(el);
+      sel.removeAllRanges();
+      const nr = document.createRange(); nr.selectNodeContents(el); sel.addRange(nr);
+    };
+    const cmd = (k) => {
+      if (htmlMode && k !== 'html') return;
+      ed.focus();
+      if (k === 'bold' || k === 'italic' || k === 'underline') document.execCommand(k);
+      else if (k === 'strike') document.execCommand('strikeThrough');
+      else if (k === 'code') wrapSel('code');
+      else if (k === 'spoiler') wrapSel('span', 'tg-spoiler');
+      else if (k === 'clear') { document.execCommand('removeFormat'); document.execCommand('unlink'); }
+      else if (k === 'link') {
+        const sel = window.getSelection();
+        if (!sel.rangeCount || sel.isCollapsed) return toast('Bôi đen chữ cần gắn link trước', 'err');
+        const range = sel.getRangeAt(0).cloneRange();
+        let url = prompt('Nhập link (https://… hoặc @username):', 'https://');
+        if (!url || url === 'https://') return;
+        url = url.trim();
+        if (url.startsWith('@')) url = 'https://t.me/' + url.slice(1);
+        if (!/^(https?:\/\/|tg:\/\/)/i.test(url)) url = 'https://' + url;
+        sel.removeAllRanges(); sel.addRange(range);
+        document.execCommand('createLink', false, url);
+      } else if (k === 'html') {
+        htmlMode = !htmlMode;
+        wrap.classList.toggle('html-mode', htmlMode);
+        if (htmlMode) { sync(); ta.focus(); } else { ed.innerHTML = tgToRich(ta.value); sync(); ed.focus(); }
+      }
+      if (k !== 'html') sync();
+      state();
+    };
+    wrap.querySelector('.rich-bar').addEventListener('mousedown', (e) => { if (e.target.closest('[data-rc]')) e.preventDefault(); }); // giữ vùng chọn
+    wrap.querySelector('.rich-bar').addEventListener('click', (e) => { const b = e.target.closest('[data-rc]'); if (b) cmd(b.dataset.rc); });
+    ed.addEventListener('input', sync);
+    ed.addEventListener('keyup', state);
+    ed.addEventListener('mouseup', state);
+    ed.addEventListener('keydown', (e) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const k = e.key.toLowerCase();
+      const map = e.shiftKey ? { x: 'strike', m: 'code', p: 'spoiler' } : { k: 'link', b: 'bold', i: 'italic', u: 'underline' };
+      if (map[k]) { e.preventDefault(); cmd(map[k]); }
+    });
+    // Dán: chỉ lấy chữ thuần (tránh dán định dạng lạ từ web khác)
+    ed.addEventListener('paste', (e) => {
+      e.preventDefault();
+      const t = (e.clipboardData || window.clipboardData).getData('text/plain');
+      document.execCommand('insertText', false, t);
+    });
+    // Chế độ HTML: sửa trực tiếp textarea
+    ta.addEventListener('input', (e) => { if (htmlMode && e.isTrusted) wrap.classList.toggle('empty', !ta.value.trim()); });
+    wrap.classList.toggle('empty', !ed.textContent.trim());
+    const api = {
+      el: ed,
+      // Chèn chữ (VD biến {name}) tại vị trí con trỏ
+      insert(text) {
+        if (htmlMode) {
+          const p = ta.selectionStart ?? ta.value.length;
+          ta.value = ta.value.slice(0, p) + text + ta.value.slice(ta.selectionEnd ?? p);
+          ta.dispatchEvent(new Event('input', { bubbles: true }));
+          return;
+        }
+        ed.focus({ preventScroll: true });
+        const sel = window.getSelection();
+        if (!sel.rangeCount || !ed.contains(sel.anchorNode)) { const r = document.createRange(); r.selectNodeContents(ed); r.collapse(false); sel.removeAllRanges(); sel.addRange(r); }
+        document.execCommand('insertText', false, text);
+        sync();
+      },
+      setValue(v) { ta.value = v; ed.innerHTML = tgToRich(v); sync(); },
+      textLength: () => (htmlMode ? stripTags(ta.value).length : ed.textContent.length),
+    };
+    ta._rich = api;
+    ed._ta = ta;
+    return api;
+  }
+  const enhanceRich = (root) => $$('textarea[data-rich]', root).forEach((t) => richEditor(t));
+
   // Danh mục biến: [mã, giải thích, ví dụ]
   const VAR_GROUPS = [
     { title: '🙋 Người gửi lệnh', vars: [
@@ -1711,7 +1910,7 @@
       const [label, hasWho] = RACT[a.type] || ['?', false];
       let f = '';
       if (hasWho) f += `<div class="segmented" style="margin-top:10px"><button type="button" data-aw="${i}" data-v="sender" class="${a.who !== 'target' ? 'active' : ''}">${a.type === 'reply' ? 'Reply người gửi' : 'Người gửi lệnh'}</button><button type="button" data-aw="${i}" data-v="target" class="${a.who === 'target' ? 'active' : ''}">Người được reply</button></div>`;
-      if (['reply', 'send'].includes(a.type)) f += `<textarea class="input" data-af="${i}" data-k="text" style="margin-top:10px;min-height:80px" placeholder="Nội dung… dùng biến như {mention}, {points}">${esc(a.text || '')}</textarea>
+      if (['reply', 'send'].includes(a.type)) f += `<textarea class="input" data-rich data-af="${i}" data-k="text" style="margin-top:10px;min-height:80px" placeholder="Nội dung… dùng biến như {mention}, {points}">${esc(a.text || '')}</textarea>
         <div class="pv"><div class="pv-label">👁 Xem trước (giá trị mẫu)</div><div class="pv-body" data-pv="${i}">${a.text ? previewText(a.text) : '<span class="muted">Nội dung sẽ hiện ở đây…</span>'}</div></div>`;
       if (a.type === 'points') f += `<div class="row" style="margin-top:10px"><input class="input" type="number" data-af="${i}" data-k="amount" value="${a.amount ?? 1}" style="text-align:center;font-weight:700"><span class="small muted nowrap">điểm (âm = trừ)</span></div>`;
       if (a.type === 'mute') f += `<div class="row" style="margin-top:10px"><input class="input" type="number" min="0" data-af="${i}" data-k="minutes" value="${a.minutes ?? 60}"><span class="small muted nowrap">phút (0 = vĩnh viễn)</span></div>`;
@@ -1838,10 +2037,13 @@
 
     sheet('<div id="redit"></div>', (el, close) => {
       const box = $('#redit', el);
-      const draw = () => { box.innerHTML = html(); };
+      const draw = () => { box.innerHTML = html(); enhanceRich(box); };
       const redraw = () => { collect(el); draw(); };
       draw();
-      el.addEventListener('focusin', (e) => { if (e.target.matches('textarea[data-af]')) lastText = e.target; });
+      el.addEventListener('focusin', (e) => {
+        const ta = e.target.matches('textarea[data-af]') ? e.target : e.target.closest('.rich')?.querySelector('textarea[data-af]');
+        if (ta) lastText = ta;
+      });
       const updatePreview = (ta) => {
         const pv = $(`[data-pv="${ta.dataset.af}"]`, el);
         if (pv) pv.innerHTML = ta.value.trim() ? previewText(ta.value) : '<span class="muted">Nội dung sẽ hiện ở đây…</span>';
@@ -1850,6 +2052,7 @@
       const insertVar = (code) => {
         const ta = lastText && document.contains(lastText) ? lastText : $('textarea[data-af]', el);
         if (!ta) return toast('Thêm hành động "Trả lời" hoặc "Gửi tin" trước', 'err');
+        if (ta._rich) { ta._rich.insert(code); lastText = ta; updatePreview(ta); return; }
         const p = ta.selectionStart ?? ta.value.length;
         ta.value = ta.value.slice(0, p) + code + ta.value.slice(ta.selectionEnd ?? p);
         ta.focus({ preventScroll: true });
@@ -1972,7 +2175,7 @@
           <label class="field"><span class="lbl">Tự xoá tin nhắc</span><select class="input" name="autodel" ${dis}>${autodelOpts.map(([v, t]) => `<option value="${v}" ${v === ru.autodel ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
           <label class="field"><span class="lbl">Nhắc lại cùng người sau</span><select class="input" name="cooldown" ${dis}>${cdOpts.map(([v, t]) => `<option value="${v}" ${v === ru.cooldown ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
         </div>
-        <label class="field"><span class="lbl">Nội dung tin nhắc</span><textarea class="input" name="text" style="min-height:120px" ${dis}>${esc(ru.text)}</textarea>
+        <label class="field"><span class="lbl">Nội dung tin nhắc</span><textarea class="input" data-rich name="text" style="min-height:120px" ${dis}>${esc(ru.text)}</textarea>
           <div class="hint">Biến: <code>{mention}</code> tag tên · <code>{name}</code> tên · <code>{id}</code> · <code>{group}</code> tên nhóm. Hỗ trợ &lt;b&gt; &lt;i&gt;.</div></label>
         <div class="pv"><div class="pv-label">👁 Xem trước</div><div class="pv-body" id="upv"></div></div>
         ${can ? `<div class="grid grid-2"><button type="button" class="btn" data-deftext>${icon('refresh', 'sm')}Nội dung mặc định</button><button class="btn primary">${icon('check', 'sm')}Lưu</button></div>`
@@ -1998,7 +2201,7 @@
           $$('[data-gsel]', el).forEach((b) => b.classList.toggle('active', groupsSel.includes(Number(b.dataset.gsel))));
           $('[data-allgroups]', el).classList.toggle('active', !groupsSel.length);
         }
-        if (e.target.closest('[data-deftext]')) { f.text.value = ru.default_text; preview(); }
+        if (e.target.closest('[data-deftext]')) { f.text._rich ? f.text._rich.setValue(ru.default_text) : (f.text.value = ru.default_text); preview(); }
       });
       f.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -2086,7 +2289,6 @@
   }
 
   // ================= Quảng cáo xoay vòng =================
-  const stripTags = (h) => String(h || '').replace(/<[^>]+>/g, '');
   const ivLabel = (sec) => (sec < 60 ? sec + ' giây' : humanSec(sec));
   const adImg = (a) => `api.php?r=ads/image&id=${a.id}&v=${a.updated_at}`;
 
@@ -2274,8 +2476,8 @@
           <div class="field"><span class="lbl">Ảnh</span>
             <label class="ad-pick"><input type="file" accept="image/*" id="adfile" hidden><span id="adpickimg">${st.imgUrl ? `<img src="${st.imgUrl}" alt="">` : `${icon('image')}<b>Chọn ảnh</b><small>JPG / PNG, nên ngang 16:9</small>`}</span></label></div>
           <label class="field"><span class="lbl">Tên bài (chỉ hiện trên web)</span><input class="input" name="title" value="${esc(st.title)}" placeholder="VD: Hidemium 230k" maxlength="120"></label>
-          <label class="field"><span class="lbl">Nội dung <span class="xs muted" id="capn"></span></span><textarea class="input" name="caption" style="min-height:120px" placeholder="Hidemium 30 ngày giá 230k, rẻ nhất thị trường - Mua liên hệ @domino_real">${esc(st.caption)}</textarea>
-            <div class="hint">&lt;b&gt;đậm&lt;/b&gt; · &lt;i&gt;nghiêng&lt;/i&gt; · &lt;u&gt;gạch chân&lt;/u&gt; · &lt;a href="https://…"&gt;link&lt;/a&gt; · @username tự thành link</div></label>
+          <label class="field"><span class="lbl">Nội dung <span class="xs muted" id="capn"></span></span><textarea class="input" data-rich name="caption" style="min-height:120px" placeholder="Hidemium 30 ngày giá 230k, rẻ nhất thị trường - Mua liên hệ @domino_real">${esc(st.caption)}</textarea>
+            <div class="hint">Bôi đen chữ rồi bấm nút hoặc <b>Ctrl+B</b> đậm · <b>Ctrl+I</b> nghiêng · <b>Ctrl+U</b> gạch chân · <b>Ctrl+K</b> link. @username tự thành link trên Telegram.</div></label>
           <div class="field"><span class="lbl">Nút bấm</span><div id="adbtns" class="stack" style="gap:8px">${btnsHtml()}</div>
             <button type="button" class="btn soft block sm" data-addbtn style="margin-top:8px">${icon('plus', 'sm')}Thêm nút</button></div>
           <div class="card" style="box-shadow:none">${sw('enabled', st.enabled, 'Bật bài này', 'Tắt thì bỏ qua khi xoay vòng')}</div>
@@ -2286,10 +2488,12 @@
     sheet(html, (el, close) => {
       el.classList.add('sheet-wide');
       const f = $('#fad', el);
+      enhanceRich(el);
       const pv = () => {
         st.caption = f.caption.value;
-        $('#capn', el).textContent = `${st.caption.length}/1024`;
-        $('#capn', el).style.color = st.caption.length > 1024 ? 'var(--danger)' : '';
+        const len = f.caption._rich ? f.caption._rich.textLength() : st.caption.length;
+        $('#capn', el).textContent = `${len}/1024`;
+        $('#capn', el).style.color = len > 1024 ? 'var(--danger)' : '';
         $('#adpv', el).innerHTML = tgPost(st.image || st.imgUrl, st.caption, rowsOf());
       };
       pv();
