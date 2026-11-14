@@ -97,6 +97,7 @@ class Api
             'installed' => $inst,
             'csrf' => Auth::csrf(),
             'user' => $inst ? Auth::publicUser(Auth::user()) : null,
+            'access' => $inst && Auth::user() ? Access::summary(Auth::user()) : null,
             'site_name' => $inst ? Settings::get('site_name') : 'Tele Manager',
             'allow_register' => $inst ? Settings::get('allow_register') === '1' : false,
             'version' => APP_VERSION,
@@ -234,6 +235,7 @@ class Api
         }
         return [
             'user' => Auth::publicUser($u),
+            'access' => Access::summary($u),
             'link_code' => $u['link_code'],
             'bots' => array_map(fn($b) => $b['username'], DB::all("SELECT username FROM tg_bots WHERE enabled = 1 AND username IS NOT NULL ORDER BY id")),
             'memberships' => $memberships,
@@ -275,7 +277,7 @@ class Api
     {
         $u = Auth::requireUser();
         $gid = $this->int('group_id');
-        if ($u['role'] !== 'admin') {
+        if (!Access::can($u, 'view', $gid)) {
             if (!$u['tg_user_id'] || !Repo::member($gid, $u['tg_user_id'])) fail('Bạn không thuộc nhóm này', 403);
         }
         $g = Repo::group($gid) ?: fail('Không tìm thấy nhóm', 404);
@@ -297,13 +299,17 @@ class Api
     // ================= Quản trị =================
     private function dashboard(): array
     {
-        Auth::requireAdmin();
+        $u = Auth::requireUser();
+        Access::require($u, 'view');
+        $ids = Access::groupIds($u); // null = tất cả
+        $web = Access::isWebAdmin($u);
+        $g = fn(string $col) => Access::sqlIn($ids, $col);
         Repo::sweepMutes();
         $today = date('Y-m-d');
         $days = [];
         for ($i = 13; $i >= 0; $i--) $days[date('Y-m-d', strtotime("-$i day"))] = ['messages' => 0, 'joins' => 0, 'leaves' => 0];
         $from = array_key_first($days);
-        foreach (DB::all('SELECT day, SUM(messages) AS m, SUM(joins) AS j, SUM(leaves) AS l FROM daily_stats WHERE day >= ? GROUP BY day', [$from]) as $r) {
+        foreach (DB::all('SELECT day, SUM(messages) AS m, SUM(joins) AS j, SUM(leaves) AS l FROM daily_stats WHERE day >= ? AND ' . $g('group_id') . ' GROUP BY day', [$from]) as $r) {
             if (isset($days[$r['day']])) $days[$r['day']] = ['messages' => (int)$r['m'], 'joins' => (int)$r['j'], 'leaves' => (int)$r['l']];
         }
         $chart = [];
@@ -311,21 +317,21 @@ class Api
 
         return [
             'stats' => [
-                'groups' => (int)DB::val('SELECT COUNT(*) FROM tg_groups WHERE active = 1'),
-                'members' => (int)DB::val("SELECT COUNT(DISTINCT tg_user_id) FROM tg_members WHERE is_bot = 0 AND status IN ('member','muted')"),
-                'messages_today' => (int)DB::val('SELECT COALESCE(SUM(messages),0) FROM daily_stats WHERE day = ?', [$today]),
-                'joins_today' => (int)DB::val('SELECT COALESCE(SUM(joins),0) FROM daily_stats WHERE day = ?', [$today]),
-                'actions_24h' => (int)DB::val("SELECT COUNT(*) FROM app_logs WHERE created_at > ? AND action IN ('ban','kick','mute','warn','delete')", [now() - 86400]),
-                'banned' => (int)DB::val("SELECT COUNT(*) FROM tg_members WHERE status = 'banned'"),
-                'muted' => (int)DB::val("SELECT COUNT(*) FROM tg_members WHERE status = 'muted'"),
-                'bots' => (int)DB::val('SELECT COUNT(*) FROM tg_bots WHERE enabled = 1'),
-                'users' => (int)DB::val('SELECT COUNT(*) FROM app_users'),
+                'groups' => (int)DB::val('SELECT COUNT(*) FROM tg_groups WHERE active = 1 AND ' . $g('id')),
+                'members' => (int)DB::val("SELECT COUNT(DISTINCT tg_user_id) FROM tg_members WHERE is_bot = 0 AND status IN ('member','muted') AND " . $g('group_id')),
+                'messages_today' => (int)DB::val('SELECT COALESCE(SUM(messages),0) FROM daily_stats WHERE day = ? AND ' . $g('group_id'), [$today]),
+                'joins_today' => (int)DB::val('SELECT COALESCE(SUM(joins),0) FROM daily_stats WHERE day = ? AND ' . $g('group_id'), [$today]),
+                'actions_24h' => (int)DB::val("SELECT COUNT(*) FROM app_logs WHERE created_at > ? AND action IN ('ban','kick','mute','warn','delete') AND " . $g('group_id'), [now() - 86400]),
+                'banned' => (int)DB::val("SELECT COUNT(*) FROM tg_members WHERE status = 'banned' AND " . $g('group_id')),
+                'muted' => (int)DB::val("SELECT COUNT(*) FROM tg_members WHERE status = 'muted' AND " . $g('group_id')),
+                'bots' => $web ? (int)DB::val('SELECT COUNT(*) FROM tg_bots WHERE enabled = 1') : null,
+                'users' => $web ? (int)DB::val('SELECT COUNT(*) FROM app_users') : null,
             ],
             'chart' => $chart,
             'top_members' => array_map(fn($r) => [
                 'id' => (int)$r['id'], 'name' => Repo::name($r), 'username' => $r['username'], 'points' => (int)$r['points'], 'group' => $r['title'], 'tg_user_id' => (string)$r['tg_user_id'],
-            ], DB::all("SELECT m.*, g.title FROM tg_members m JOIN tg_groups g ON g.id = m.group_id WHERE m.is_bot = 0 AND m.status <> 'banned' ORDER BY m.points DESC LIMIT 5")),
-            'recent_logs' => $this->formatLogs(DB::all('SELECT l.*, g.title AS group_title FROM app_logs l LEFT JOIN tg_groups g ON g.id = l.group_id ORDER BY l.id DESC LIMIT 8')),
+            ], DB::all("SELECT m.*, g.title FROM tg_members m JOIN tg_groups g ON g.id = m.group_id WHERE m.is_bot = 0 AND m.status <> 'banned' AND " . $g('m.group_id') . ' ORDER BY m.points DESC LIMIT 5')),
+            'recent_logs' => Access::can($u, 'logs') ? $this->formatLogs(DB::all('SELECT l.*, g.title AS group_title FROM app_logs l LEFT JOIN tg_groups g ON g.id = l.group_id WHERE ' . $g('l.group_id') . ' ORDER BY l.id DESC LIMIT 8')) : [],
             'has_bot' => (bool)DB::val('SELECT COUNT(*) FROM tg_bots'),
         ];
     }
@@ -482,19 +488,19 @@ class Api
 
     private function groups(): array
     {
-        Auth::requireAdmin();
+        $u = $this->gate('view');
         $rows = DB::all("SELECT g.*, b.username AS bot_username,
             (SELECT COUNT(*) FROM tg_members m WHERE m.group_id = g.id AND m.is_bot = 0 AND m.status IN ('member','muted')) AS tracked,
             (SELECT COALESCE(SUM(messages),0) FROM daily_stats d WHERE d.group_id = g.id AND d.day = ?) AS messages_today
-            FROM tg_groups g LEFT JOIN tg_bots b ON b.id = g.bot_id ORDER BY g.active DESC, g.updated_at DESC", [date('Y-m-d')]);
+            FROM tg_groups g LEFT JOIN tg_bots b ON b.id = g.bot_id WHERE " . Access::sqlIn(Access::groupIds($u), 'g.id') . " ORDER BY g.active DESC, g.updated_at DESC", [date('Y-m-d')]);
         return array_map([$this, 'groupRow'], $rows);
     }
 
     private function group(): array
     {
-        Auth::requireAdmin();
-        Repo::sweepMutes();
         $id = $this->int('id');
+        $u = $this->gate('view', ['id' => $id]);
+        Repo::sweepMutes();
         $g = DB::get("SELECT g.*, b.username AS bot_username,
             (SELECT COUNT(*) FROM tg_members m WHERE m.group_id = g.id AND m.is_bot = 0 AND m.status IN ('member','muted')) AS tracked
             FROM tg_groups g LEFT JOIN tg_bots b ON b.id = g.bot_id WHERE g.id = ?", [$id]) ?: fail('Không tìm thấy nhóm', 404);
@@ -517,8 +523,17 @@ class Api
                 'admins' => (int)DB::val('SELECT COUNT(*) FROM tg_members WHERE group_id = ? AND is_admin = 1', [$id]),
                 'points' => (int)DB::val('SELECT COALESCE(SUM(points),0) FROM tg_members WHERE group_id = ?', [$id]),
             ],
-            'bots' => array_map(fn($b) => ['id' => (int)$b['id'], 'username' => $b['username']], DB::all('SELECT id, username FROM tg_bots ORDER BY id')),
+            'access' => Access::summary($u)['perms'],
+            'bots' => !Access::isWebAdmin($u) ? [] : array_map(fn($b) => ['id' => (int)$b['id'], 'username' => $b['username']], DB::all('SELECT id, username FROM tg_bots ORDER BY id')),
         ];
+    }
+
+    /** Kiểm tra quyền theo nhóm; trả về người dùng hiện tại */
+    private function gate(string $perm, ?array $group = null): array
+    {
+        $u = Auth::requireUser();
+        Access::require($u, $perm, $group ? (int)$group['id'] : null);
+        return $u;
     }
 
     private function loadGroup(): array
@@ -528,19 +543,19 @@ class Api
 
     private function groupSettings(): array
     {
-        $u = Auth::requireAdmin();
         $g = $this->loadGroup();
+        $u = $this->gate('settings', $g);
         $s = Repo::saveSettings($g, (array)$this->in('settings', []));
         $botId = $this->int('bot_id');
-        if ($botId && DB::get('SELECT id FROM tg_bots WHERE id = ?', [$botId])) DB::run('UPDATE tg_groups SET bot_id = ? WHERE id = ?', [$botId, $g['id']]);
+        if ($botId && Access::isWebAdmin($u) && DB::get('SELECT id FROM tg_bots WHERE id = ?', [$botId])) DB::run('UPDATE tg_groups SET bot_id = ? WHERE id = ?', [$botId, $g['id']]);
         Repo::log((int)$g['id'], $u['username'], 'settings', null, 'Cập nhật cài đặt nhóm');
         return ['settings' => $s];
     }
 
     private function groupSend(): array
     {
-        $u = Auth::requireAdmin();
         $g = $this->loadGroup();
+        $u = $this->gate('send', $g);
         $text = trim((string)$this->in('text'));
         if ($text === '') fail('Nội dung trống');
         $api = Repo::apiForGroup($g) ?: fail('Nhóm chưa có bot');
@@ -559,8 +574,8 @@ class Api
 
     private function groupSync(): array
     {
-        Auth::requireAdmin();
         $g = $this->loadGroup();
+        $this->gate('view', $g);
         $api = Repo::apiForGroup($g) ?: fail('Nhóm chưa có bot');
         try {
             $chat = $api->call('getChat', ['chat_id' => $g['chat_id']]);
@@ -578,8 +593,8 @@ class Api
 
     private function groupLeave(): array
     {
-        $u = Auth::requireAdmin();
         $g = $this->loadGroup();
+        $u = $this->gate('danger', $g);
         $api = Repo::apiForGroup($g);
         if ($api) $api->tryCall('leaveChat', ['chat_id' => $g['chat_id']]);
         DB::run('UPDATE tg_groups SET active = 0 WHERE id = ?', [$g['id']]);
@@ -589,16 +604,16 @@ class Api
 
     private function groupDelete(): array
     {
-        Auth::requireAdmin();
         $g = $this->loadGroup();
+        $u = $this->gate('danger', $g);
         Repo::deleteGroup((int)$g['id']);
         return [];
     }
 
     private function groupResetPoints(): array
     {
-        $u = Auth::requireAdmin();
         $g = $this->loadGroup();
+        $u = $this->gate('danger', $g);
         DB::run('UPDATE tg_members SET points = 0 WHERE group_id = ?', [$g['id']]);
         Repo::log((int)$g['id'], $u['username'], 'reset_points', null, 'Đặt lại điểm toàn nhóm');
         return [];
@@ -641,9 +656,8 @@ class Api
     /** 30 tin gần nhất, hoặc 30 tin cũ hơn before_id */
     private function chat(): array
     {
-        Auth::requireAdmin();
-        Repo::sweepMutes();
         $g = $this->loadGroup();
+        $this->gate('chat', $g);
         $before = $this->int('before_id');
         $limit = max(10, min(100, $this->int('limit', 30)));
         $rows = $before
@@ -663,8 +677,8 @@ class Api
     /** Tin mới sau after_id + tin đã thay đổi (xoá/sửa/ghim) từ since */
     private function chatPoll(): array
     {
-        Auth::requireAdmin();
         $g = $this->loadGroup();
+        $this->gate('chat', $g);
         $after = $this->int('after_id');
         $since = $this->int('since');
         $new = DB::all(self::CHAT_SQL . ' WHERE c.group_id = ? AND c.id > ? ORDER BY c.id ASC LIMIT 100', [$g['id'], $after]);
@@ -686,8 +700,8 @@ class Api
 
     private function chatSend(): array
     {
-        $u = Auth::requireAdmin();
         $g = $this->loadGroup();
+        $u = $this->gate('send', $g);
         $text = trim((string)$this->in('text'));
         if ($text === '') fail('Nội dung trống');
         $api = Repo::apiForGroup($g) ?: fail('Nhóm chưa có bot');
@@ -705,8 +719,8 @@ class Api
 
     private function chatDelete(): array
     {
-        $u = Auth::requireAdmin();
         [$c, $g, $api] = $this->chatMsg();
+        $u = $this->gate('chat', $g);
         try {
             $api->call('deleteMessage', ['chat_id' => $g['chat_id'], 'message_id' => $c['message_id']]);
         } catch (TelegramException $e) {
@@ -724,8 +738,8 @@ class Api
 
     private function chatPin(): array
     {
-        $u = Auth::requireAdmin();
         [$c, $g, $api] = $this->chatMsg();
+        $u = $this->gate('chat', $g);
         $unpin = (bool)$this->in('unpin');
         try {
             $api->call($unpin ? 'unpinChatMessage' : 'pinChatMessage', ['chat_id' => $g['chat_id'], 'message_id' => $c['message_id'], 'disable_notification' => true]);
@@ -761,9 +775,9 @@ class Api
 
     private function members(): array
     {
-        Auth::requireAdmin();
-        Repo::sweepMutes();
         $gid = $this->int('group_id');
+        $this->gate('view', ['id' => $gid]);
+        Repo::sweepMutes();
         $where = ['group_id = ?'];
         $p = [$gid];
         $q = trim((string)$this->in('q', ''));
@@ -790,9 +804,9 @@ class Api
 
     private function member(): array
     {
-        Auth::requireAdmin();
-        Repo::sweepMutes();
         $m = DB::get('SELECT * FROM tg_members WHERE id = ?', [$this->int('id')]) ?: fail('Không tìm thấy thành viên', 404);
+        $this->gate('view', ['id' => (int)$m['group_id']]);
+        Repo::sweepMutes();
         $g = Repo::group((int)$m['group_id']);
         $rank = 1 + (int)DB::val('SELECT COUNT(*) FROM tg_members WHERE group_id = ? AND is_bot = 0 AND points > ?', [$m['group_id'], $m['points']]);
         $logs = DB::all('SELECT * FROM app_logs WHERE group_id = ? AND target_tg_id = ? ORDER BY id DESC LIMIT 30', [$m['group_id'], $m['tg_user_id']]);
@@ -811,10 +825,11 @@ class Api
 
     private function memberAction(): array
     {
-        $u = Auth::requireAdmin();
         $m = DB::get('SELECT * FROM tg_members WHERE id = ?', [$this->int('id')]) ?: fail('Không tìm thấy thành viên', 404);
         $action = (string)$this->in('action');
         if (!in_array($action, Moderation::ACTIONS, true)) fail('Hành động không hợp lệ');
+        $u = $this->gate(in_array($action, ['points', 'setpoints'], true) ? 'points' : 'moderate', ['id' => (int)$m['group_id']]);
+        if (!Access::isWebAdmin($u) && $m['is_admin'] && in_array($action, ['ban', 'kick', 'mute', 'warn'], true)) fail('Quản trị viên nhóm không thể xử lý quản trị viên khác', 403);
         $g = Repo::group((int)$m['group_id']);
         try {
             $r = Moderation::perform($action, $g, [
@@ -836,7 +851,8 @@ class Api
 
     private function memberNote(): array
     {
-        Auth::requireAdmin();
+        $m = DB::get('SELECT group_id FROM tg_members WHERE id = ?', [$this->int('id')]) ?: fail('Không tìm thấy thành viên', 404);
+        $this->gate('moderate', ['id' => (int)$m['group_id']]);
         DB::run('UPDATE tg_members SET note = ? WHERE id = ?', [mb_substr((string)$this->in('note', ''), 0, 1000), $this->int('id')]);
         return [];
     }
@@ -844,8 +860,8 @@ class Api
     /** Thêm thành viên theo ID để xử lý (ví dụ ban trước người chưa vào nhóm) */
     private function memberAdd(): array
     {
-        Auth::requireAdmin();
         $g = $this->loadGroup();
+        $this->gate('moderate', $g);
         $tg = trim((string)$this->in('tg_user_id'));
         if (!preg_match('/^\d{4,}$/', $tg)) fail('ID Telegram không hợp lệ');
         $api = Repo::apiForGroup($g);
@@ -880,10 +896,12 @@ class Api
 
     private function logs(): array
     {
-        Auth::requireAdmin();
-        $where = ['1=1'];
+        $u = Auth::requireUser();
+        $gid = $this->int('group_id');
+        Access::require($u, 'logs', $gid ?: null);
+        $where = [Access::sqlIn(Access::groupIds($u), 'l.group_id')];
         $p = [];
-        if ($gid = $this->int('group_id')) { $where[] = 'l.group_id = ?'; $p[] = $gid; }
+        if ($gid) { $where[] = 'l.group_id = ?'; $p[] = $gid; }
         if ($a = (string)$this->in('action', '')) {
             if ($a === 'moderation') $where[] = "l.action IN ('ban','unban','kick','mute','unmute','warn','unwarn','resetwarn','delete')";
             elseif ($a === 'points') $where[] = "l.action IN ('points','setpoints','reset_points')";
@@ -907,7 +925,11 @@ class Api
     private function users(): array
     {
         Auth::requireAdmin();
-        return array_map([Auth::class, 'publicUser'], DB::all('SELECT * FROM app_users ORDER BY role ASC, id ASC'));
+        return array_map(function ($x) {
+            $row = Auth::publicUser($x);
+            $row['managed_groups'] = $x['role'] === 'admin' ? null : count(Access::groupIds($x) ?? []);
+            return $row;
+        }, DB::all('SELECT * FROM app_users ORDER BY role ASC, id ASC'));
     }
 
     private function userSave(): array
@@ -967,32 +989,52 @@ class Api
         $api->registerCommands($mem, $adm);
     }
 
+    /** Lệnh có sửa được bởi người dùng này không: lệnh dùng chung chỉ admin web */
+    private function canEditRule(array $u, ?int $groupId): bool
+    {
+        return $groupId === null ? Access::isWebAdmin($u) : Access::can($u, 'rules', $groupId);
+    }
+
     private function rules(): array
     {
-        Auth::requireAdmin();
+        $u = Auth::requireUser();
         $gid = $this->int('group_id');
+        Access::require($u, 'view', $gid ?: null);
+        $ids = Access::groupIds($u);
         $sql = 'SELECT r.*, g.title AS group_title FROM tg_rules r LEFT JOIN tg_groups g ON g.id = r.group_id';
-        $rows = $gid ? DB::all("$sql WHERE r.group_id IS NULL OR r.group_id = ? ORDER BY r.group_id IS NULL, r.priority DESC, r.id", [$gid])
-            : DB::all("$sql ORDER BY r.group_id IS NOT NULL, r.priority DESC, r.id");
+        // Quản trị viên nhóm: thấy lệnh của nhóm mình + lệnh dùng chung (chỉ xem)
+        $scope = '(r.group_id IS NULL OR ' . Access::sqlIn($ids, 'r.group_id') . ')';
+        $rows = $gid ? DB::all("$sql WHERE (r.group_id IS NULL OR r.group_id = ?) ORDER BY r.group_id IS NULL, r.priority DESC, r.id", [$gid])
+            : DB::all("$sql WHERE $scope ORDER BY r.group_id IS NOT NULL, r.priority DESC, r.id");
         return [
-            'rules' => array_map([Rules::class, 'row'], $rows),
+            'rules' => array_map(function ($r) use ($u) {
+                $row = Rules::row($r);
+                $row['can_edit'] = $this->canEditRule($u, $row['group_id']);
+                return $row;
+            }, $rows),
             'menu_admin_only' => Telegram::menuAdminOnly(),
-            'groups' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title']], DB::all('SELECT id, title FROM tg_groups ORDER BY active DESC, title')),
+            'web_admin' => Access::isWebAdmin($u),
+            'groups' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title']],
+                DB::all('SELECT id, title FROM tg_groups WHERE ' . Access::sqlIn($ids, 'id') . ' ORDER BY active DESC, title')),
         ];
     }
 
     private function ruleSave(): array
     {
-        $u = Auth::requireAdmin();
+        $u = Auth::requireUser();
         $data = Rules::sanitize($this->in);
         $id = $this->int('id');
+        if (!$this->canEditRule($u, $data['group_id'])) {
+            fail($data['group_id'] === null ? 'Chỉ admin web được tạo lệnh dùng chung cho tất cả nhóm. Hãy chọn nhóm của bạn ở mục "Áp dụng cho".' : 'Bạn không có quyền sửa lệnh của nhóm này', 403);
+        }
         if ($data['trigger_type'] === 'command') {
             $dup = DB::get("SELECT id FROM tg_rules WHERE trigger_type = 'command' AND trigger_value = ? AND id <> ? AND ((group_id IS NULL AND ? IS NULL) OR group_id = ?)",
                 [$data['trigger_value'], $id, $data['group_id'], $data['group_id']]);
             if ($dup) fail('Đã có lệnh /' . $data['trigger_value'] . ' trong phạm vi này');
         }
         if ($id) {
-            DB::get('SELECT id FROM tg_rules WHERE id = ?', [$id]) ?: fail('Không tìm thấy lệnh', 404);
+            $old = DB::get('SELECT * FROM tg_rules WHERE id = ?', [$id]) ?: fail('Không tìm thấy lệnh', 404);
+            if (!$this->canEditRule($u, $old['group_id'] ? (int)$old['group_id'] : null)) fail('Bạn không có quyền sửa lệnh này', 403);
             DB::update('tg_rules', $data, 'id = ?', [$id]);
         } else {
             $data['created_at'] = now();
@@ -1000,13 +1042,22 @@ class Api
         }
         Repo::log($data['group_id'], $u['username'], 'rule', null, 'Lưu lệnh: ' . $data['name']);
         $errors = Rules::syncMenus();
-        return ['rule' => Rules::row(DB::get('SELECT r.*, g.title AS group_title FROM tg_rules r LEFT JOIN tg_groups g ON g.id = r.group_id WHERE r.id = ?', [$id])), 'menu_errors' => $errors];
+        $row = Rules::row(DB::get('SELECT r.*, g.title AS group_title FROM tg_rules r LEFT JOIN tg_groups g ON g.id = r.group_id WHERE r.id = ?', [$id]));
+        $row['can_edit'] = true;
+        return ['rule' => $row, 'menu_errors' => $errors];
+    }
+
+    private function loadRuleForEdit(array $u): array
+    {
+        $r = DB::get('SELECT * FROM tg_rules WHERE id = ?', [$this->int('id')]) ?: fail('Không tìm thấy lệnh', 404);
+        if (!$this->canEditRule($u, $r['group_id'] ? (int)$r['group_id'] : null)) fail('Chỉ admin web được sửa lệnh dùng chung', 403);
+        return $r;
     }
 
     private function ruleDelete(): array
     {
-        $u = Auth::requireAdmin();
-        $r = DB::get('SELECT * FROM tg_rules WHERE id = ?', [$this->int('id')]) ?: fail('Không tìm thấy lệnh', 404);
+        $u = Auth::requireUser();
+        $r = $this->loadRuleForEdit($u);
         DB::run('DELETE FROM tg_rules WHERE id = ?', [$r['id']]);
         DB::run('DELETE FROM tg_rule_hits WHERE rule_id = ?', [$r['id']]);
         Repo::log($r['group_id'] ? (int)$r['group_id'] : null, $u['username'], 'rule', null, 'Xoá lệnh: ' . $r['name']);
@@ -1014,24 +1065,30 @@ class Api
         return [];
     }
 
-    /** Bật/tắt hàng loạt: enabled hoặc show_in_menu cho danh sách id */
+    /** Bật/tắt hàng loạt: enabled hoặc show_in_menu cho danh sách id (chỉ các lệnh được phép sửa) */
     private function ruleBulk(): array
     {
-        $u = Auth::requireAdmin();
+        $u = Auth::requireUser();
+        Access::require($u, 'view');
         $field = $this->in('field');
         if (!in_array($field, ['enabled', 'show_in_menu'], true)) fail('Trường không hợp lệ');
         $ids = array_values(array_filter(array_map('intval', (array)$this->in('ids', [])), fn($x) => $x > 0));
         if (!$ids) fail('Không có lệnh nào');
+        $allowed = [];
+        foreach (DB::all('SELECT id, group_id FROM tg_rules WHERE id IN (' . implode(',', $ids) . ')') as $r) {
+            if ($this->canEditRule($u, $r['group_id'] ? (int)$r['group_id'] : null)) $allowed[] = (int)$r['id'];
+        }
+        if (!$allowed) fail('Bạn không có quyền sửa các lệnh này', 403);
         $v = $this->in('value') ? 1 : 0;
-        $where = 'id IN (' . implode(',', $ids) . ')' . ($field === 'show_in_menu' ? " AND trigger_type = 'command'" : '');
+        $where = 'id IN (' . implode(',', $allowed) . ')' . ($field === 'show_in_menu' ? " AND trigger_type = 'command'" : '');
         $n = DB::run("UPDATE tg_rules SET $field = ? WHERE $where", [$v]);
         $label = $field === 'enabled' ? ($v ? 'Bật' : 'Tắt') . ' tất cả lệnh' : ($v ? 'Hiện' : 'Ẩn') . ' tất cả lệnh trong menu Telegram';
         Repo::log(null, $u['username'], 'rule', null, "$label ($n lệnh)");
         $errors = Rules::syncMenus();
-        return ['updated' => $n, 'menu_errors' => $errors];
+        return ['updated' => $n, 'skipped' => count($ids) - count($allowed), 'menu_errors' => $errors];
     }
 
-    /** Ai thấy menu lệnh khi gõ "/" trong nhóm: mọi người hoặc chỉ admin */
+    /** Ai thấy menu lệnh khi gõ "/" trong nhóm: mọi người hoặc chỉ admin (chỉ admin web) */
     private function ruleMenuMode(): array
     {
         $u = Auth::requireAdmin();
@@ -1043,8 +1100,9 @@ class Api
 
     private function ruleToggle(): array
     {
-        Auth::requireAdmin();
-        DB::run('UPDATE tg_rules SET enabled = ? WHERE id = ?', [$this->in('enabled') ? 1 : 0, $this->int('id')]);
+        $u = Auth::requireUser();
+        $r = $this->loadRuleForEdit($u);
+        DB::run('UPDATE tg_rules SET enabled = ? WHERE id = ?', [$this->in('enabled') ? 1 : 0, $r['id']]);
         Rules::syncMenus();
         return [];
     }
@@ -1055,6 +1113,13 @@ class Api
         Auth::requireAdmin();
         return [
             'settings' => Settings::publicAll(),
+            'access' => [
+                'enabled' => Access::enabled(),
+                'perms' => Access::perms(),
+                'catalog' => array_map(fn($p) => ['default' => $p[0], 'name' => $p[1], 'desc' => $p[2]], Access::PERMS),
+                'managers' => array_map(fn($x) => ['id' => (int)$x['id'], 'name' => $x['display_name'] ?: $x['username'], 'groups' => count(Access::groupIds($x) ?? [])],
+                    array_values(array_filter(DB::all("SELECT * FROM app_users WHERE role <> 'admin' AND disabled = 0 AND tg_user_id IS NOT NULL"), fn($x) => (bool)Access::groupIds($x)))),
+            ],
             'version' => Updater::current(),
             'detected_url' => (function () {
                 $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
@@ -1078,6 +1143,12 @@ class Api
         $u = Auth::requireAdmin();
         $in = (array)$this->in('settings', []);
         $urlChanged = false;
+        if (array_key_exists('group_admin_access', $in)) Settings::set('group_admin_access', $in['group_admin_access'] ? '1' : '0');
+        if (isset($in['group_admin_perms']) && is_array($in['group_admin_perms'])) {
+            $perms = [];
+            foreach (Access::PERMS as $k => $_) $perms[$k] = !empty($in['group_admin_perms'][$k]);
+            Settings::set('group_admin_perms', json_encode($perms));
+        }
         foreach (['site_name', 'site_url', 'allow_register', 'update_repo', 'update_branch', 'update_token'] as $k) {
             if (!array_key_exists($k, $in)) continue;
             $v = trim((string)$in[$k]);

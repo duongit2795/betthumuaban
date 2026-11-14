@@ -115,7 +115,12 @@
   };
 
   // ================= State & API =================
-  const S = { user: null, csrf: '', site: window.SITE_NAME || 'Tele Manager', allowRegister: false, status: null };
+  const S = { user: null, csrf: '', site: window.SITE_NAME || 'Tele Manager', allowRegister: false, status: null, access: null };
+  // Phân quyền: admin web (toàn quyền) / quản trị viên nhóm (nhóm của mình) / thành viên
+  const isWebAdmin = () => !!S.access?.web_admin;
+  const isManager = () => !!S.access?.manager;
+  const can = (perm) => isWebAdmin() || !!S.access?.perms?.[perm];
+  const roleLabel = () => (isWebAdmin() ? 'Admin web' : isManager() ? 'Quản trị viên nhóm' : 'Thành viên');
 
   async function api(route, data, opts = {}) {
     const isPost = data !== undefined;
@@ -275,7 +280,9 @@
     let r, params = {};
     for (const x of routes) { const m = path.match(x.re); if (m) { r = x; params = m.groups || {}; break; } }
     if (!r) return go('/');
-    if (r.admin && S.user.role !== 'admin') return go('/');
+    if (r.webAdmin && !isWebAdmin()) { toast('Chỉ admin web mới vào được mục này', 'err'); return go('/'); }
+    if (r.manage && !isManager()) return go('/');
+    if (r.perm && !can(r.perm)) { toast('Bạn chưa được cấp quyền vào mục này', 'err'); return go('/'); }
 
     shell(r.nav || '', r.title || '', r.back);
     // Thay #main bằng phần tử mới để gỡ toàn bộ sự kiện của trang trước
@@ -301,7 +308,13 @@
   }
 
   function navItems() {
-    if (S.user.role === 'admin') {
+    if (!isWebAdmin() && isManager()) {
+      return {
+        tab: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/rules', 'terminal', 'Lệnh'], ...(can('logs') ? [['/logs', 'list', 'Nhật ký']] : []), ['/more', 'grid', 'Thêm']],
+        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm của tôi'], ['/rules', 'terminal', 'Lệnh tự tạo'], ...(can('logs') ? [['/logs', 'list', 'Nhật ký']] : []), ['/me', 'star', 'Điểm của tôi'], ['/rank', 'trophy', 'Xếp hạng'], ['/account', 'user', 'Tài khoản']],
+      };
+    }
+    if (isWebAdmin()) {
       return {
         tab: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/logs', 'list', 'Nhật ký'], ['/more', 'grid', 'Thêm']],
         side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh tự tạo'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ['/account', 'user', 'Tài khoản']],
@@ -330,12 +343,14 @@
     }
     const items = navItems();
     const path = current();
-    const isActive = (p) => (p === '/' ? path === '/' : path === p || path.startsWith(p + '/') || (p === '/groups' && path.startsWith('/group/')) || (p === '/more' && ['/users', '/system', '/account', '/me', '/rules'].some((x) => path.startsWith(x))));
+    const direct = (p) => (p === '/' ? path === '/' : path === p || path.startsWith(p + '/') || (p === '/groups' && path.startsWith('/group/')));
+    const inTabs = items.tab.some(([p]) => p !== '/more' && direct(p));
+    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/rank'].some((x) => path.startsWith(x)));
     $('#tabbar').innerHTML = items.tab.map(([p, ic, t]) => `<a href="#${p}" class="${isActive(p) ? 'active' : ''}">${icon(ic)}<span>${t}</span></a>`).join('');
     $('#sidebar').innerHTML = `<div class="brand"><img src="assets/icon.svg" alt="">${esc(S.site)}</div>`
       + items.side.map(([p, ic, t]) => `<a href="#${p}" class="nav ${isActive(p) && !(p === '/more') ? 'active' : ''}">${icon(ic)}${t}</a>`).join('')
       + `<div class="foot stack"><a class="nav" href="javascript:void 0" data-theme-toggle>${icon('moon')}Giao diện sáng/tối</a><a class="nav" href="javascript:void 0" data-logout>${icon('logout')}Đăng xuất</a>
-         <div class="row" style="padding:8px 12px">${avatar(S.user.display_name, S.user.id)}<div class="grow"><div class="ellipsis" style="font-weight:600">${esc(S.user.display_name)}</div><div class="xs muted">${S.user.role === 'admin' ? 'Quản trị viên' : 'Thành viên'}</div></div></div></div>`;
+         <div class="row" style="padding:8px 12px">${avatar(S.user.display_name, S.user.id)}<div class="grow"><div class="ellipsis" style="font-weight:600">${esc(S.user.display_name)}</div><div class="xs muted">${roleLabel()}</div></div></div></div>`;
     $('#page-title').textContent = title;
     $('#page-actions').innerHTML = '';
     $('#page-back').innerHTML = back ? `<a class="btn icon ghost" href="#${back}" aria-label="Quay lại">${icon('back')}</a>` : `<div class="brand only-mobile"><img src="assets/icon.svg" alt=""></div>`;
@@ -390,7 +405,7 @@
       await withBtn(btn, async () => {
         try {
           const d = await api('auth/login', formData(e.target), { noRedirect: true });
-          S.user = d.user; $('#app').innerHTML = ''; go('/');
+          S.user = d.user; await boot(); $('#app').innerHTML = ''; go('/');
         } catch (err) { toast(err.message, 'err'); }
       });
     };
@@ -410,7 +425,7 @@
     $('#f').onsubmit = async (e) => {
       e.preventDefault();
       await withBtn(e.target.querySelector('button'), async () => {
-        try { const d = await api('auth/register', formData(e.target), { noRedirect: true }); S.user = d.user; $('#app').innerHTML = ''; go('/'); }
+        try { const d = await api('auth/register', formData(e.target), { noRedirect: true }); S.user = d.user; await boot(); $('#app').innerHTML = ''; go('/'); }
         catch (err) { toast(err.message, 'err'); }
       });
     };
@@ -463,7 +478,7 @@
   }
 
   // ================= Admin: Dashboard =================
-  route('/', async () => (S.user.role === 'admin' ? viewDashboard() : viewMe()), { title: '' });
+  route('/', async () => (isManager() ? viewDashboard() : viewMe()), { title: '' });
 
   async function viewDashboard() {
     const d = await api('dashboard');
@@ -474,14 +489,15 @@
       title: 'Tổng quan',
       actions: `<button class="btn icon ghost only-mobile" data-theme-toggle aria-label="Đổi giao diện">${icon('moon')}</button>`,
       html: `
-      ${!d.has_bot ? `<a href="#/bots" class="alert warn" style="margin:4px 0 14px;color:inherit">${icon('bot')}<div><b>Chưa có bot nào.</b> Nhấn để thêm bot Telegram (lấy token từ @BotFather).</div></a>` : ''}
+      ${!isWebAdmin() ? `<div class="alert info" style="margin:4px 0 14px">${icon('shield')}<div class="small">Bạn đang quản lý <b>${S.access.groups.length} nhóm</b> với quyền <b>quản trị viên nhóm</b>. Một số mục chỉ admin web mới vào được.</div></div>` : ''}
+      ${!d.has_bot && isWebAdmin() ? `<a href="#/bots" class="alert warn" style="margin:4px 0 14px;color:inherit">${icon('bot')}<div><b>Chưa có bot nào.</b> Nhấn để thêm bot Telegram (lấy token từ @BotFather).</div></a>` : ''}
       <div class="hero" style="margin-top:4px">
         <div class="muted small">Xin chào, ${esc(S.user.display_name)} 👋</div>
         <div class="row" style="align-items:flex-end;margin-top:6px"><div class="big">${num(st.messages_today)}</div><div class="muted" style="padding-bottom:7px">tin nhắn hôm nay</div></div>
-        <div class="row wrap small" style="margin-top:8px;gap:14px"><span>${icon('users', 'sm')} ${num(st.groups)} nhóm</span><span>${icon('bot', 'sm')} ${num(st.bots)} bot</span><span>${icon('plus', 'sm')} ${num(st.joins_today)} người mới</span></div>
+        <div class="row wrap small" style="margin-top:8px;gap:14px"><span>${icon('users', 'sm')} ${num(st.groups)} nhóm</span>${st.bots !== null ? `<span>${icon('bot', 'sm')} ${num(st.bots)} bot</span>` : ''}<span>${icon('plus', 'sm')} ${num(st.joins_today)} người mới</span></div>
       </div>
       <div class="grid grid-4" style="margin-top:12px">
-        ${stat('users', '', 'Thành viên', st.members, 'trong tất cả nhóm')}
+        ${stat('users', '', 'Thành viên', st.members, isWebAdmin() ? 'trong tất cả nhóm' : 'trong nhóm của bạn')}
         ${stat('shield', 'amber', 'Xử lý 24h', st.actions_24h, 'cảnh cáo, mute, ban…')}
         ${stat('mute', 'amber', 'Đang cấm chat', st.muted)}
         ${stat('ban', 'red', 'Đã bị cấm', st.banned)}
@@ -499,7 +515,7 @@
             <div class="points">${num(m.points)}</div></a>`).join('') : empty('trophy', 'Chưa có dữ liệu')}</div>
         </div>
         <div>
-          <div class="section-title"><h2>Hoạt động gần đây</h2><a href="#/logs" class="small">Xem tất cả</a></div>
+          <div class="section-title"><h2>Hoạt động gần đây</h2>${can('logs') ? '<a href="#/logs" class="small">Xem tất cả</a>' : ''}</div>
           <div class="list">${d.recent_logs.length ? d.recent_logs.map(logItem).join('') : empty('list', 'Chưa có hoạt động')}</div>
         </div>
       </div>`,
@@ -529,15 +545,18 @@
         <p class="xs muted center" style="margin-top:14px">Thêm bot vào nhóm Telegram, nhóm sẽ tự xuất hiện ở đây.</p>`
         : `<div class="card">${empty('users', 'Chưa có nhóm nào.<br>Hãy thêm bot vào nhóm Telegram và cấp quyền quản trị.')}</div>`,
     };
-  }, { admin: true, title: 'Nhóm' });
+  }, { manage: true, title: 'Nhóm' });
 
-  route('/group/:id', (p) => viewGroup(p.id, 'overview'), { admin: true, back: '/groups' });
-  route('/group/:id/:tab', (p) => viewGroup(p.id, p.tab), { admin: true, back: '/groups' });
+  route('/group/:id', (p) => viewGroup(p.id, 'overview'), { manage: true, back: '/groups' });
+  route('/group/:id/:tab', (p) => viewGroup(p.id, p.tab), { manage: true, back: '/groups' });
 
   async function viewGroup(id, tab) {
     const d = await api('group', undefined, { query: { id } });
     const g = d.group;
-    const tabs = [['overview', 'Tổng quan'], ['chat', '💬 Chat'], ['members', 'Thành viên'], ['settings', 'Cài đặt'], ['rules', 'Lệnh'], ['send', 'Gửi tin'], ['logs', 'Nhật ký']];
+    const gp = d.access || {};
+    const tabs = [['overview', 'Tổng quan'], ['chat', '💬 Chat', 'chat'], ['members', 'Thành viên'], ['settings', 'Cài đặt', 'settings'], ['rules', 'Lệnh'], ['send', 'Gửi tin', 'send'], ['logs', 'Nhật ký', 'logs']]
+      .filter(([, , perm]) => !perm || gp[perm]);
+    if (!tabs.some(([k]) => k === tab)) tab = 'overview';
     const tabsHtml = `<div class="tabs">${tabs.map(([k, t]) => `<button data-tab="${k}" class="${k === tab ? 'active' : ''}">${t}</button>`).join('')}</div>`;
     let body = '';
     let mount = () => {};
@@ -567,7 +586,7 @@
         <div class="row">${avatar(g.title, g.chat_id, 'lg sq')}<div class="grow"><h2 class="ellipsis">${esc(g.title)}</h2>
         <div class="xs muted mono">${esc(g.chat_id)}</div>
         <div class="row wrap" style="gap:6px;margin-top:6px"><span class="badge">${g.type === 'supergroup' ? 'Siêu nhóm' : 'Nhóm'}</span>${g.username ? `<a class="badge blue" target="_blank" rel="noopener" href="https://t.me/${esc(g.username)}">@${esc(g.username)}</a>` : ''}${g.bot_username ? `<span class="badge">${icon('bot', 'sm')}@${esc(g.bot_username)}</span>` : ''}</div></div></div>
-        <div class="grid grid-2" style="margin-top:14px"><button class="btn soft sm" data-sync>${icon('refresh', 'sm')}Đồng bộ</button><a class="btn sm" href="#/group/${g.id}/send">${icon('send', 'sm')}Gửi tin</a></div>
+        <div class="grid grid-2" style="margin-top:14px"><button class="btn soft sm" data-sync>${icon('refresh', 'sm')}Đồng bộ</button>${(d.access || {}).send ? `<a class="btn sm" href="#/group/${g.id}/send">${icon('send', 'sm')}Gửi tin</a>` : `<a class="btn sm" href="#/group/${g.id}/members">${icon('users', 'sm')}Thành viên</a>`}</div>
       </div>
       <div class="grid grid-3" style="margin-top:12px">
         <div class="card stat"><div class="label">Thành viên</div><div class="value">${num(g.member_count)}</div><div class="sub">${num(g.tracked)} đã ghi nhận</div></div>
@@ -578,17 +597,17 @@
         <div class="card stat"><div class="label">Bị cấm</div><div class="value">${num(c.banned)}</div></div>
       </div>
       <div class="card" style="margin-top:12px"><div class="card-head"><h3>Tin nhắn 14 ngày</h3></div><div class="card-body">${barChart(d.chart)}</div></div>
-      <div class="section-title"><h2>Vùng nguy hiểm</h2></div>
+      ${!(d.access || {}).danger ? '' : `<div class="section-title"><h2>Vùng nguy hiểm</h2></div>
       <div class="list">
         <button class="list-item" data-resetpts>${icon('star')}<div class="grow">Đặt lại điểm toàn nhóm</div></button>
         ${g.active ? `<button class="list-item" data-leave style="color:var(--danger)">${icon('kick')}<div class="grow">Cho bot rời nhóm</div></button>` : ''}
         <button class="list-item" data-del style="color:var(--danger)">${icon('trash')}<div class="grow">Xoá nhóm khỏi web (xoá dữ liệu)</div></button>
-      </div>`;
+      </div>`}`;
     const mount = (root) => {
       $('[data-sync]', root).onclick = (e) => withBtn(e.currentTarget, async () => {
         try { const r = await api('group/sync', { id: g.id }); toast(`Đã đồng bộ: ${r.member_count} thành viên, ${r.admins} admin`); render(); } catch (err) { toast(err.message, 'err'); }
       });
-      $('[data-resetpts]', root).onclick = async () => {
+      if ($('[data-resetpts]', root)) $('[data-resetpts]', root).onclick = async () => {
         if (!(await confirmBox('Đặt lại điểm?', 'Toàn bộ điểm tương tác của thành viên trong nhóm sẽ về 0.', { danger: true, ok: 'Đặt lại' }))) return;
         await api('group/reset-points', { id: g.id }); toast('Đã đặt lại điểm'); render();
       };
@@ -597,7 +616,7 @@
         if (!(await confirmBox('Cho bot rời nhóm?', 'Bot sẽ rời khỏi nhóm Telegram này.', { danger: true, ok: 'Rời nhóm' }))) return;
         await api('group/leave', { id: g.id }); toast('Bot đã rời nhóm'); render();
       };
-      $('[data-del]', root).onclick = async () => {
+      if ($('[data-del]', root)) $('[data-del]', root).onclick = async () => {
         if (!(await confirmBox('Xoá nhóm?', 'Toàn bộ dữ liệu thành viên, điểm và nhật ký của nhóm sẽ bị xoá vĩnh viễn.', { danger: true, ok: 'Xoá' }))) return;
         await api('group/delete', { id: g.id }); toast('Đã xoá nhóm'); go('/groups');
       };
@@ -674,16 +693,23 @@
         <div class="card stat" style="padding:10px"><div class="label xs">Tin nhắn</div><div class="value" style="font-size:20px;margin-top:2px">${num(m.messages)}</div></div>
         <div class="card stat" style="padding:10px"><div class="label xs">Cảnh cáo</div><div class="value" style="font-size:20px;margin-top:2px;${m.warns ? 'color:var(--warning)' : ''}">${m.warns}/${d.warn_limit}</div></div>
       </div>
-      <div class="actions" style="margin-bottom:14px">
-        ${act('warn', 'alert', 'Cảnh cáo', 'amber')}
-        ${m.warns ? act('unwarn', 'check', 'Gỡ CC', 'green') : act('points', 'star', 'Điểm')}
-        ${m.status === 'muted' ? act('unmute', 'volume', 'Bỏ mute', 'green') : act('mute', 'mute', 'Cấm chat', 'amber')}
-        ${act('kick', 'kick', 'Đuổi', 'red')}
-        ${m.status === 'banned' ? act('unban', 'check', 'Gỡ cấm', 'green') : act('ban', 'ban', 'Cấm', 'red')}
-        ${m.warns ? act('points', 'star', 'Điểm') : act('resetwarn', 'refresh', 'Xoá CC')}
-        ${act('setpoints', 'edit', 'Đặt điểm')}
-        ${act('note', 'note', 'Ghi chú')}
-      </div>
+      ${(() => {
+        // Quản trị viên nhóm không xử phạt được quản trị viên khác
+        const mod = can('moderate'), pts = can('points'), protect = m.is_admin && !isWebAdmin();
+        const list = [
+          mod && !protect ? act('warn', 'alert', 'Cảnh cáo', 'amber') : '',
+          mod && m.warns ? act('unwarn', 'check', 'Gỡ CC', 'green') : '',
+          mod && !protect ? (m.status === 'muted' ? act('unmute', 'volume', 'Bỏ mute', 'green') : act('mute', 'mute', 'Cấm chat', 'amber')) : '',
+          mod && !protect ? act('kick', 'kick', 'Đuổi', 'red') : '',
+          mod && !protect ? (m.status === 'banned' ? act('unban', 'check', 'Gỡ cấm', 'green') : act('ban', 'ban', 'Cấm', 'red')) : '',
+          mod && m.warns ? act('resetwarn', 'refresh', 'Xoá CC') : '',
+          pts ? act('points', 'star', 'Điểm') : '',
+          pts ? act('setpoints', 'edit', 'Đặt điểm') : '',
+          mod ? act('note', 'note', 'Ghi chú') : '',
+        ].filter(Boolean);
+        return list.length ? `<div class="actions" style="margin-bottom:14px">${list.join('')}</div>`
+          : `<div class="alert info" style="margin-bottom:14px">${icon('lock')}<div class="small">${protect ? 'Không thể xử lý quản trị viên của nhóm.' : 'Bạn chỉ có quyền xem.'}</div></div>`;
+      })()}
       ${m.status === 'muted' ? `<div class="alert warn" style="margin-bottom:12px">${icon('mute')}<div>Cấm chat ${m.muted_until ? 'đến ' + fmtDate(m.muted_until, true) : 'vĩnh viễn'}</div></div>` : ''}
       ${m.note ? `<div class="alert info" style="margin-bottom:12px">${icon('note')}<div style="white-space:pre-wrap">${esc(m.note)}</div></div>` : ''}
       <dl class="kv card card-pad" style="margin:0 0 14px">
@@ -839,7 +865,7 @@
     const body = `<div class="chat-wrap">
       <div class="chat-top" id="ctop"></div>
       <div class="chat" id="chat"><div class="stack"><div class="skeleton" style="height:56px;width:70%"></div><div class="skeleton" style="height:42px;width:55%"></div><div class="skeleton" style="height:64px;width:75%"></div></div></div>
-      <form class="composer" id="composer">
+      <form class="composer ${can('send') ? '' : 'hidden'}" id="composer">
         <div id="replybar"></div>
         <div class="row"><textarea rows="1" name="text" placeholder="Nhắn vào nhóm với tư cách bot…" aria-label="Nội dung"></textarea>
         <button class="btn primary icon" aria-label="Gửi">${icon('send')}</button></div>
@@ -858,7 +884,7 @@
         const b = (a, ic, title, cls = '') => `<button type="button" data-ca="${a}" data-id="${m.id}" class="${cls}" title="${title}" aria-label="${title}">${icon(ic)}</button>`;
         let h = '';
         if (!m.deleted) h += b('del', 'trash', 'Xoá tin', 'red');
-        if (mb && !m.is_bot && !mb.is_admin) {
+        if (mb && !m.is_bot && can('moderate') && !(mb.is_admin && !isWebAdmin())) {
           h += b('warn', 'alert', 'Cảnh cáo', 'amber');
           h += mb.status === 'muted' ? b('unmute', 'volume', 'Bỏ cấm chat') : b('mute', 'mute', 'Cấm chat', 'amber');
           h += mb.status === 'banned' ? b('unban', 'check', 'Gỡ cấm') : b('ban', 'ban', 'Cấm khỏi nhóm', 'red');
@@ -994,12 +1020,12 @@
         sheet(`<div class="sheet-head"><h2 class="ellipsis">${esc(m.name || 'Tin nhắn')}</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
           <div class="card card-pad small text-2" style="margin-bottom:12px;max-height:120px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere">${esc(m.text || m.media || '')}</div>
           <div class="list">
-            ${it('reply', 'reply', 'Trả lời tin này')}
+            ${can('send') ? it('reply', 'reply', 'Trả lời tin này') : ''}
             ${it(m.pinned ? 'unpin' : 'pin', 'pin', m.pinned ? 'Bỏ ghim' : 'Ghim tin')}
             ${it('copy', 'copy', 'Sao chép nội dung')}
             ${mb ? it('profile', 'user', 'Xem hồ sơ thành viên') : ''}
-            ${mb && !m.is_bot ? it('points', 'star', 'Cộng / trừ điểm') : ''}
-            ${mb && !m.is_bot && !mb.is_admin ? it('kick', 'kick', 'Đuổi khỏi nhóm', true) : ''}
+            ${mb && !m.is_bot && can('points') ? it('points', 'star', 'Cộng / trừ điểm') : ''}
+            ${mb && !m.is_bot && !mb.is_admin && can('moderate') ? it('kick', 'kick', 'Đuổi khỏi nhóm', true) : ''}
             ${!m.deleted ? it('del', 'trash', 'Xoá tin nhắn', true) : ''}
           </div>`, (el, close) => el.addEventListener('click', async (e) => {
           const b = e.target.closest('[data-sa]');
@@ -1111,7 +1137,7 @@
   }
   const groupLogs = (d) => logsBlock(d.group.id);
 
-  route('/logs', async () => { const { body, mount } = logsBlock(null); return { title: 'Nhật ký', html: body, mount }; }, { admin: true, title: 'Nhật ký' });
+  route('/logs', async () => { const { body, mount } = logsBlock(null); return { title: 'Nhật ký', html: body, mount }; }, { manage: true, perm: 'logs', title: 'Nhật ký' });
 
   // ================= Admin: Bots =================
   route('/bots', async () => {
@@ -1184,7 +1210,7 @@
         });
       },
     };
-  }, { admin: true, title: 'Bot' });
+  }, { webAdmin: true, title: 'Bot' });
 
   // ================= Admin: Lệnh tự tạo =================
   const TRIGGER = {
@@ -1415,30 +1441,35 @@
       const load = async () => {
         const d = await api('rules', undefined, { query: groupId ? { group_id: groupId } : {} });
         groups = d.groups;
-        const cmds = d.rules.filter((r) => r.trigger_type === 'command');
-        const allOn = d.rules.length && d.rules.every((r) => r.enabled);
+        const cmds = d.rules.filter((r) => r.trigger_type === 'command' && r.can_edit);
+        const allOn = d.rules.filter((r) => r.can_edit).length && d.rules.filter((r) => r.can_edit).every((r) => r.enabled);
         const allMenu = cmds.length && cmds.every((r) => r.show_in_menu);
+        webAdminRules = d.web_admin;
+        const editable = d.rules.filter((r) => r.can_edit);
         const master = `<div class="card" style="margin-bottom:12px">
-            <label class="switch-row"><div class="txt"><b>🔒 Chỉ admin thấy menu lệnh</b><span>${d.menu_admin_only ? 'Thành viên gõ "/" sẽ không thấy danh sách lệnh' : 'Đang tắt: mọi thành viên đều thấy menu khi gõ "/"'}</span></div>
-              <div class="switch"><input type="checkbox" data-menumode ${d.menu_admin_only ? 'checked' : ''}><span></span></div></label>
-            ${d.rules.length ? `<label class="switch-row"><div class="txt"><b>Bật tất cả lệnh</b><span>${d.rules.filter((r) => r.enabled).length}/${d.rules.length} lệnh đang bật</span></div>
+            ${!d.web_admin ? '' : `<label class="switch-row"><div class="txt"><b>🔒 Chỉ admin thấy menu lệnh</b><span>${d.menu_admin_only ? 'Thành viên gõ "/" sẽ không thấy danh sách lệnh' : 'Đang tắt: mọi thành viên đều thấy menu khi gõ "/"'}</span></div>
+              <div class="switch"><input type="checkbox" data-menumode ${d.menu_admin_only ? 'checked' : ''}><span></span></div></label>`}
+            ${editable.length ? `<label class="switch-row"><div class="txt"><b>Bật tất cả lệnh${d.web_admin ? '' : ' của nhóm tôi'}</b><span>${editable.filter((r) => r.enabled).length}/${editable.length} lệnh đang bật</span></div>
               <div class="switch"><input type="checkbox" data-bulk="enabled" ${allOn ? 'checked' : ''}><span></span></div></label>
             ${cmds.length ? `<label class="switch-row"><div class="txt"><b>Hiện tất cả trong menu lệnh Telegram</b><span>Hiện khi gõ "/" trong nhóm · ${cmds.filter((r) => r.show_in_menu).length}/${cmds.length} lệnh</span></div>
               <div class="switch"><input type="checkbox" data-bulk="show_in_menu" ${allMenu ? 'checked' : ''}><span></span></div></label>` : ''}` : ''}
           </div>`;
-        ids = d.rules.map((r) => r.id);
-        $('#rlist', root).innerHTML = master + (d.rules.length ? `<div class="list">${d.rules.map((r) => `
+        ids = editable.map((r) => r.id);
+        const masterHtml = /switch-row/.test(master) ? master : '';
+        $('#rlist', root).innerHTML = masterHtml + (!d.web_admin && d.rules.some((r) => !r.can_edit) ? `<div class="xs muted" style="margin:0 2px 10px">${icon('lock', 'sm')} Lệnh có khoá là lệnh dùng chung cho mọi nhóm, chỉ admin web sửa được.</div>` : '') + (d.rules.length ? `<div class="list">${d.rules.map((r) => `
           <div class="list-item" style="align-items:flex-start">
             <button class="grow" data-rule='${esc(JSON.stringify(r))}' style="all:unset;cursor:pointer;flex:1;min-width:0">
               <div class="row wrap" style="gap:6px">${triggerChip(r)}<b class="ellipsis">${esc(r.name)}</b></div>
               <div class="xs text-2" style="margin-top:4px">${ruleSummary(r)}</div>
               <div class="xs muted" style="margin-top:3px">${r.group_id ? esc(r.group_title || 'Nhóm') : 'Tất cả nhóm'} · ${num(r.uses)} lượt dùng${r.last_used ? ' · ' + ago(r.last_used) : ''}${r.trigger_type === 'command' && r.show_in_menu ? ' · <span style="color:var(--primary)">hiện trong menu</span>' : ''}</div>
             </button>
-            <label class="switch" style="margin-top:2px"><input type="checkbox" data-rtoggle="${r.id}" ${r.enabled ? 'checked' : ''}><span></span></label>
+            ${r.can_edit ? `<label class="switch" style="margin-top:2px"><input type="checkbox" data-rtoggle="${r.id}" ${r.enabled ? 'checked' : ''}><span></span></label>`
+              : `<span class="badge" title="Lệnh dùng chung – chỉ admin web sửa được">${icon('lock', 'sm')}${r.enabled ? 'Bật' : 'Tắt'}</span>`}
           </div>`).join('')}</div>`
           : `<div class="card">${empty('terminal', 'Chưa có lệnh nào. Nhấn <b>Tạo lệnh</b> để bắt đầu từ mẫu có sẵn.')}</div>`);
       };
       let ids = [];
+      let webAdminRules = false;
       const pickTemplate = () => sheet(`<div class="sheet-head"><h2>Tạo lệnh mới</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
         <button class="list-item card" data-tpl="-1" style="border-radius:14px;margin-bottom:10px;border:1px solid var(--border)"><span style="font-size:22px">✏️</span><div class="grow"><b>Tạo từ đầu</b><div class="xs muted">Tự thiết lập mọi thứ</div></div>${icon('chevron')}</button>
         <div class="small muted" style="margin:14px 2px 0">Hoặc chọn mẫu có sẵn (${RULE_TEMPLATES.length} mẫu)</div>
@@ -1451,13 +1482,17 @@
         const i = Number(b.dataset.tpl);
         const base = i < 0 ? { trigger_type: 'command', trigger_value: '', name: '', conditions: { who: 'all' }, actions: [{ type: 'reply', who: 'sender', text: '' }], show_in_menu: 1 } : JSON.parse(JSON.stringify(RULE_TEMPLATES[i].rule));
         base.enabled = 1;
-        base.group_id = groupId || null;
-        ruleEditor(base, groups, load);
+        base.group_id = groupId || (webAdminRules ? null : groups[0]?.id ?? null);
+        ruleEditor(base, groups, load, webAdminRules);
       }));
       root.addEventListener('click', (e) => {
         if (e.target.closest('[data-newrule]')) pickTemplate();
         const r = e.target.closest('[data-rule]');
-        if (r) ruleEditor(JSON.parse(r.dataset.rule), groups, load);
+        if (r) {
+          const rule = JSON.parse(r.dataset.rule);
+          if (!rule.can_edit) return toast('Đây là lệnh dùng chung cho mọi nhóm, chỉ admin web sửa được', 'err');
+          ruleEditor(rule, groups, load, webAdminRules);
+        }
       });
       root.addEventListener('change', async (e) => {
         const mm = e.target.closest('[data-menumode]');
@@ -1514,7 +1549,7 @@
     });
   }
 
-  function ruleEditor(rule, groups, onSaved) {
+  function ruleEditor(rule, groups, onSaved, webAdmin = isWebAdmin()) {
     const r = JSON.parse(JSON.stringify(rule));
     r.conditions = { who: 'all', min_points: 0, require_reply: false, cooldown: 0, chance: 100, autodel: false, autodel_trigger: true, autodel_reply: true, autodel_target: false, ...(r.conditions || {}) };
     // Thời gian xoá riêng từng loại (rule cũ chỉ có autodel_after chung)
@@ -1556,7 +1591,7 @@
             : `<input class="input" name="trigger_value" value="${esc(r.trigger_value)}" placeholder="${r.trigger_type === 'regex' ? '^gia (\\w+)$' : 'từ khoá 1|từ khoá 2'}" required>`}
             <div class="hint">${TRIGGER[r.trigger_type][1]}${isCmd ? '. Chỉ chữ thường không dấu, số, dấu _' : ''}</div></label>
           <label class="field"><span class="lbl">Tên / mô tả lệnh</span><input class="input" name="name" value="${esc(r.name || '')}" placeholder="VD: Điểm danh hằng ngày" maxlength="120"></label>
-          <label class="field"><span class="lbl">Áp dụng cho</span><select class="input" name="group_id"><option value="">Tất cả nhóm</option>${groups.map((g) => `<option value="${g.id}" ${g.id === r.group_id ? 'selected' : ''}>${esc(g.title)}</option>`).join('')}</select></label>
+          <label class="field"><span class="lbl">Áp dụng cho</span><select class="input" name="group_id">${webAdmin ? '<option value="">Tất cả nhóm</option>' : ''}${groups.map((g) => `<option value="${g.id}" ${g.id === r.group_id ? 'selected' : ''}>${esc(g.title)}</option>`).join('')}</select></label>
         </div>
 
         <div class="stack">
@@ -1724,28 +1759,30 @@
     });
   }
 
-  route('/rules', async () => { const { body, mount } = rulesBlock(null); return { title: 'Lệnh tự tạo', html: body, mount }; }, { admin: true, title: 'Lệnh tự tạo' });
+  route('/rules', async () => { const { body, mount } = rulesBlock(null); return { title: 'Lệnh tự tạo', html: body, mount }; }, { manage: true, title: 'Lệnh tự tạo' });
 
   // ================= Admin: More / Users / System =================
   route('/more', async () => ({
     title: 'Thêm',
     html: `
-      <div class="card card-pad row" style="margin-bottom:14px">${avatar(S.user.display_name, S.user.id, 'lg')}<div class="grow"><h2>${esc(S.user.display_name)}</h2><div class="small muted">@${esc(S.user.username)} · Quản trị viên</div></div></div>
+      <div class="card card-pad row" style="margin-bottom:14px">${avatar(S.user.display_name, S.user.id, 'lg')}<div class="grow"><h2>${esc(S.user.display_name)}</h2><div class="small muted">@${esc(S.user.username)} · ${roleLabel()}</div></div></div>
       <div class="list">
         <a class="list-item" href="#/rules">${icon('terminal')}<div class="grow">Lệnh tự tạo</div><span class="chev">${icon('chevron')}</span></a>
-        <a class="list-item" href="#/users">${icon('key')}<div class="grow">Tài khoản web</div><span class="chev">${icon('chevron')}</span></a>
-        <a class="list-item" href="#/system">${icon('download')}<div class="grow">Hệ thống & cập nhật</div><span class="chev">${icon('chevron')}</span></a>
+        ${isWebAdmin() ? `<a class="list-item" href="#/users">${icon('key')}<div class="grow">Tài khoản web & phân quyền</div><span class="chev">${icon('chevron')}</span></a>
+        <a class="list-item" href="#/system">${icon('download')}<div class="grow">Hệ thống & cập nhật</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         <a class="list-item" href="#/me">${icon('star')}<div class="grow">Điểm của tôi</div><span class="chev">${icon('chevron')}</span></a>
+        ${!isWebAdmin() ? `<a class="list-item" href="#/rank">${icon('trophy')}<div class="grow">Xếp hạng</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         <a class="list-item" href="#/account">${icon('user')}<div class="grow">Tài khoản & liên kết Telegram</div><span class="chev">${icon('chevron')}</span></a>
         <button class="list-item" data-theme-toggle>${icon('moon')}<div class="grow">Giao diện sáng / tối</div></button>
         <button class="list-item" data-logout style="color:var(--danger)">${icon('logout')}<div class="grow">Đăng xuất</div></button>
-      </div>`,
-  }), { admin: true, title: 'Thêm' });
+      </div>
+      ${!isWebAdmin() ? `<div class="alert info" style="margin-top:14px">${icon('lock')}<div class="xs">Bot, tài khoản web, hệ thống & cập nhật, lệnh dùng chung cho mọi nhóm chỉ <b>admin web</b> mới vào được.</div></div>` : ''}`,
+  }), { manage: true, title: 'Thêm' });
 
   route('/users', async () => {
     const users = await api('users');
     const item = (u) => `<button class="list-item" data-user='${esc(JSON.stringify(u))}'>${avatar(u.display_name, u.id)}
-      <div class="grow"><div class="row" style="gap:6px"><b class="ellipsis">${esc(u.display_name)}</b>${u.role === 'admin' ? '<span class="badge blue">Admin</span>' : '<span class="badge">Thành viên</span>'}${u.disabled ? '<span class="badge red">Khoá</span>' : ''}</div>
+      <div class="grow"><div class="row" style="gap:6px"><b class="ellipsis">${esc(u.display_name)}</b>${u.role === 'admin' ? '<span class="badge blue">Admin web</span>' : u.managed_groups ? `<span class="badge green">${icon('shield', 'sm')}Admin ${u.managed_groups} nhóm</span>` : '<span class="badge">Thành viên</span>'}${u.disabled ? '<span class="badge red">Khoá</span>' : ''}</div>
       <div class="xs muted">@${esc(u.username)}${u.tg_user_id ? ' · TG ' + u.tg_user_id : ' · chưa liên kết'} · ${ago(u.last_login)}</div></div><span class="chev">${icon('chevron')}</span></button>`;
     const form = (u) => sheet(`<div class="sheet-head"><h2>${u ? 'Sửa tài khoản' : 'Tạo tài khoản'}</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
       <form class="stack" id="fu">
@@ -1753,7 +1790,8 @@
         <label class="field"><span class="lbl">Tên hiển thị</span><input class="input" name="display_name" value="${esc(u?.display_name || '')}"></label>
         <label class="field"><span class="lbl">${u ? 'Mật khẩu mới (bỏ trống nếu giữ)' : 'Mật khẩu'}</span><input class="input" type="password" name="password" ${u ? '' : 'required'} minlength="6" autocomplete="new-password"></label>
         <label class="field"><span class="lbl">ID Telegram</span><input class="input" name="tg_user_id" inputmode="numeric" value="${esc(u?.tg_user_id || '')}"><div class="hint">Admin có ID Telegram sẽ dùng được lệnh quản trị của bot</div></label>
-        <label class="field"><span class="lbl">Vai trò</span><select class="input" name="role"><option value="member">Thành viên</option><option value="admin" ${u?.role === 'admin' ? 'selected' : ''}>Quản trị viên</option></select></label>
+        <label class="field"><span class="lbl">Vai trò</span><select class="input" name="role"><option value="member">Thành viên</option><option value="admin" ${u?.role === 'admin' ? 'selected' : ''}>Admin web (toàn quyền)</option></select>
+          <div class="hint">Thành viên đã liên kết Telegram và là admin nhóm trên Telegram sẽ tự có quyền <b>Quản trị viên nhóm</b> (chỉnh ở Hệ thống → Phân quyền).</div></label>
         ${u ? `<div class="card" style="box-shadow:none">${sw('disabled', u.disabled, 'Khoá tài khoản')}</div>` : ''}
         <div class="grid ${u ? 'grid-2' : ''}">${u ? `<button type="button" class="btn soft-danger" data-deluser>${icon('trash', 'sm')}Xoá</button>` : ''}<button class="btn primary">Lưu</button></div>
       </form>`, (el, close) => {
@@ -1777,7 +1815,7 @@
         root.addEventListener('click', (e) => { const b = e.target.closest('[data-user]'); if (b) form(JSON.parse(b.dataset.user)); });
       },
     };
-  }, { admin: true, title: 'Tài khoản web', back: '/more' });
+  }, { webAdmin: true, title: 'Tài khoản web', back: '/more' });
 
   route('/system', async () => {
     const d = await api('system');
@@ -1793,6 +1831,22 @@
         ${!env.writable ? `<div class="alert warn" style="margin-top:12px">${icon('alert')}<div class="small">Thư mục web không có quyền ghi. Trong aaPanel → Files, đặt owner <b>www</b> cho thư mục website.</div></div>` : ''}
         ${!env.zip ? `<div class="alert warn" style="margin-top:12px">${icon('alert')}<div class="small">PHP thiếu extension <b>zip</b>. aaPanel → App Store → PHP → Settings → Install extensions → zip.</div></div>` : ''}
       </div>
+
+      <form id="fperm">
+        <div class="section-title"><h2>🛡 Phân quyền quản trị viên nhóm</h2></div>
+        <div class="card">
+          ${sw('group_admin_access', d.access.enabled, 'Cho quản trị viên nhóm vào web', 'Admin của nhóm trên Telegram, đã liên kết tài khoản web, sẽ quản lý được nhóm của họ')}
+          <div class="form-group"><div class="xs muted" style="margin-bottom:6px">Quyền được cấp (chỉ trong nhóm họ làm admin)</div></div>
+          ${Object.entries(d.access.catalog).map(([k, c]) => sw('perm_' + k, d.access.perms[k], (k === 'danger' ? '⚠️ ' : '') + c.name, c.desc)).join('')}
+          <div class="form-group"><div class="alert info" style="margin:0">${icon('lock')}<div class="xs">Luôn chỉ <b>admin web</b>: Bot, Tài khoản web, Hệ thống & cập nhật, lệnh dùng chung cho mọi nhóm, chế độ menu lệnh, đổi bot quản lý nhóm.</div></div></div>
+          <div class="form-group">
+            <div class="small" style="font-weight:600;margin-bottom:6px">Đang là quản trị viên nhóm (${d.access.managers.length})</div>
+            ${d.access.managers.length ? d.access.managers.map((x) => `<div class="row small" style="padding:4px 0">${avatar(x.name, x.id)}<div class="grow">${esc(x.name)}</div><span class="badge green">${x.groups} nhóm</span></div>`).join('')
+              : '<div class="xs muted">Chưa có ai. Thành viên cần đăng ký tài khoản web, liên kết Telegram và là admin của nhóm có bot.</div>'}
+          </div>
+        </div>
+        <button class="btn primary block" style="height:46px;margin-top:12px">${icon('check')}Lưu phân quyền</button>
+      </form>
 
       <form id="fsys">
         <div class="section-title"><h2>Cài đặt chung</h2></div>
@@ -1843,6 +1897,16 @@
             } catch (err) { box.innerHTML = `<div class="alert err">${icon('alert')}<div class="small">${esc(err.message)}</div></div>`; }
           });
         };
+        $('#fperm', root).onsubmit = async (e) => {
+          e.preventDefault();
+          const f = formData(e.target);
+          const perms = {};
+          Object.keys(d.access.catalog).forEach((k) => { perms[k] = !!f['perm_' + k]; });
+          await withBtn(e.target.querySelector('button.primary'), async () => {
+            try { await api('system/settings', { settings: { group_admin_access: f.group_admin_access, group_admin_perms: perms } }); toast('Đã lưu phân quyền'); }
+            catch (err) { toast(err.message, 'err'); }
+          });
+        };
         $('#fsys', root).onsubmit = async (e) => {
           e.preventDefault();
           const data = formData(e.target);
@@ -1858,7 +1922,7 @@
         check($('[data-checkupd]', root));
       },
     };
-  }, { admin: true, title: 'Hệ thống', back: '/more' });
+  }, { webAdmin: true, title: 'Hệ thống', back: '/more' });
 
   // ================= Member views =================
   async function viewMe() {
@@ -1866,8 +1930,9 @@
     const u = d.user;
     if (!u.tg_user_id) {
       return {
-        title: S.user.role === 'admin' ? 'Điểm của tôi' : 'Của tôi',
+        title: isManager() ? 'Điểm của tôi' : 'Của tôi',
         html: `<div class="hero"><div class="muted small">Xin chào 👋</div><h1 style="margin-top:4px">${esc(u.display_name)}</h1><div class="muted small" style="margin-top:6px">Liên kết tài khoản Telegram để xem điểm tương tác, thứ hạng và trạng thái của bạn trong các nhóm.</div></div>
+          <div class="alert info" style="margin-top:12px">${icon('shield')}<div class="small">Nếu bạn là <b>quản trị viên nhóm</b> trên Telegram, sau khi liên kết bạn sẽ quản lý được nhóm của mình ngay trên web.</div></div>
           <div style="margin-top:14px">${linkCard(d)}</div>`,
         mount: mountLink,
       };
@@ -1877,7 +1942,7 @@
     const msgs = ms.reduce((a, b) => a + b.messages, 0);
     const best = ms.reduce((a, b) => (!a || b.rank < a.rank ? b : a), null);
     return {
-      title: S.user.role === 'admin' ? 'Điểm của tôi' : 'Của tôi',
+      title: isManager() ? 'Điểm của tôi' : 'Của tôi',
       actions: `<button class="btn icon ghost only-mobile" data-theme-toggle aria-label="Đổi giao diện">${icon('moon')}</button>`,
       html: `
       <div class="hero">
@@ -1915,9 +1980,13 @@
       if (e.target.closest('[data-gencode]')) { await api('me/link-code', {}); render(); }
       if (e.target.closest('[data-relink]')) {
         const st = await api('status');
+        const wasManager = isManager();
         S.user = st.user;
-        if (st.user?.tg_user_id) { toast('Liên kết thành công!'); } else toast('Chưa nhận được liên kết, hãy gửi mã cho bot', 'err');
-        render();
+        S.access = st.access;
+        if (st.user?.tg_user_id) {
+          toast(!wasManager && isManager() ? `Liên kết thành công! Bạn quản lý ${S.access.groups.length} nhóm trên web.` : 'Liên kết thành công!');
+        } else toast('Chưa nhận được liên kết, hãy gửi mã cho bot', 'err');
+        if (!wasManager && isManager()) { $('#app').innerHTML = ''; go('/'); } else render();
       }
     });
   }
@@ -1964,7 +2033,7 @@
     return {
       title: 'Tài khoản',
       html: `
-      <div class="card card-pad row" style="margin-bottom:14px">${avatar(u.display_name, u.id, 'lg')}<div class="grow"><h2>${esc(u.display_name)}</h2><div class="small muted">@${esc(u.username)} · ${u.role === 'admin' ? 'Quản trị viên' : 'Thành viên'}</div>
+      <div class="card card-pad row" style="margin-bottom:14px">${avatar(u.display_name, u.id, 'lg')}<div class="grow"><h2>${esc(u.display_name)}</h2><div class="small muted">@${esc(u.username)} · ${roleLabel()}</div>
         <div class="xs muted">Tham gia ${fmtDate(u.created_at)}</div></div></div>
       ${u.tg_user_id ? `<div class="card card-pad row" style="margin-bottom:14px"><span style="color:var(--success)">${icon('check')}</span><div class="grow"><b>Đã liên kết Telegram</b><div class="xs muted mono">${esc(u.tg_user_id)}</div></div><button class="btn sm soft-danger" data-unlink>Huỷ</button></div>` : `<div style="margin-bottom:14px">${linkCard(d)}</div>`}
       <form class="card card-pad stack" id="fp">
@@ -1987,20 +2056,20 @@
         });
         $('#fp', root).onsubmit = async (e) => {
           e.preventDefault();
-          try { const r = await api('me/update', formData(e.target)); S.user = r.user; toast('Đã lưu'); e.target.current_password.value = ''; e.target.new_password.value = ''; shell('', 'Tài khoản', S.user.role === 'admin' ? '/more' : null); $('#page-title').textContent = 'Tài khoản'; }
+          try { const r = await api('me/update', formData(e.target)); S.user = r.user; toast('Đã lưu'); e.target.current_password.value = ''; e.target.new_password.value = ''; shell('', 'Tài khoản', isManager() ? '/more' : null); $('#page-title').textContent = 'Tài khoản'; }
           catch (err) { toast(err.message, 'err'); }
         };
       },
     };
   }, { title: 'Tài khoản' });
 
-  route('/member/:id', async (p) => { setTimeout(() => openMember(p.id), 50); return viewDashboard(); }, { admin: true });
+  route('/member/:id', async (p) => { setTimeout(() => openMember(p.id), 50); return viewDashboard(); }, { manage: true });
 
   // ================= Boot =================
   async function boot() {
     try {
       const st = await api('status', undefined, { noRedirect: true });
-      S.status = st; S.csrf = st.csrf; S.user = st.user; S.site = st.site_name; S.allowRegister = st.allow_register;
+      S.status = st; S.csrf = st.csrf; S.user = st.user; S.site = st.site_name; S.allowRegister = st.allow_register; S.access = st.access;
     } catch (e) {
       $('#app').innerHTML = `<div class="auth"><div class="alert err">${icon('alert')}<div>${esc(e.message)}</div></div></div>`;
       throw e;

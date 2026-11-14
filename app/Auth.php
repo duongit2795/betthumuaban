@@ -76,7 +76,7 @@ class Auth
     public static function requireAdmin(): array
     {
         $u = self::requireUser();
-        if ($u['role'] !== 'admin') fail('Bạn không có quyền quản trị', 403);
+        if ($u['role'] !== 'admin') fail('Chỉ admin web mới vào được mục này', 403);
         return $u;
     }
 
