@@ -6,7 +6,7 @@ class DB
 {
     private static ?PDO $pdo = null;
     private static string $driver = 'sqlite';
-    const SCHEMA_VERSION = 7;
+    const SCHEMA_VERSION = 8;
 
     public static function connect(?array $c = null): PDO
     {
@@ -295,6 +295,27 @@ class DB
                 leaves INT NOT NULL DEFAULT 0,
                 PRIMARY KEY (group_id, day)
             )",
+            "CREATE TABLE IF NOT EXISTS wallet_tx (
+                id $pk,
+                user_id INT NOT NULL,
+                amount $big NOT NULL,
+                balance_after $big NOT NULL DEFAULT 0,
+                type VARCHAR(16) NOT NULL,
+                ref VARCHAR(64),
+                note TEXT,
+                meta TEXT,
+                created_at INT NOT NULL
+            )",
+            "CREATE TABLE IF NOT EXISTS bank_tx (
+                id $pk,
+                txid VARCHAR(64) NOT NULL UNIQUE,
+                amount $big NOT NULL,
+                description TEXT,
+                tx_date VARCHAR(40),
+                user_id INT,
+                status VARCHAR(16) NOT NULL,
+                created_at INT NOT NULL
+            )",
         ];
         $pdo = self::connect();
         foreach ($tables as $sql) $pdo->exec($sql . $suffix);
@@ -306,6 +327,8 @@ class DB
             'idx_logs_time' => 'app_logs (created_at)',
             'idx_delq_time' => 'tg_delete_queue (delete_at)',
             'idx_msg_updated' => 'tg_messages (group_id, updated_at)',
+            'idx_wallet_user' => 'wallet_tx (user_id, id)',
+            'idx_bank_status' => 'bank_tx (status, id)',
         ];
         foreach ($indexes as $name => $def) {
             try {
@@ -316,6 +339,8 @@ class DB
         // v6: nhật ký lưu chi tiết + bằng chứng vi phạm
         self::addColumn('app_logs', 'meta', 'TEXT');
         self::addColumn('app_logs', 'evidence', 'TEXT');
+        // v8: ví VND
+        self::addColumn('app_users', 'balance', ($my ? 'BIGINT' : 'INTEGER') . ' NOT NULL DEFAULT 0');
         // Các migration theo phiên bản schema đặt ở đây trong tương lai
         $v = (int)(Settings::get('schema_version') ?? 0);
         if ($v < self::SCHEMA_VERSION) Settings::set('schema_version', (string)self::SCHEMA_VERSION);

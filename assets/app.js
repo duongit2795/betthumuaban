@@ -56,6 +56,9 @@
     up: '<path d="m18 15-6-6-6 6"/>',
     down: '<path d="m6 9 6 6 6-6"/>',
     terminal: '<path d="m4 17 6-6-6-6M12 19h8"/>',
+    wallet: '<path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5"/><path d="M17 14h.01"/>',
+    heart: '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z"/>',
+    bank: '<path d="M3 21h18M4 10h16M5 10v8M9.5 10v8M14.5 10v8M19 10v8M12 3l9 5H3z"/>',
     globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
   };
   const icon = (n, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24" aria-hidden="true">${P[n] || ''}</svg>`;
@@ -116,6 +119,7 @@
     settings: ['Cài đặt', 'settings', ''], bot_added: ['Thêm bot vào nhóm', 'bot', 'green'], bot_removed: ['Bot rời nhóm', 'bot', 'red'],
     bot_add: ['Thêm bot', 'bot', 'blue'], bot_delete: ['Xoá bot', 'bot', 'red'], bot_on: ['Bật bot', 'power', 'green'], bot_off: ['Tắt bot', 'power', ''],
     rule: ['Lệnh tự tạo', 'terminal', 'blue'], ad_post: ['Quảng cáo', 'megaphone', 'blue'], username: ['Nhắc đặt username', 'user', 'amber'], login: ['Đăng nhập', 'key', 'green'], update: ['Cập nhật hệ thống', 'download', 'blue'], system: ['Hệ thống', 'settings', ''], pin: ['Ghim tin', 'pin', 'blue'], unpin: ['Bỏ ghim', 'pin', ''],
+    payments_settings: ['Cài đặt nạp tiền', 'bank', ''], wallet_assign: ['Cộng tiền tay', 'wallet', 'green'], wallet_adjust: ['Điều chỉnh số dư', 'wallet', 'blue'],
   };
 
   // ================= State & API =================
@@ -313,20 +317,21 @@
     }
   }
 
+  const payNav = () => [...(S.pay?.wallet ? [['/wallet', 'wallet', 'Ví']] : []), ...(S.pay?.amnesty ? [['/amnesty', 'heart', 'Ân xá']] : [])];
   function navItems() {
     if (!isWebAdmin() && isManager()) {
       return {
         tab: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/rules', 'terminal', 'Lệnh'], ...(can('logs') ? [['/logs', 'list', 'Nhật ký']] : []), ['/more', 'grid', 'Thêm']],
-        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm của tôi'], ['/rules', 'terminal', 'Lệnh'], ...(can('logs') ? [['/logs', 'list', 'Nhật ký']] : []), ['/me', 'star', 'Điểm của tôi'], ['/rank', 'trophy', 'Xếp hạng'], ['/account', 'user', 'Tài khoản']],
+        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm của tôi'], ['/rules', 'terminal', 'Lệnh'], ...(can('logs') ? [['/logs', 'list', 'Nhật ký']] : []), ['/me', 'star', 'Điểm của tôi'], ['/rank', 'trophy', 'Xếp hạng'], ...payNav(), ['/account', 'user', 'Tài khoản']],
       };
     }
     if (isWebAdmin()) {
       return {
         tab: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/logs', 'list', 'Nhật ký'], ['/more', 'grid', 'Thêm']],
-        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh'], ['/ads', 'megaphone', 'Quảng cáo'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ['/account', 'user', 'Tài khoản']],
+        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh'], ['/ads', 'megaphone', 'Quảng cáo'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/payments', 'bank', 'Nạp tiền & ân xá'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ...payNav(), ['/account', 'user', 'Tài khoản']],
       };
     }
-    const m = [['/', 'star', 'Của tôi'], ['/rank', 'trophy', 'Xếp hạng'], ['/account', 'user', 'Tài khoản']];
+    const m = [['/', 'star', 'Của tôi'], ['/rank', 'trophy', 'Xếp hạng'], ...payNav(), ['/account', 'user', 'Tài khoản']];
     return { tab: m, side: m };
   }
 
@@ -351,7 +356,7 @@
     const path = current();
     const direct = (p) => (p === '/' ? path === '/' : path === p || path.startsWith(p + '/') || (p === '/groups' && path.startsWith('/group/')) || (p === '/rules' && path === '/commands'));
     const inTabs = items.tab.some(([p]) => p !== '/more' && direct(p));
-    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads'].some((x) => path.startsWith(x)));
+    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments'].some((x) => path.startsWith(x)));
     $('#tabbar').innerHTML = items.tab.map(([p, ic, t]) => `<a href="#${p}" class="${isActive(p) ? 'active' : ''}">${icon(ic)}<span>${t}</span></a>`).join('');
     $('#sidebar').innerHTML = `<div class="brand"><img src="assets/icon.svg" alt="">${esc(S.site)}</div>`
       + items.side.map(([p, ic, t]) => `<a href="#${p}" class="nav ${isActive(p) && !(p === '/more') ? 'active' : ''}">${icon(ic)}${t}</a>`).join('')
@@ -2542,7 +2547,10 @@
         <a class="list-item" href="#/rules">${icon('terminal')}<div class="grow">Lệnh tự tạo & lệnh mặc định</div><span class="chev">${icon('chevron')}</span></a>
         ${isWebAdmin() ? `<a class="list-item" href="#/ads">${icon('megaphone')}<div class="grow">Quảng cáo xoay vòng</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         ${isWebAdmin() ? `<a class="list-item" href="#/users">${icon('key')}<div class="grow">Tài khoản web & phân quyền</div><span class="chev">${icon('chevron')}</span></a>
+        <a class="list-item" href="#/payments">${icon('bank')}<div class="grow">Nạp tiền & ân xá</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/system">${icon('download')}<div class="grow">Hệ thống & cập nhật</div><span class="chev">${icon('chevron')}</span></a>` : ''}
+        ${S.pay?.wallet || isWebAdmin() ? `<a class="list-item" href="#/wallet">${icon('wallet')}<div class="grow">Ví của tôi</div><span class="small muted">${money(S.user.balance || 0)}</span><span class="chev">${icon('chevron')}</span></a>` : ''}
+        ${S.pay?.amnesty || isWebAdmin() ? `<a class="list-item" href="#/amnesty">${icon('heart')}<div class="grow">Ân xá thành viên</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         <a class="list-item" href="#/me">${icon('star')}<div class="grow">Điểm của tôi</div><span class="chev">${icon('chevron')}</span></a>
         ${!isWebAdmin() ? `<a class="list-item" href="#/rank">${icon('trophy')}<div class="grow">Xếp hạng</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         <a class="list-item" href="#/account">${icon('user')}<div class="grow">Tài khoản & liên kết Telegram</div><span class="chev">${icon('chevron')}</span></a>
@@ -2556,7 +2564,7 @@
     const users = await api('users');
     const item = (u) => `<button class="list-item" data-user='${esc(JSON.stringify(u))}'>${avatar(u.display_name, u.id)}
       <div class="grow"><div class="row" style="gap:6px"><b class="ellipsis">${esc(u.display_name)}</b>${u.role === 'admin' ? '<span class="badge blue">Admin web</span>' : u.managed_groups ? `<span class="badge green">${icon('shield', 'sm')}Admin ${u.managed_groups} nhóm</span>` : '<span class="badge">Thành viên</span>'}${u.disabled ? '<span class="badge red">Khoá</span>' : ''}</div>
-      <div class="xs muted">@${esc(u.username)}${u.tg_user_id ? ' · TG ' + u.tg_user_id : ' · chưa liên kết'} · ${ago(u.last_login)}</div></div><span class="chev">${icon('chevron')}</span></button>`;
+      <div class="xs muted">@${esc(u.username)}${u.tg_user_id ? ' · TG ' + u.tg_user_id : ' · chưa liên kết'} · ${ago(u.last_login)}</div></div>${u.balance ? `<span class="small nowrap" style="font-weight:600">${money(u.balance)}</span>` : ''}<span class="chev">${icon('chevron')}</span></button>`;
     const form = (u) => sheet(`<div class="sheet-head"><h2>${u ? 'Sửa tài khoản' : 'Tạo tài khoản'}</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
       <form class="stack" id="fu">
         ${u ? `<div class="small muted">@${esc(u.username)}</div>` : `<label class="field"><span class="lbl">Tên đăng nhập</span><input class="input" name="username" required></label>`}
@@ -2565,13 +2573,29 @@
         <label class="field"><span class="lbl">ID Telegram</span><input class="input" name="tg_user_id" inputmode="numeric" value="${esc(u?.tg_user_id || '')}"><div class="hint">Admin có ID Telegram sẽ dùng được lệnh quản trị của bot</div></label>
         <label class="field"><span class="lbl">Vai trò</span><select class="input" name="role"><option value="member">Thành viên</option><option value="admin" ${u?.role === 'admin' ? 'selected' : ''}>Admin web (toàn quyền)</option></select>
           <div class="hint">Thành viên đã liên kết Telegram và là admin nhóm trên Telegram sẽ tự có quyền <b>Quản trị viên nhóm</b> (chỉnh ở Hệ thống → Phân quyền).</div></label>
-        ${u ? `<div class="card" style="box-shadow:none">${sw('disabled', u.disabled, 'Khoá tài khoản')}</div>` : ''}
+        ${u ? `<div class="card" style="box-shadow:none">${sw('disabled', u.disabled, 'Khoá tài khoản')}</div>
+        <div class="card card-pad stack" style="box-shadow:none;background:var(--surface-2)">
+          <div class="row between"><b>${icon('wallet', 'sm')} Số dư ví</b><b data-ubal>${money(u.balance)}</b></div>
+          <div class="grid grid-2"><input class="input" data-badj inputmode="numeric" placeholder="+50000 hoặc -20000"><input class="input" data-bnote placeholder="Ghi chú"></div>
+          <div class="grid grid-2"><button type="button" class="btn sm soft" data-badjust>Cộng / trừ</button><button type="button" class="btn sm" data-btx>Lịch sử ví</button></div>
+          <div data-btxlist></div>
+        </div>` : ''}
         <div class="grid ${u ? 'grid-2' : ''}">${u ? `<button type="button" class="btn soft-danger" data-deluser>${icon('trash', 'sm')}Xoá</button>` : ''}<button class="btn primary">Lưu</button></div>
       </form>`, (el, close) => {
       $('#fu', el).onsubmit = async (e) => {
         e.preventDefault();
         try { await api('users/save', { id: u?.id, ...formData(e.target) }); close(); toast('Đã lưu'); render(); } catch (err) { toast(err.message, 'err'); }
       };
+      $('[data-badjust]', el)?.addEventListener('click', (e) => withBtn(e.currentTarget, async () => {
+        const amount = parseInt(($('[data-badj]', el).value || '').replace(/[^\d-]/g, ''), 10) || 0;
+        if (!amount) return toast('Nhập số tiền, số âm để trừ', 'err');
+        if (!(await confirmBox('Điều chỉnh số dư?', `${amount > 0 ? 'Cộng' : 'Trừ'} <b>${money(Math.abs(amount))}</b> ${amount > 0 ? 'cho' : 'của'} <b>${esc(u.username)}</b>`))) return;
+        try { const r = await api('users/balance', { user_id: u.id, amount, note: $('[data-bnote]', el).value }); u.balance = r.balance; $('[data-ubal]', el).textContent = money(r.balance); $('[data-badj]', el).value = ''; toast('Đã cập nhật số dư'); } catch (err) { toast(err.message, 'err'); }
+      }));
+      $('[data-btx]', el)?.addEventListener('click', (e) => withBtn(e.currentTarget, async () => {
+        const r = await api('users/tx', undefined, { query: { user_id: u.id } });
+        $('[data-btxlist]', el).innerHTML = `<div class="list">${r.rows.length ? r.rows.map(txItem).join('') : empty('wallet', 'Chưa có giao dịch')}</div>`;
+      }));
       $('[data-deluser]', el)?.addEventListener('click', async () => {
         close();
         if (await confirmBox('Xoá tài khoản?', `Xoá tài khoản <b>${esc(u.username)}</b>?`, { danger: true, ok: 'Xoá' })) {
@@ -2802,6 +2826,322 @@
     });
   }
 
+  // ================= Ví & nạp tiền =================
+  const money = (v) => num(v) + 'đ';
+  const qrSrc = (w, amount) => w.account_no ? `https://img.vietqr.io/image/${encodeURIComponent(w.bank)}-${encodeURIComponent(w.account_no)}-compact2.png?` + new URLSearchParams({ ...(amount > 0 ? { amount } : {}), addInfo: w.code, ...(w.account_name ? { accountName: w.account_name } : {}) }) : '';
+  const TX_ICON = { deposit: ['plus', 'green'], amnesty: ['heart', 'amber'], amnesty_fail: ['x', ''], refund: ['refresh', 'blue'], admin: ['key', ''] };
+  const txItem = (t) => { const [ic, c] = TX_ICON[t.type] || ['info', '']; return `<div class="list-item"><span class="log-ico ${c}">${icon(ic, 'sm')}</span>
+    <div class="grow" style="min-width:0"><div class="ellipsis" style="font-weight:600">${esc(t.note || t.type_label)}</div><div class="xs muted">${esc(t.type_label)} · ${fmtDate(t.created_at, true)}</div></div>
+    <div style="text-align:right" class="nowrap"><div class="tx-amt ${t.amount > 0 ? 'in' : 'out'}">${t.amount > 0 ? '+' : '−'}${money(Math.abs(t.amount))}</div><div class="xs muted">Dư ${money(t.balance_after)}</div></div></div>`; };
+
+  route('/wallet', async () => {
+    const w = await api('wallet');
+    const amounts = [20000, 50000, 100000, 200000, 500000];
+    return {
+      title: 'Ví của tôi',
+      html: `
+      <div class="hero wallet-hero">
+        <div class="muted small">${icon('wallet', 'sm')} Số dư ví</div>
+        <div class="big" data-bal>${money(w.balance)}</div>
+        <div class="row wrap small" style="gap:14px;margin-top:6px"><span>Đã nạp ${money(w.stats.deposit)}</span><span>Đã dùng ${money(w.stats.spent)}</span></div>
+        ${S.pay?.amnesty ? `<a class="btn sm" href="#/amnesty" style="margin-top:12px;background:rgba(255,255,255,.18);color:#fff;border-color:transparent">${icon('heart', 'sm')}Ân xá thành viên</a>` : ''}
+      </div>
+      ${!w.enabled ? `<div class="alert info" style="margin-top:12px">${icon('info')}<div class="small">Admin chưa bật nạp tiền. Liên hệ admin để được cộng tiền vào ví.</div></div>` : `
+      <div class="section-title"><h2>Nạp tiền</h2>${w.auto ? `<span class="badge green">${icon('zap', 'sm')}Tự động</span>` : '<span class="badge">Admin duyệt tay</span>'}</div>
+      <div class="card card-pad stack">
+        <div class="field"><span class="lbl">Số tiền muốn nạp</span>
+          <div class="chips" style="flex-wrap:wrap">${amounts.map((a) => `<button type="button" class="chip" data-amt="${a}">${num(a / 1000)}k</button>`).join('')}</div>
+          <input class="input" data-amount inputmode="numeric" placeholder="Hoặc nhập số tiền (tối thiểu ${money(w.min)})" style="margin-top:8px"></div>
+        <div class="pay-box">
+          <div class="qr-wrap"><img data-qr alt="Mã QR chuyển khoản" src="${esc(qrSrc(w, 0))}" loading="lazy"><div class="xs muted center">Quét bằng app ngân hàng</div></div>
+          <dl class="pay-kv">
+            <dt>Ngân hàng</dt><dd>${esc(w.bank_name)}</dd>
+            <dt>Số tài khoản</dt><dd><span class="mono">${esc(w.account_no)}</span><button class="btn icon sm ghost" data-copy="${esc(w.account_no)}" aria-label="Sao chép">${icon('copy', 'sm')}</button></dd>
+            ${w.account_name ? `<dt>Chủ tài khoản</dt><dd>${esc(w.account_name)}</dd>` : ''}
+            <dt>Số tiền</dt><dd data-amtshow>Tuỳ bạn (≥ ${money(w.min)})</dd>
+            <dt>Nội dung</dt><dd><span class="pay-code">${esc(w.code)}</span><button class="btn icon sm ghost" data-copy="${esc(w.code)}" aria-label="Sao chép">${icon('copy', 'sm')}</button></dd>
+          </dl>
+        </div>
+        <div class="alert warn">${icon('alert')}<div class="xs">Ghi <b>đúng nội dung ${esc(w.code)}</b> để hệ thống nhận ra tài khoản của bạn. Sai nội dung hoặc dưới ${money(w.min)} sẽ cần admin cộng tay.</div></div>
+        <button class="btn primary block" data-check>${icon('refresh', 'sm')}Tôi đã chuyển khoản — kiểm tra ngay</button>
+        <div class="xs muted center" data-checkmsg>${w.auto ? 'Tiền thường được cộng sau 1–2 phút.' + (w.last_sync ? ' Lần đồng bộ gần nhất: ' + ago(w.last_sync) + '.' : '') : 'Sau khi chuyển, admin sẽ kiểm tra và cộng tiền.'}</div>
+      </div>`}
+      <div class="section-title"><h2>Lịch sử giao dịch</h2></div>
+      <div class="list" data-hist>${w.history.length ? w.history.map(txItem).join('') : empty('wallet', 'Chưa có giao dịch')}</div>
+      ${w.has_more ? `<button class="btn block" data-more style="margin-top:10px">Xem thêm</button>` : ''}`,
+      mount: (root) => {
+        let amount = 0;
+        const setAmt = (a) => {
+          amount = a;
+          $$('[data-amt]', root).forEach((c) => c.classList.toggle('active', +c.dataset.amt === a));
+          const img = $('[data-qr]', root); if (img) img.src = qrSrc(w, a);
+          const sh = $('[data-amtshow]', root); if (sh) sh.innerHTML = a > 0 ? `<b>${money(a)}</b>` : `Tuỳ bạn (≥ ${money(w.min)})`;
+        };
+        root.addEventListener('click', async (e) => {
+          const c = e.target.closest('[data-amt]');
+          if (c) { $('[data-amount]', root).value = ''; setAmt(+c.dataset.amt); }
+          if (e.target.closest('[data-more]')) {
+            const b = e.target.closest('[data-more]');
+            const last = w.history[w.history.length - 1];
+            await withBtn(b, async () => {
+              const r = await api('wallet', undefined, { query: { before: last.id } });
+              w.history.push(...r.history);
+              $('[data-hist]', root).insertAdjacentHTML('beforeend', r.history.map(txItem).join(''));
+              if (!r.has_more) b.remove();
+            });
+          }
+        });
+        $('[data-amount]', root)?.addEventListener('input', debounce((e) => setAmt(Math.max(0, parseInt(e.target.value.replace(/\D/g, ''), 10) || 0)), 400));
+        const btn = $('[data-check]', root);
+        if (!btn) return;
+        let polling = null;
+        const check = async () => {
+          const r = await api('wallet/check', {});
+          if (r.added > 0) {
+            toast('Đã cộng ' + money(r.added) + ' vào ví 🎉');
+            if (polling) clearInterval(polling);
+            render();
+            return true;
+          }
+          return false;
+        };
+        btn.onclick = () => withBtn(btn, async () => {
+          try {
+            if (await check()) return;
+            const msg = $('[data-checkmsg]', root);
+            msg.innerHTML = '<span class="dot amber"></span> Chưa thấy tiền về. Đang tự kiểm tra lại mỗi 15 giây (tối đa 10 phút)…';
+            if (polling) clearInterval(polling);
+            let n = 0;
+            polling = every(async () => { if (++n > 40) { clearInterval(polling); msg.textContent = 'Chưa nhận được tiền. Nếu đã chuyển đúng nội dung, hãy liên hệ admin.'; return; } try { await check(); } catch {} }, 15000);
+          } catch (err) { toast(err.message, 'err'); }
+        });
+      },
+    };
+  }, { title: 'Ví của tôi' });
+
+  // ================= Ân xá =================
+  const punishCard = (m, showGroup) => `<div class="card card-pad amnesty-card">
+    <div class="row">${avatar(m.name, m.tg_user_id)}<div class="grow" style="min-width:0"><div class="ellipsis" style="font-weight:600">${esc(m.name)}${m.username ? ` <span class="xs muted">@${esc(m.username)}</span>` : ''}</div>
+      <div class="xs muted ellipsis">${showGroup ? esc(m.group_title || '') + ' · ' : ''}<span class="mono">${esc(m.tg_user_id)}</span></div></div>${statusBadge(m)}</div>
+    <div class="stack" style="gap:8px;margin-top:12px">${m.punishments.map((p) => `<div class="punish-row"><span class="p-ico">${p.icon}</span><div class="grow" style="min-width:0"><div class="small" style="font-weight:600">${esc(p.label)}</div><div class="xs muted">${esc(p.desc)}</div></div>
+      <button class="btn sm primary nowrap" data-amnesty='${esc(JSON.stringify({ id: m.id, kind: p.kind, price: p.price, label: p.label, icon: p.icon, desc: p.desc, name: m.name, group: m.group_title }))}'>${icon('heart', 'sm')}${money(p.price)}</button></div>`).join('')}</div></div>`;
+
+  route('/amnesty', async () => {
+    const d = await api('amnesty');
+    let balance = d.balance;
+    const priceList = Object.entries(d.kinds).filter(([k]) => d.prices[k] > 0);
+    return {
+      title: 'Ân xá',
+      html: `
+      <div class="hero amnesty-hero">
+        <div class="row between" style="align-items:flex-start"><div><div class="muted small">🕊 Ân xá thành viên</div><div class="big" style="font-size:28px" data-bal>${money(balance)}</div><div class="muted xs">Số dư ví</div></div>
+        <a class="btn sm" href="#/wallet" style="background:rgba(255,255,255,.18);color:#fff;border-color:transparent">${icon('plus', 'sm')}Nạp tiền</a></div>
+        <div class="row wrap" style="gap:8px;margin-top:12px">${priceList.map(([k, v]) => `<span class="price-pill">${v.icon} ${esc(v.label)} · <b>${money(d.prices[k])}</b></span>`).join('')}</div>
+      </div>
+      ${!d.enabled ? `<div class="alert info" style="margin-top:12px">${icon('info')}<div class="small">Tính năng ân xá đang tắt. ${isWebAdmin() ? 'Bật ở <a href="#/payments">Nạp tiền & ân xá</a>.' : ''}</div></div>` : ''}
+      ${d.note ? `<div class="alert info" style="margin-top:12px">${icon('info')}<div class="small">${esc(d.note)}</div></div>` : ''}
+      <div class="section-title"><h2>Hình phạt của bạn</h2></div>
+      ${!d.linked ? `<div class="card">${empty('link', 'Liên kết Telegram ở trang <a href="#/account">Tài khoản</a> để xem và ân xá hình phạt của bạn.')}</div>`
+        : d.mine.length ? `<div class="stack">${d.mine.map((m) => punishCard(m, true)).join('')}</div>` : `<div class="card">${empty('check', 'Bạn không có hình phạt nào 🎉')}</div>`}
+      ${d.allow_others && d.groups.length ? `
+      <div class="section-title"><h2>Ân xá người khác</h2></div>
+      <div class="chips" data-groups>${d.groups.map((g, i) => `<button class="chip ${i === 0 ? 'active' : ''}" data-g="${g.id}">${esc(g.title)}${g.punished ? ` · ${g.punished}` : ''}</button>`).join('')}</div>
+      <div class="input-icon" style="margin:10px 0">${icon('search')}<input class="input" data-q placeholder="Tìm tên, @username hoặc ID"></div>
+      <div data-others class="stack"></div>` : ''}
+      ${d.recent.length ? `<div class="section-title"><h2>Ân xá gần đây</h2></div>
+      <div class="list">${d.recent.map((r) => `<div class="list-item"><span class="log-ico amber">${icon('heart', 'sm')}</span><div class="grow" style="min-width:0"><div class="small ellipsis"><b>${esc(r.payer)}</b> · ${esc(r.note)}</div><div class="xs muted">${ago(r.created_at)}</div></div><div class="small nowrap" style="font-weight:600">${money(r.amount)}</div></div>`).join('')}</div>` : ''}`,
+      mount: (root) => {
+        let gid = d.groups[0]?.id;
+        const box = $('[data-others]', root);
+        const load = async () => {
+          if (!box || !gid) return;
+          box.innerHTML = '<div class="skeleton" style="height:110px"></div>';
+          try {
+            const r = await api('amnesty/search', undefined, { query: { group_id: gid, q: $('[data-q]', root).value } });
+            box.innerHTML = r.rows.length ? r.rows.map((m) => punishCard(m, false)).join('') : `<div class="card">${empty('check', 'Không có thành viên nào đang bị xử lý')}</div>`;
+          } catch (e) { box.innerHTML = `<div class="alert err">${icon('alert')}<div>${esc(e.message)}</div></div>`; }
+        };
+        load();
+        $('[data-q]', root)?.addEventListener('input', debounce(load, 350));
+        root.addEventListener('click', (e) => {
+          const g = e.target.closest('[data-g]');
+          if (g) { gid = +g.dataset.g; $$('[data-g]', root).forEach((x) => x.classList.toggle('active', x === g)); load(); return; }
+          const b = e.target.closest('[data-amnesty]');
+          if (!b) return;
+          if (!d.enabled) return toast('Tính năng ân xá đang tắt', 'err');
+          const a = JSON.parse(b.dataset.amnesty);
+          const after = balance - a.price;
+          sheet(`<div class="sheet-head"><h2>🕊 Xác nhận ân xá</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
+            <div class="card card-pad" style="box-shadow:none;background:var(--surface-2)">
+              <div class="row">${avatar(a.name, a.id)}<div class="grow"><b>${esc(a.name)}</b><div class="xs muted">${esc(a.group || '')}</div></div></div>
+              <div class="punish-row" style="margin-top:10px"><span class="p-ico">${a.icon}</span><div class="grow"><b class="small">${esc(a.label)}</b><div class="xs muted">${esc(a.desc)}</div></div></div>
+            </div>
+            <dl class="kv" style="margin:16px 0">
+              <dt>Phí ân xá</dt><dd><b>${money(a.price)}</b></dd>
+              <dt>Số dư hiện tại</dt><dd>${money(balance)}</dd>
+              <dt>Số dư sau</dt><dd style="color:${after < 0 ? 'var(--danger)' : 'var(--success)'}"><b>${after < 0 ? 'Không đủ' : money(after)}</b></dd>
+            </dl>
+            ${after < 0 ? `<div class="alert err" style="margin-bottom:14px">${icon('alert')}<div class="small">Bạn cần nạp thêm <b>${money(-after)}</b>.</div></div>
+              <a class="btn primary block" href="#/wallet">${icon('plus', 'sm')}Nạp tiền</a>`
+              : `<div class="xs muted" style="margin-bottom:14px">Bot sẽ thực hiện ngay trên Telegram và thông báo trong nhóm. Nếu Telegram lỗi, tiền được hoàn tự động.</div>
+              <div class="grid grid-2"><button class="btn" data-close>Huỷ</button><button class="btn primary" data-go>${icon('heart', 'sm')}Ân xá</button></div>`}`,
+          (el, close) => {
+            $('[data-go]', el)?.addEventListener('click', (ev) => withBtn(ev.currentTarget, async () => {
+              try {
+                const r = await api('amnesty/do', { member_id: a.id, kind: a.kind });
+                balance = r.balance;
+                close();
+                sheet(`<div class="center" style="padding:10px 0 4px"><div style="font-size:54px">🕊</div><h2>Ân xá thành công</h2>
+                  <p class="text-2 small">${esc(a.name)} đã được <b>${esc(r.label.toLowerCase())}</b>.<br>Đã trừ ${money(r.price)} · Số dư còn <b>${money(r.balance)}</b></p></div>
+                  ${r.invite_link ? `<div class="field"><span class="lbl">Link vào lại nhóm (dùng 1 lần, hạn 3 ngày)</span><div class="code-box" style="font-size:13px;letter-spacing:0"><span class="ellipsis">${esc(r.invite_link)}</span><button class="btn icon sm ghost" data-copy="${esc(r.invite_link)}">${icon('copy', 'sm')}</button></div><div class="hint">Bot đã gửi link này cho người được ân xá (nếu họ đã mở bot).</div></div>` : ''}
+                  <button class="btn primary block" data-close style="margin-top:14px">Xong</button>`, null, () => render());
+              } catch (err) { toast(err.message, 'err'); }
+            }));
+          });
+        });
+      },
+    };
+  }, { title: 'Ân xá' });
+
+  // ================= Admin: nạp tiền & ân xá =================
+  const BANK_ST = { credited: ['Đã cộng', 'green'], unmatched: ['Không khớp', 'red'], below_min: ['Dưới mức tối thiểu', 'amber'], ignored: ['Bỏ qua', ''] };
+  const AMNESTY_VARS = [['{member}', 'Tag người được ân xá'], ['{member_name}', 'Tên người được ân xá'], ['{member_id}', 'ID Telegram'], ['{kind}', 'Loại ân xá'], ['{icon}', 'Biểu tượng loại'], ['{before}', 'Hình phạt trước đó'], ['{payer}', 'Người trả tiền'], ['{price}', 'Phí'], ['{group}', 'Tên nhóm'], ['{time}', 'Thời gian']];
+
+  route('/payments', async () => {
+    const d = await api('payments');
+    const w = d.wallet, am = d.amnesty, st = d.stats;
+    const tab = sessionStorage.getItem('payTab') || 'deposit';
+    const bankItem = (t) => { const [lb, c] = BANK_ST[t.status] || [t.status, '']; return `<div class="list-item" style="align-items:flex-start">
+      <span class="log-ico ${c}">${icon('bank', 'sm')}</span><div class="grow" style="min-width:0">
+      <div class="row between"><b>+${money(t.amount)}</b><span class="badge ${c}">${lb}</span></div>
+      <div class="xs" style="overflow-wrap:anywhere;margin-top:2px">${esc(t.description || '(không có nội dung)')}</div>
+      <div class="xs muted">${esc(t.tx_date || fmtDate(t.created_at, true))}${t.user ? ' · ' + esc(t.user.name) : ''}</div>
+      ${t.status !== 'credited' && t.status !== 'ignored' ? `<div class="row" style="gap:6px;margin-top:8px"><button class="btn sm soft" data-assign="${t.id}" data-amt="${t.amount}">${icon('user', 'sm')}Cộng cho tài khoản…</button><button class="btn sm ghost" data-ignore="${t.id}">Bỏ qua</button></div>` : ''}</div></div>`; };
+    return {
+      title: 'Nạp tiền & ân xá',
+      html: `
+      <div class="grid grid-2" style="margin-bottom:14px">
+        <div class="card stat"><div class="label"><span class="ico green">${icon('plus', 'sm')}</span>Tổng nạp</div><div class="value">${money(st.deposit)}</div></div>
+        <div class="card stat"><div class="label"><span class="ico amber">${icon('heart', 'sm')}</span>Thu ân xá</div><div class="value">${money(st.amnesty)}</div><div class="sub">${num(st.amnesty_count)} lần</div></div>
+        <div class="card stat"><div class="label"><span class="ico">${icon('wallet', 'sm')}</span>Số dư người dùng</div><div class="value">${money(st.balances)}</div></div>
+        <div class="card stat"><div class="label"><span class="ico red">${icon('alert', 'sm')}</span>Chưa khớp</div><div class="value">${num(st.unmatched)}</div><div class="sub">giao dịch cần xử lý</div></div>
+      </div>
+      <div class="tabs" data-tabs><button data-t="deposit">Nạp tiền</button><button data-t="amnesty">Ân xá</button><button data-t="bank">Giao dịch NH${st.unmatched ? ` (${st.unmatched})` : ''}</button></div>
+
+      <form class="stack" data-pane="deposit" id="fw">
+        <div class="card">${sw('enabled', w.enabled, 'Bật nạp tiền', 'Hiện trang Ví và thông tin chuyển khoản cho người dùng')}</div>
+        <div class="card card-pad stack">
+          <h3>Tài khoản nhận tiền</h3>
+          <label class="field"><span class="lbl">Ngân hàng</span><select class="input" name="bank">${Object.entries(d.banks).map(([k, v]) => `<option value="${k}" ${w.bank === k ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></label>
+          <label class="field"><span class="lbl">Số tài khoản</span><input class="input" name="account_no" inputmode="numeric" value="${esc(w.account_no)}"></label>
+          <label class="field"><span class="lbl">Tên chủ tài khoản</span><input class="input" name="account_name" value="${esc(w.account_name)}" placeholder="NGUYEN VAN A"></label>
+          <div class="grid grid-2">
+            <label class="field"><span class="lbl">Tiền tố nội dung</span><input class="input" name="prefix" value="${esc(w.prefix)}" maxlength="12"><div class="hint">Nội dung = tiền tố + ID, VD <b>${esc(w.prefix)}12</b></div></label>
+            <label class="field"><span class="lbl">Nạp tối thiểu (đ)</span><input class="input" name="min" inputmode="numeric" value="${w.min}"></label>
+          </div>
+        </div>
+        <div class="card card-pad stack">
+          <h3>${icon('zap', 'sm')} Nạp tự động (API lịch sử giao dịch)</h3>
+          <div class="alert info">${icon('lock')}<div class="xs">Link API chứa thông tin đăng nhập ngân hàng. Link chỉ lưu trong database, <b>không bao giờ hiện lại</b> trên web và không nằm trong mã nguồn. Hỗ trợ API dạng web2m (<span class="mono">api.web2m.com/historyapiacb/…</span>) và các API trả JSON có danh sách giao dịch.</div></div>
+          <label class="field"><span class="lbl">Link API ${w.has_api ? '<span class="badge green">Đã lưu</span>' : '<span class="badge">Chưa có</span>'}</span>
+            <input class="input" type="password" name="api_url" autocomplete="off" placeholder="${w.has_api ? '•••••• (để trống nếu giữ nguyên)' : 'https://api.web2m.com/historyapiacb/…'}"></label>
+          ${w.has_api ? `<label class="row small" style="gap:8px"><input type="checkbox" name="clear_api"> Xoá link API đã lưu</label>` : ''}
+          <div class="xs muted">${w.last_sync ? 'Đồng bộ gần nhất: ' + ago(w.last_sync) : 'Chưa đồng bộ lần nào'} · Cron chạy mỗi phút sẽ tự đồng bộ.</div>
+          ${w.last_error ? `<div class="alert err">${icon('alert')}<div class="xs">Lỗi gần nhất: ${esc(w.last_error)}</div></div>` : ''}
+          <div class="grid grid-2"><button type="button" class="btn" data-test>${icon('search', 'sm')}Kiểm tra API</button><button type="button" class="btn" data-sync>${icon('refresh', 'sm')}Đồng bộ ngay</button></div>
+          <div data-testout></div>
+        </div>
+        <button class="btn primary block">Lưu cài đặt nạp tiền</button>
+      </form>
+
+      <form class="stack hidden" data-pane="amnesty" id="fa">
+        <div class="card">${sw('enabled', am.enabled, 'Bật ân xá thành viên', 'Thành viên dùng số dư ví để gỡ hình phạt')}
+          ${sw('allow_others', am.allow_others, 'Cho ân xá người khác', 'Thành viên trong nhóm trả tiền ân xá giúp bạn bè')}
+          ${sw('notify', am.notify, 'Thông báo trong nhóm', 'Bot gửi thông báo ân xá vào nhóm')}
+          ${sw('invite', am.invite, 'Gửi link mời khi gỡ cấm', 'Tạo link vào lại nhóm dùng 1 lần (hạn 3 ngày) cho người được gỡ cấm')}</div>
+        <div class="card card-pad stack">
+          <h3>Bảng giá (đ) <span class="xs muted" style="font-weight:400">— đặt 0 để tắt loại đó</span></h3>
+          ${Object.entries({ unmute: '🔊 Gỡ cấm chat', unban: '✅ Gỡ cấm khỏi nhóm', unwarn: '🧹 Xoá toàn bộ cảnh cáo' }).map(([k, l]) => `<label class="field"><span class="lbl">${l}</span><input class="input" name="price_${k}" inputmode="numeric" value="${am.prices[k]}"></label>`).join('')}
+        </div>
+        <div class="card card-pad stack">
+          <h3>Nội dung thông báo trong nhóm</h3>
+          <textarea class="input" name="message" rows="7" data-rich>${esc(am.message)}</textarea>
+          <div class="chips" style="flex-wrap:wrap">${AMNESTY_VARS.map(([v, t]) => `<button type="button" class="chip var-chip" data-avar="${v}" title="${esc(t)}"><code>${v}</code><small>${esc(t)}</small></button>`).join('')}</div>
+          <button type="button" class="btn sm ghost" data-resetmsg>${icon('refresh', 'sm')}Dùng nội dung mặc định</button>
+          <label class="field"><span class="lbl">Ghi chú hiện ở trang Ân xá & lệnh /anxa</span><input class="input" name="note" value="${esc(am.note)}" placeholder="VD: Ân xá không áp dụng cho lỗi lừa đảo"></label>
+        </div>
+        <button class="btn primary block">Lưu cài đặt ân xá</button>
+      </form>
+
+      <div class="hidden" data-pane="bank">
+        <div class="chips" style="margin-bottom:10px">${[['', 'Tất cả'], ['unmatched', 'Không khớp'], ['below_min', 'Dưới tối thiểu'], ['credited', 'Đã cộng'], ['ignored', 'Bỏ qua']].map(([k, l]) => `<button class="chip ${k === '' ? 'active' : ''}" data-bst="${k}">${l}</button>`).join('')}</div>
+        <div class="list" data-banklist>${d.bank_tx.length ? d.bank_tx.map(bankItem).join('') : empty('bank', 'Chưa có giao dịch nào')}</div>
+        <div class="xs muted" style="margin-top:10px">Chỉ hiện giao dịch tiền vào. Giao dịch không khớp nội dung có thể cộng tay cho đúng tài khoản. Cộng / trừ số dư thủ công ở trang <a href="#/users">Tài khoản web</a>.</div>
+      </div>`,
+      mount: (root) => {
+        const setTab = (t) => { sessionStorage.setItem('payTab', t); $$('[data-t]', root).forEach((b) => b.classList.toggle('active', b.dataset.t === t)); $$('[data-pane]', root).forEach((x) => x.classList.toggle('hidden', x.dataset.pane !== t)); };
+        setTab(tab);
+        $('[data-tabs]', root).onclick = (e) => { const b = e.target.closest('[data-t]'); if (b) setTab(b.dataset.t); };
+        $('#fw', root).onsubmit = async (e) => {
+          e.preventDefault();
+          const f = formData(e.target);
+          try { await api('payments/save', { wallet: f }); toast('Đã lưu'); await boot(); render(); } catch (err) { toast(err.message, 'err'); }
+        };
+        $('#fa', root).onsubmit = async (e) => {
+          e.preventDefault();
+          const f = formData(e.target);
+          try {
+            await api('payments/save', { amnesty: { enabled: f.enabled, allow_others: f.allow_others, notify: f.notify, invite: f.invite, message: f.message, note: f.note, prices: { unmute: +f.price_unmute || 0, unban: +f.price_unban || 0, unwarn: +f.price_unwarn || 0 } } });
+            toast('Đã lưu'); await boot(); render();
+          } catch (err) { toast(err.message, 'err'); }
+        };
+        const ta = $('#fa textarea[name=message]', root);
+        $('#fa', root).addEventListener('click', (e) => {
+          const v = e.target.closest('[data-avar]');
+          if (v) { if (ta._rich) ta._rich.insert(v.dataset.avar); else ta.value += v.dataset.avar; }
+          if (e.target.closest('[data-resetmsg]')) { if (ta._rich) ta._rich.setValue(am.default_message); else ta.value = am.default_message; toast('Đã đặt lại, bấm Lưu để áp dụng'); }
+        });
+        $('[data-test]', root).onclick = (e) => withBtn(e.currentTarget, async () => {
+          const out = $('[data-testout]', root);
+          try {
+            const r = await api('payments/test', {});
+            out.innerHTML = !r.ok ? `<div class="alert err">${icon('alert')}<div class="xs">${esc(r.error)}</div></div>`
+              : `<div class="alert ok">${icon('check')}<div class="xs">Kết nối được. Đọc được <b>${r.total}</b> giao dịch (<b>${r.incoming}</b> tiền vào). Kiểm tra không cộng tiền.</div></div>
+                ${r.sample.length ? `<div class="list" style="margin-top:8px">${r.sample.map((t) => `<div class="list-item"><div class="grow" style="min-width:0"><b>+${money(t.amount)}</b> <span class="xs muted">${esc(t.date)}</span><div class="xs" style="overflow-wrap:anywhere">${esc(t.description)}</div></div>${t.match ? `<span class="badge green">${esc(t.match)}</span>` : '<span class="badge">Không khớp</span>'}</div>`).join('')}</div>` : ''}`;
+          } catch (err) { out.innerHTML = `<div class="alert err">${icon('alert')}<div class="xs">${esc(err.message)}</div></div>`; }
+        });
+        $('[data-sync]', root).onclick = (e) => withBtn(e.currentTarget, async () => {
+          try {
+            const r = await api('payments/sync', {});
+            if (r.error) toast(r.error, 'err'); else toast(`Đồng bộ xong: ${r.new} giao dịch mới, cộng ${r.credited}, không khớp ${r.unmatched}`);
+            if (r.new) render();
+          } catch (err) { toast(err.message, 'err'); }
+        });
+        $('[data-pane=bank]', root).addEventListener('click', async (e) => {
+          const f = e.target.closest('[data-bst]');
+          if (f) {
+            $$('[data-bst]', root).forEach((x) => x.classList.toggle('active', x === f));
+            const r = await api('payments', undefined, { query: { status: f.dataset.bst } });
+            $('[data-banklist]', root).innerHTML = r.bank_tx.length ? r.bank_tx.map(bankItem).join('') : empty('bank', 'Không có giao dịch');
+            return;
+          }
+          const ig = e.target.closest('[data-ignore]');
+          if (ig) { await api('payments/ignore', { id: +ig.dataset.ignore }); toast('Đã bỏ qua'); render(); return; }
+          const as = e.target.closest('[data-assign]');
+          if (as) sheet(`<div class="sheet-head"><h2>Cộng ${money(+as.dataset.amt)} cho…</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
+            <form class="stack" id="fas"><label class="field"><span class="lbl">Tên đăng nhập hoặc ID tài khoản web</span><input class="input" name="who" required placeholder="VD: lan99 hoặc 12"></label>
+            <button class="btn primary block">Cộng tiền</button></form>`, (el, close) => {
+            $('#fas', el).onsubmit = async (ev) => {
+              ev.preventDefault();
+              const who = ev.target.who.value.trim();
+              try { await api('payments/assign', { id: +as.dataset.assign, ...(/^\d+$/.test(who) ? { user_id: +who } : { username: who }) }); close(); toast('Đã cộng tiền'); render(); } catch (err) { toast(err.message, 'err'); }
+            };
+          });
+        });
+      },
+    };
+  }, { webAdmin: true, title: 'Nạp tiền & ân xá', back: '/more' });
+
   route('/me', viewMe, { title: 'Điểm của tôi', back: '/more' });
 
   route('/rank', async () => {
@@ -2881,7 +3221,7 @@
   async function boot() {
     try {
       const st = await api('status', undefined, { noRedirect: true });
-      S.status = st; S.csrf = st.csrf; S.user = st.user; S.site = st.site_name; S.allowRegister = st.allow_register; S.access = st.access; S.tgLogin = st.tg_login;
+      S.status = st; S.csrf = st.csrf; S.user = st.user; S.site = st.site_name; S.allowRegister = st.allow_register; S.access = st.access; S.tgLogin = st.tg_login; S.pay = st.pay;
     } catch (e) {
       $('#app').innerHTML = `<div class="auth"><div class="alert err">${icon('alert')}<div>${esc(e.message)}</div></div></div>`;
       throw e;

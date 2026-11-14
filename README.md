@@ -62,17 +62,25 @@ Web PHP (chạy tốt trên **aaPanel**) để quản lý nhóm Telegram bằng 
 | Lệnh | Ai dùng | Tác dụng |
 |---|---|---|
 | `/help` `/rules` `/me` `/top` `/info` `/id` | Mọi người | Trợ giúp, nội quy, điểm của tôi, xếp hạng, thông tin, ID |
+| `/anxa` (reply) | Mọi người | Bảng giá ân xá, hình phạt của người được reply, nút mở trang Ân xá |
 | `/warn [lý do]` `/unwarn` `/resetwarn` | Admin | Cảnh cáo (reply hoặc `@username` / ID) |
 | `/mute [30m\|2h\|1d] [lý do]` `/unmute` | Admin | Cấm chat |
 | `/kick` `/ban` `/unban` | Admin | Đuổi / cấm / gỡ cấm |
 | `/addpoints 10 [lý do]` | Admin | Cộng (hoặc trừ, số âm) điểm |
 | `/del` `/pin` `/unpin` `/setrules` `/reload` | Admin | Xoá / ghim tin, đặt nội quy, làm mới danh sách admin |
 
-Chat riêng với bot: `/start`, `/login MÃ` (hoặc `/dangnhap`), `/link MÃ`, `/me`.
+Chat riêng với bot: `/start`, `/login MÃ` (hoặc `/dangnhap`), `/link MÃ`, `/me`, `/sodu` (số dư ví, cách nạp tiền, hình phạt có thể ân xá).
 
 **🔖 Yêu cầu đặt Username** (*Lệnh → Lệnh mặc định → Tính năng mặc định*): thành viên chưa có @username khi nhắn tin hoặc vừa vào nhóm sẽ bị *chỉ nhắc* / *xoá tin + nhắc* / *cấm chat cho tới khi đặt username* / *đuổi*. Tin nhắc có nút **✅ Tôi đã đặt username**: bot kiểm tra lại và tự bỏ cấm chat. Chọn nhóm áp dụng, bỏ qua admin, tự xoá tin nhắc, giới hạn tần suất, sửa nội dung (có xem trước).
 
 **Tuỳ chỉnh lệnh mặc định** (*Lệnh → 📚 Lệnh mặc định*): xem chi tiết, cú pháp, ví dụ của từng lệnh; admin web **đổi tên / thêm tên khác** (VD `/me` → `/canhan`, tối đa 5 tên), giữ hoặc tắt tên gốc, bật/tắt lệnh, sửa mô tả trong menu Telegram. Menu "/", `/help` và hướng dẫn của bot tự dùng tên mới. Lệnh tự tạo trùng tên được ưu tiên (trang lệnh sẽ cảnh báo).
+
+**💰 Ví VND & nạp tiền** (*Thêm → Nạp tiền & ân xá*, chỉ admin web): mỗi tài khoản web có số dư VND. Trang **Ví** hiện số tài khoản, mã QR VietQR và **nội dung chuyển khoản riêng** của từng người (VD `NAPTIEN12` = tiền tố + ID tài khoản).
+- **Nạp tự động**: dán link API lịch sử giao dịch (VD web2m `https://api.web2m.com/historyapiacb/…`) vào ô *Link API*. Cron mỗi phút đọc giao dịch tiền vào, khớp nội dung → cộng tiền và nhắn Telegram báo người nạp. Người dùng bấm *Tôi đã chuyển khoản — kiểm tra ngay* để đồng bộ ngay. Chống cộng trùng theo mã giao dịch.
+- Link API chứa thông tin đăng nhập ngân hàng: chỉ lưu trong database, **không bao giờ hiện lại** trên web và không nằm trong mã nguồn. Nút *Kiểm tra API* để thử kết nối (không cộng tiền).
+- Giao dịch sai nội dung / dưới mức tối thiểu nằm ở tab *Giao dịch NH* để **cộng tay** cho đúng tài khoản hoặc bỏ qua. Admin cộng / trừ số dư ở *Tài khoản web*.
+
+**🕊 Ân xá thành viên** (trang *Ân xá*): dùng số dư ví để **gỡ cấm chat / gỡ cấm khỏi nhóm / xoá cảnh cáo** cho mình hoặc cho người khác trong nhóm (tuỳ chọn). Admin đặt giá từng loại (0 = tắt). Bot thực hiện ngay trên Telegram, **thông báo trong nhóm** (sửa được nội dung, có biến `{member}` `{payer}` `{price}`…), nhắn riêng cho người được ân xá; gỡ cấm thì kèm **link mời dùng 1 lần**. Telegram báo lỗi → **tự hoàn tiền**. Mọi lượt ân xá được ghi vào Nhật ký và lịch sử ví.
 
 ## Yêu cầu
 

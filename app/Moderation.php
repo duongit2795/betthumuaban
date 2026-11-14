@@ -13,6 +13,7 @@ class Moderation
         'bot' => 'Bot tự động',
         'rule' => 'Lệnh tự tạo',
         'auto' => 'Tự động (đủ cảnh cáo)',
+        'amnesty' => 'Ân xá (trả phí)',
     ];
 
     const TITLES = [
@@ -92,6 +93,7 @@ class Moderation
         $chat = $group['chat_id'];
         $meta = ['source' => $source, 'actor_tg_id' => $o['actorTgId'] ?? null];
         if (!empty($o['escalatedFrom'])) $meta['escalated_from'] = $o['escalatedFrom'];
+        if (!empty($o['meta']) && is_array($o['meta'])) $meta += $o['meta'];
         $facts = []; // các dòng chi tiết cho thông báo: [icon, nhãn, giá trị HTML]
         $short = '';  // tóm tắt cho nhật ký
 
@@ -212,7 +214,7 @@ class Moderation
     {
         [$ico, $title] = self::TITLES[$action] ?? ['ℹ️', strtoupper($action)];
         $mention = Repo::mention($m);
-        $by = tg_esc(preg_replace('/\s*\((Telegram|Web|tự động|lệnh tự tạo)\)$/u', '', $actor)) . ' · ' . (self::SOURCES[$source] ?? $source);
+        $by = tg_esc(preg_replace('/\s*\((Telegram|Web|tự động|lệnh tự tạo|ân xá)\)$/u', '', $actor)) . ' · ' . (self::SOURCES[$source] ?? $source);
 
         if (empty($s['mod_notify_detail'])) {
             $line = "$ico $mention — " . mb_strtolower($title);

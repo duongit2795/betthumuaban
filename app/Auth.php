@@ -91,6 +91,7 @@ class Auth
             'tg_user_id' => $u['tg_user_id'] ? (string)$u['tg_user_id'] : null,
             'has_password' => ($u['password_hash'] ?? '') !== '',
             'disabled' => (int)$u['disabled'],
+            'balance' => (int)($u['balance'] ?? 0),
             'created_at' => (int)$u['created_at'],
             'last_login' => $u['last_login'] ? (int)$u['last_login'] : null,
         ];
