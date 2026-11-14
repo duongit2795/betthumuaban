@@ -68,6 +68,7 @@ class Api
             'rules/save' => 'ruleSave',
             'rules/delete' => 'ruleDelete',
             'rules/toggle' => 'ruleToggle',
+            'rules/bulk' => 'ruleBulk',
             'system' => 'system',
             'system/settings' => 'systemSettings',
             'system/check-update' => 'checkUpdate',
@@ -871,6 +872,23 @@ class Api
         Repo::log($r['group_id'] ? (int)$r['group_id'] : null, $u['username'], 'rule', null, 'Xoá lệnh: ' . $r['name']);
         Rules::syncMenus();
         return [];
+    }
+
+    /** Bật/tắt hàng loạt: enabled hoặc show_in_menu cho danh sách id */
+    private function ruleBulk(): array
+    {
+        $u = Auth::requireAdmin();
+        $field = $this->in('field');
+        if (!in_array($field, ['enabled', 'show_in_menu'], true)) fail('Trường không hợp lệ');
+        $ids = array_values(array_filter(array_map('intval', (array)$this->in('ids', [])), fn($x) => $x > 0));
+        if (!$ids) fail('Không có lệnh nào');
+        $v = $this->in('value') ? 1 : 0;
+        $where = 'id IN (' . implode(',', $ids) . ')' . ($field === 'show_in_menu' ? " AND trigger_type = 'command'" : '');
+        $n = DB::run("UPDATE tg_rules SET $field = ? WHERE $where", [$v]);
+        $label = $field === 'enabled' ? ($v ? 'Bật' : 'Tắt') . ' tất cả lệnh' : ($v ? 'Hiện' : 'Ẩn') . ' tất cả lệnh trong menu Telegram';
+        Repo::log(null, $u['username'], 'rule', null, "$label ($n lệnh)");
+        $errors = Rules::syncMenus();
+        return ['updated' => $n, 'menu_errors' => $errors];
     }
 
     private function ruleToggle(): array

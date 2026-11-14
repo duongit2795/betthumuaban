@@ -1004,17 +1004,28 @@
       const load = async () => {
         const d = await api('rules', undefined, { query: groupId ? { group_id: groupId } : {} });
         groups = d.groups;
-        $('#rlist', root).innerHTML = d.rules.length ? `<div class="list">${d.rules.map((r) => `
+        const cmds = d.rules.filter((r) => r.trigger_type === 'command');
+        const allOn = d.rules.length && d.rules.every((r) => r.enabled);
+        const allMenu = cmds.length && cmds.every((r) => r.show_in_menu);
+        const master = d.rules.length ? `<div class="card" style="margin-bottom:12px">
+            <label class="switch-row"><div class="txt"><b>Bật tất cả lệnh</b><span>${d.rules.filter((r) => r.enabled).length}/${d.rules.length} lệnh đang bật</span></div>
+              <div class="switch"><input type="checkbox" data-bulk="enabled" ${allOn ? 'checked' : ''}><span></span></div></label>
+            ${cmds.length ? `<label class="switch-row"><div class="txt"><b>Hiện tất cả trong menu lệnh Telegram</b><span>Hiện khi gõ "/" trong nhóm · ${cmds.filter((r) => r.show_in_menu).length}/${cmds.length} lệnh</span></div>
+              <div class="switch"><input type="checkbox" data-bulk="show_in_menu" ${allMenu ? 'checked' : ''}><span></span></div></label>` : ''}
+          </div>` : '';
+        ids = d.rules.map((r) => r.id);
+        $('#rlist', root).innerHTML = master + (d.rules.length ? `<div class="list">${d.rules.map((r) => `
           <div class="list-item" style="align-items:flex-start">
             <button class="grow" data-rule='${esc(JSON.stringify(r))}' style="all:unset;cursor:pointer;flex:1;min-width:0">
               <div class="row wrap" style="gap:6px">${triggerChip(r)}<b class="ellipsis">${esc(r.name)}</b></div>
               <div class="xs text-2" style="margin-top:4px">${ruleSummary(r)}</div>
-              <div class="xs muted" style="margin-top:3px">${r.group_id ? esc(r.group_title || 'Nhóm') : 'Tất cả nhóm'} · ${num(r.uses)} lượt dùng${r.last_used ? ' · ' + ago(r.last_used) : ''}</div>
+              <div class="xs muted" style="margin-top:3px">${r.group_id ? esc(r.group_title || 'Nhóm') : 'Tất cả nhóm'} · ${num(r.uses)} lượt dùng${r.last_used ? ' · ' + ago(r.last_used) : ''}${r.trigger_type === 'command' && r.show_in_menu ? ' · <span style="color:var(--primary)">hiện trong menu</span>' : ''}</div>
             </button>
             <label class="switch" style="margin-top:2px"><input type="checkbox" data-rtoggle="${r.id}" ${r.enabled ? 'checked' : ''}><span></span></label>
           </div>`).join('')}</div>`
-          : `<div class="card">${empty('terminal', 'Chưa có lệnh nào. Nhấn <b>Tạo lệnh</b> để bắt đầu từ mẫu có sẵn.')}</div>`;
+          : `<div class="card">${empty('terminal', 'Chưa có lệnh nào. Nhấn <b>Tạo lệnh</b> để bắt đầu từ mẫu có sẵn.')}</div>`);
       };
+      let ids = [];
       const pickTemplate = () => sheet(`<div class="sheet-head"><h2>Tạo lệnh mới</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
         <button class="list-item card" data-tpl="-1" style="border-radius:14px;margin-bottom:10px;border:1px solid var(--border)"><span style="font-size:22px">✏️</span><div class="grow"><b>Tạo từ đầu</b><div class="xs muted">Tự thiết lập mọi thứ</div></div>${icon('chevron')}</button>
         <div class="small muted" style="margin:14px 2px 8px">Hoặc chọn mẫu có sẵn</div>
@@ -1035,9 +1046,20 @@
         if (r) ruleEditor(JSON.parse(r.dataset.rule), groups, load);
       });
       root.addEventListener('change', async (e) => {
+        const bk = e.target.closest('[data-bulk]');
+        if (bk) {
+          bk.disabled = true;
+          try {
+            const r = await api('rules/bulk', { ids, field: bk.dataset.bulk, value: bk.checked });
+            toast(bk.dataset.bulk === 'enabled' ? (bk.checked ? `Đã bật ${r.updated} lệnh` : `Đã tắt ${r.updated} lệnh`) : (bk.checked ? `Đã hiện ${r.updated} lệnh trong menu` : `Đã ẩn ${r.updated} lệnh khỏi menu`));
+            (r.menu_errors || []).length && toast('Không cập nhật được menu ở: ' + r.menu_errors.join(', '), 'err');
+          } catch (err) { toast(err.message, 'err'); }
+          return load();
+        }
         const t = e.target.closest('[data-rtoggle]');
         if (!t) return;
         try { await api('rules/toggle', { id: t.dataset.rtoggle, enabled: t.checked }); toast(t.checked ? 'Đã bật lệnh' : 'Đã tắt lệnh'); } catch (err) { toast(err.message, 'err'); }
+        load();
       });
       load();
     };
