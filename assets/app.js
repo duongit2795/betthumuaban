@@ -1208,7 +1208,88 @@
     unban: ['✅ Gỡ cấm', true],
   };
   const AD_PRESETS = [[0, 'Ngay lập tức'], [5, 'Sau 5 giây'], [10, 'Sau 10 giây'], [20, 'Sau 20 giây'], [30, 'Sau 30 giây'], [60, 'Sau 1 phút'], [120, 'Sau 2 phút'], [300, 'Sau 5 phút'], [600, 'Sau 10 phút'], [1800, 'Sau 30 phút'], [3600, 'Sau 1 giờ'], [21600, 'Sau 6 giờ'], [86400, 'Sau 1 ngày'], [172800, 'Sau 2 ngày']];
-  const VARS = ['{mention}', '{name}', '{username}', '{id}', '{points}', '{rank}', '{messages}', '{warns}', '{args}', '{target_mention}', '{target_name}', '{target_points}', '{group}', '{member_count}', '{rules}', '{count}', '{random}', '{random:1-6}', '{date}', '{time}'];
+  // Danh mục biến: [mã, giải thích, ví dụ]
+  const VAR_GROUPS = [
+    { title: '🙋 Người gửi lệnh', vars: [
+      ['{mention}', 'Tag tên người gửi (bấm vào mở trang cá nhân)', '@Lan'],
+      ['{name}', 'Họ tên đầy đủ', 'Nguyễn Lan'],
+      ['{first_name}', 'Tên', 'Lan'],
+      ['{last_name}', 'Họ', 'Nguyễn'],
+      ['{username}', '@username (không có thì dùng tên)', '@lan99'],
+      ['{id}', 'ID Telegram', '123456789'],
+      ['{points}', 'Điểm hiện tại', '152'],
+      ['{rank}', 'Hạng trong nhóm', '3'],
+      ['{messages}', 'Số tin nhắn đã gửi', '420'],
+      ['{warns}', 'Số lần bị cảnh cáo', '1'],
+      ['{warn_limit}', 'Giới hạn cảnh cáo của nhóm', '3'],
+      ['{warns_left}', 'Còn bao nhiêu lần cảnh cáo nữa thì bị xử lý', '2'],
+      ['{role}', 'Vai trò: Quản trị viên / Thành viên', 'Thành viên'],
+      ['{joined}', 'Ngày vào nhóm', '01/10/2026'],
+      ['{days}', 'Số ngày đã ở trong nhóm', '44'],
+    ] },
+    { title: '↩️ Người được reply', note: 'Chỉ có giá trị khi lệnh được dùng bằng cách reply tin của người khác', vars: [
+      ['{target_mention}', 'Tag tên người được reply', '@Huy'],
+      ['{target_name}', 'Họ tên người được reply', 'Quốc Huy'],
+      ['{target_first_name}', 'Tên người được reply', 'Huy'],
+      ['{target_username}', '@username người được reply', '@huy_dev'],
+      ['{target_id}', 'ID Telegram người được reply', '987654321'],
+      ['{target_points}', 'Điểm của người được reply', '88'],
+      ['{target_rank}', 'Hạng của người được reply', '7'],
+      ['{target_messages}', 'Số tin nhắn của người được reply', '230'],
+      ['{target_warns}', 'Số cảnh cáo của người được reply', '0'],
+      ['{target_role}', 'Vai trò người được reply', 'Thành viên'],
+      ['{target_days}', 'Số ngày người được reply đã ở trong nhóm', '12'],
+    ] },
+    { title: '👥 Nhóm', vars: [
+      ['{group}', 'Tên nhóm', 'Hội Yêu Cafe'],
+      ['{member_count}', 'Số thành viên', '1.250'],
+      ['{messages_today}', 'Số tin nhắn hôm nay', '312'],
+      ['{rules}', 'Nội quy nhóm (đặt trong Cài đặt nhóm)', '1. Tôn trọng mọi người…'],
+      ['{top1}', 'Người có điểm cao nhất', 'Tuấn Kiệt'],
+      ['{top1_points}', 'Điểm của người đứng đầu', '846'],
+      ['{top3}', 'Danh sách top 3 (nhiều dòng)', '🥇 Kiệt — 846 điểm…'],
+      ['{group_link}', 'Link nhóm công khai (nếu có)', 'https://t.me/hoicafe'],
+      ['{group_id}', 'ID nhóm', '-1001234567890'],
+      ['{bot}', '@username của bot', '@quanly_bot'],
+    ] },
+    { title: '⌨️ Chữ gõ sau lệnh', note: 'VD người dùng gõ: /boi mai có mưa không', vars: [
+      ['{args}', 'Toàn bộ phần chữ sau lệnh', 'mai có mưa không'],
+      ['{arg1}', 'Từ thứ 1 sau lệnh', 'mai'],
+      ['{arg2}', 'Từ thứ 2 sau lệnh', 'có'],
+      ['{arg3}', 'Từ thứ 3 sau lệnh', 'mưa'],
+    ] },
+    { title: '🕒 Thời gian', vars: [
+      ['{time}', 'Giờ hiện tại', '20:45'],
+      ['{date}', 'Ngày hôm nay', '14/11/2026'],
+      ['{datetime}', 'Giờ và ngày', '20:45 14/11/2026'],
+      ['{weekday}', 'Thứ trong tuần', 'Thứ bảy'],
+      ['{day}', 'Ngày (số)', '14'],
+      ['{month}', 'Tháng', '11'],
+      ['{year}', 'Năm', '2026'],
+    ] },
+    { title: '🎲 Ngẫu nhiên & khác', vars: [
+      ['{random}', 'Số ngẫu nhiên từ 1 đến 100', '73'],
+      ['{random:1-6}', 'Số ngẫu nhiên trong khoảng (đổi 1-6 tuỳ ý)', '4'],
+      ['{choice:Có|Không|Có thể}', 'Chọn ngẫu nhiên 1 trong các lựa chọn (cách nhau bằng |)', 'Có thể'],
+      ['{count}', 'Lệnh đã được dùng bao nhiêu lần', '58'],
+      ['{command}', 'Tên lệnh', '/diemdanh'],
+    ] },
+  ];
+  const VAR_LIST = VAR_GROUPS.flatMap((g) => g.vars);
+  const VAR_QUICK = ['{mention}', '{name}', '{points}', '{rank}', '{target_mention}', '{args}', '{group}', '{time}'];
+
+  // Xem trước nội dung với giá trị mẫu (chỉ giữ thẻ HTML Telegram cho phép)
+  function previewText(t) {
+    let out = String(t || '');
+    out = out.replace(/\{random:(-?\d+)-(-?\d+)\}/g, (_, a) => a).replace(/\{choice:([^{}]*)\}/g, (_, o) => (o.split('|')[0] || '').trim());
+    for (const [code, , ex] of VAR_LIST) if (!code.includes(':')) out = out.split(code).join(code === '{mention}' || code === '{target_mention}' ? `\u0001${ex}\u0002` : ex);
+    out = esc(out)
+      .replace(/\u0001(.*?)\u0002/g, '<a class="pv-mention">$1</a>')
+      .replace(/&lt;(\/?)(b|i|u|s|code|pre|tg-spoiler)&gt;/g, '<$1$2>')
+      .replace(/&lt;a href=&quot;(https?:\/\/[^&]*?)&quot;&gt;/g, '<a href="$1" target="_blank" rel="noopener">')
+      .replace(/&lt;\/a&gt;/g, '</a>');
+    return out;
+  }
   // Mẫu lệnh có sẵn (cat: nhóm hiển thị)
   const RULE_TEMPLATES = [
     // ---- Điểm & giải trí ----
@@ -1409,6 +1490,30 @@
     return { body, mount };
   }
 
+  // Bảng tra cứu biến: tìm kiếm, giải thích, ví dụ; chạm để chèn
+  function varPicker(onPick) {
+    const rows = (q) => VAR_GROUPS.map((g) => {
+      const list = g.vars.filter(([c, d, ex]) => !q || (c + ' ' + d + ' ' + ex).toLowerCase().includes(q));
+      if (!list.length) return '';
+      return `<div class="small" style="font-weight:700;margin:14px 2px 4px">${g.title}</div>${g.note ? `<div class="xs muted" style="margin:0 2px 8px">${g.note}</div>` : ''}
+        <div class="list">${list.map(([c, d, ex]) => `<button type="button" class="list-item var-row" data-pick="${esc(c)}">
+          <code class="var-code">${esc(c)}</code><div class="grow"><div class="small">${esc(d)}</div><div class="xs muted">VD: ${esc(ex)}</div></div>${icon('plus', 'sm')}</button>`).join('')}</div>`;
+    }).join('') || '<div class="list-empty">Không tìm thấy biến phù hợp</div>';
+    sheet(`<div class="sheet-head"><h2>Biến nội dung</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
+      <div class="alert info" style="margin-bottom:10px">${icon('info')}<div class="xs">Biến là chữ trong ngoặc nhọn, bot sẽ <b>tự thay bằng giá trị thật</b> khi gửi. VD: <code>Chào {name}, bạn có {points} điểm</code> → <i>Chào Lan, bạn có 152 điểm</i>.</div></div>
+      <div class="input-icon">${icon('search')}<input class="input" id="vq" placeholder="Tìm biến: điểm, tên, giờ…"></div>
+      <div id="vlist">${rows('')}</div>`, (el, close) => {
+      $('#vq', el).addEventListener('input', (e) => { $('#vlist', el).innerHTML = rows(e.target.value.trim().toLowerCase()); });
+      el.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-pick]');
+        if (!b) return;
+        close();
+        onPick(b.dataset.pick);
+        toast('Đã chèn ' + b.dataset.pick);
+      });
+    });
+  }
+
   function ruleEditor(rule, groups, onSaved) {
     const r = JSON.parse(JSON.stringify(rule));
     r.conditions = { who: 'all', min_points: 0, require_reply: false, cooldown: 0, chance: 100, autodel: false, autodel_trigger: true, autodel_reply: true, autodel_target: false, ...(r.conditions || {}) };
@@ -1427,7 +1532,8 @@
       const [label, hasWho] = RACT[a.type] || ['?', false];
       let f = '';
       if (hasWho) f += `<div class="segmented" style="margin-top:10px"><button type="button" data-aw="${i}" data-v="sender" class="${a.who !== 'target' ? 'active' : ''}">${a.type === 'reply' ? 'Reply người gửi' : 'Người gửi lệnh'}</button><button type="button" data-aw="${i}" data-v="target" class="${a.who === 'target' ? 'active' : ''}">Người được reply</button></div>`;
-      if (['reply', 'send'].includes(a.type)) f += `<textarea class="input" data-af="${i}" data-k="text" style="margin-top:10px;min-height:80px" placeholder="Nội dung… dùng biến như {mention}, {points}">${esc(a.text || '')}</textarea>`;
+      if (['reply', 'send'].includes(a.type)) f += `<textarea class="input" data-af="${i}" data-k="text" style="margin-top:10px;min-height:80px" placeholder="Nội dung… dùng biến như {mention}, {points}">${esc(a.text || '')}</textarea>
+        <div class="pv"><div class="pv-label">👁 Xem trước (giá trị mẫu)</div><div class="pv-body" data-pv="${i}">${a.text ? previewText(a.text) : '<span class="muted">Nội dung sẽ hiện ở đây…</span>'}</div></div>`;
       if (a.type === 'points') f += `<div class="row" style="margin-top:10px"><input class="input" type="number" data-af="${i}" data-k="amount" value="${a.amount ?? 1}" style="text-align:center;font-weight:700"><span class="small muted nowrap">điểm (âm = trừ)</span></div>`;
       if (a.type === 'mute') f += `<div class="row" style="margin-top:10px"><input class="input" type="number" min="0" data-af="${i}" data-k="minutes" value="${a.minutes ?? 60}"><span class="small muted nowrap">phút (0 = vĩnh viễn)</span></div>`;
       if (['warn', 'mute', 'kick', 'ban'].includes(a.type)) f += `<input class="input" data-af="${i}" data-k="reason" value="${esc(a.reason || '')}" placeholder="Lý do (tuỳ chọn)" style="margin-top:10px">`;
@@ -1468,8 +1574,10 @@
           <div class="row" style="gap:8px"><span class="badge green">THÌ</span><b>Hành động (chạy lần lượt)</b></div>
           <div id="acts">${r.actions.map(actionHtml).join('')}</div>
           <button type="button" class="btn soft block" data-addact>${icon('plus', 'sm')}Thêm hành động</button>
-          <div class="field"><span class="lbl">Biến dùng trong nội dung (chạm để chèn)</span><div class="chips" style="flex-wrap:wrap">${VARS.map((v) => `<button type="button" class="chip mono" data-var="${v}" style="height:30px;font-size:12px">${v}</button>`).join('')}</div>
-          <div class="hint">{args} = phần chữ gõ sau lệnh · {target_…} = người được reply · hỗ trợ HTML &lt;b&gt; &lt;i&gt; &lt;a&gt;</div></div>
+          <div class="field"><span class="lbl">Biến hay dùng (chạm để chèn vào nội dung)</span>
+            <div class="chips" style="flex-wrap:wrap">${VAR_QUICK.map((v) => { const d = VAR_LIST.find((x) => x[0] === v); return `<button type="button" class="chip var-chip" data-var="${v}" title="${esc(d[1])}"><code>${v}</code><small>${esc(d[1].split('(')[0].trim())}</small></button>`; }).join('')}</div>
+            <button type="button" class="btn sm soft block" data-allvars style="margin-top:10px">📖 Xem tất cả ${VAR_LIST.length} biến kèm giải thích</button>
+            <div class="hint">Định dạng: &lt;b&gt;đậm&lt;/b&gt; · &lt;i&gt;nghiêng&lt;/i&gt; · &lt;u&gt;gạch chân&lt;/u&gt; · &lt;code&gt;mã&lt;/code&gt; · &lt;a href="https://…"&gt;link&lt;/a&gt;</div></div>
         </div>
 
         <div class="stack">
@@ -1555,6 +1663,21 @@
       const redraw = () => { collect(el); draw(); };
       draw();
       el.addEventListener('focusin', (e) => { if (e.target.matches('textarea[data-af]')) lastText = e.target; });
+      const updatePreview = (ta) => {
+        const pv = $(`[data-pv="${ta.dataset.af}"]`, el);
+        if (pv) pv.innerHTML = ta.value.trim() ? previewText(ta.value) : '<span class="muted">Nội dung sẽ hiện ở đây…</span>';
+      };
+      el.addEventListener('input', (e) => { if (e.target.matches('textarea[data-af]')) updatePreview(e.target); });
+      const insertVar = (code) => {
+        const ta = lastText && document.contains(lastText) ? lastText : $('textarea[data-af]', el);
+        if (!ta) return toast('Thêm hành động "Trả lời" hoặc "Gửi tin" trước', 'err');
+        const p = ta.selectionStart ?? ta.value.length;
+        ta.value = ta.value.slice(0, p) + code + ta.value.slice(ta.selectionEnd ?? p);
+        ta.focus({ preventScroll: true });
+        ta.selectionStart = ta.selectionEnd = p + code.length;
+        lastText = ta;
+        updatePreview(ta);
+      };
       el.addEventListener('change', (e) => {
         const t = e.target.closest('[data-at]');
         if (t) { collect(el); const a = r.actions[t.dataset.at]; a.type = t.value; if (!RACT[a.type][1]) a.who = 'sender'; draw(); }
@@ -1578,13 +1701,8 @@
         else if (b.dataset.aw !== undefined) { collect(el); r.actions[b.dataset.aw].who = b.dataset.v; draw(); }
         else if (b.dataset.adel !== undefined) { collect(el); r.actions.splice(Number(b.dataset.adel), 1); draw(); }
         else if (b.hasAttribute('data-addact')) { collect(el); r.actions.push({ type: 'reply', who: 'sender', text: '' }); draw(); }
-        else if (b.dataset.var) {
-          const ta = lastText && document.contains(lastText) ? lastText : $('textarea[data-af]', el);
-          if (!ta) return toast('Thêm hành động "Trả lời" hoặc "Gửi tin" trước', 'err');
-          const p = ta.selectionStart ?? ta.value.length;
-          ta.value = ta.value.slice(0, p) + b.dataset.var + ta.value.slice(ta.selectionEnd ?? p);
-          ta.focus(); ta.selectionStart = ta.selectionEnd = p + b.dataset.var.length;
-        } else if (b.hasAttribute('data-rdel')) {
+        else if (b.dataset.var) insertVar(b.dataset.var);
+        else if (b.hasAttribute('data-allvars')) varPicker(insertVar); else if (b.hasAttribute('data-rdel')) {
           if (!(await confirmBox('Xoá lệnh?', `Xoá lệnh <b>${esc(r.name)}</b>?`, { danger: true, ok: 'Xoá' }))) return;
           await api('rules/delete', { id: r.id }); close(); toast('Đã xoá lệnh'); onSaved();
         }

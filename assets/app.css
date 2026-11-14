@@ -452,3 +452,16 @@ img, svg, video { max-width: 100%; }
 .new-pill { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--nav-h) + var(--safe-b) + 92px); z-index: 16; box-shadow: var(--shadow-lg); }
 @media (min-width: 900px) { .new-pill { bottom: 100px; left: calc(50% + 120px); } }
 .chat-empty { text-align: center; color: var(--muted); padding: 40px 16px; }
+
+/* Biến nội dung & xem trước */
+.var-chip { height: auto; min-height: 34px; padding: 5px 10px; display: inline-flex; flex-direction: column; align-items: flex-start; gap: 0; line-height: 1.2; text-align: left; }
+.var-chip code { font-size: 12px; font-weight: 700; color: var(--primary); }
+.var-chip small { font-size: 10.5px; color: var(--muted); font-weight: 500; }
+.var-chip.active code, .var-chip:active code { color: inherit; }
+.var-row { align-items: flex-start; }
+.var-code { flex: none; max-width: 46%; font-size: 12px; font-weight: 700; color: var(--primary); background: var(--primary-soft); padding: 3px 7px; border-radius: 7px; overflow-wrap: anywhere; }
+.pv { margin-top: 8px; border: 1px dashed var(--border); border-radius: 12px; padding: 8px 10px; background: var(--surface); }
+.pv-label { font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+.pv-body { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.45; }
+.pv-body a, .pv-mention { color: var(--primary); text-decoration: none; font-weight: 600; }
+.pv-body code { background: var(--surface-3); padding: 0 4px; border-radius: 4px; }
