@@ -28,6 +28,8 @@ try {
     (new BotHandler($bot))->handle($update);
     // Xoá các tin hẹn giờ (tự động xoá của lệnh tự tạo)
     DelQueue::finishRequest();
+    // Kiểm tra bản cập nhật mới (theo chu kỳ cài đặt) và báo cho admin qua Telegram
+    UpdateNotifier::maybeCheck();
 } catch (Throwable $e) {
     error_log('[tele-manager webhook] ' . $e);
     try { DB::run('UPDATE tg_bots SET last_error = ? WHERE id = ?', ['Xử lý: ' . mb_substr($e->getMessage(), 0, 300), $botId]); } catch (Throwable $x) {}

@@ -23,7 +23,9 @@ class BotHandler
         elseif (isset($u['chat_member'])) $this->onChatMember($u['chat_member']);
         elseif (isset($u['message'])) $this->onMessage($u['message']);
         elseif (isset($u['edited_message'])) $this->onMessage($u['edited_message'], true);
-        elseif (isset($u['callback_query'])) TgLogin::onCallback($this->api, $u['callback_query']);
+        elseif (isset($u['callback_query'])) {
+            if (!UpdateNotifier::onCallback($this->api, $u['callback_query'])) TgLogin::onCallback($this->api, $u['callback_query']);
+        }
     }
 
     private function isGroup(array $chat): bool

@@ -14,6 +14,8 @@ class Settings
         'menu_admin_only' => '0',
         'group_admin_access' => '1',
         'tg_login' => '1',
+        'update_notify' => '1',
+        'update_check_hours' => '6',
         'group_admin_perms' => '',
     ];
     private static array $cache = [];
