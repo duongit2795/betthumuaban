@@ -73,7 +73,7 @@ class Telegram
     {
         $post = [];
         foreach ($params as $k => $v) $post[$k] = is_array($v) ? json_encode($v, JSON_UNESCAPED_UNICODE) : (is_bool($v) ? ($v ? 'true' : 'false') : (string)$v);
-        foreach ($files as $k => $path) $post[$k] = new CURLFile($path, mime_content_type($path) ?: 'image/jpeg', basename($path));
+        foreach ($files as $k => $path) $post[$k] = new CURLFile($path, file_mime($path), basename($path));
         $ch = curl_init('https://api.telegram.org/bot' . $this->token . '/' . $method);
         curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => $post, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => $timeout, CURLOPT_CONNECTTIMEOUT => 8]);
         $body = curl_exec($ch);
