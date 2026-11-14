@@ -1,0 +1,4 @@
+# aaPanel > Website > (site) > Config: dán vào trong khối server { ... }
+# Chặn truy cập trực tiếp vào thư mục dữ liệu và mã nguồn
+location ~ ^/(data|app)/ { deny all; return 404; }
+location ~ /\.git { deny all; return 404; }
