@@ -6,7 +6,7 @@ class DB
 {
     private static ?PDO $pdo = null;
     private static string $driver = 'sqlite';
-    const SCHEMA_VERSION = 4;
+    const SCHEMA_VERSION = 5;
 
     public static function connect(?array $c = null): PDO
     {
@@ -228,6 +228,19 @@ class DB
                 created_at INT NOT NULL,
                 updated_at INT NOT NULL,
                 UNIQUE (group_id, message_id)
+            )",
+            "CREATE TABLE IF NOT EXISTS tg_login_codes (
+                id $pk,
+                code VARCHAR(16) NOT NULL UNIQUE,
+                sess VARCHAR(64) NOT NULL,
+                status VARCHAR(16) NOT NULL DEFAULT 'pending',
+                tg_user_id $big,
+                tg_name $str,
+                tg_username $str,
+                ip VARCHAR(64),
+                ua VARCHAR(191),
+                created_at INT NOT NULL,
+                expires_at INT NOT NULL
             )",
             "CREATE TABLE IF NOT EXISTS daily_stats (
                 group_id INT NOT NULL,

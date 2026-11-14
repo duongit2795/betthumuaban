@@ -89,6 +89,7 @@ class Auth
             'display_name' => $u['display_name'] ?: $u['username'],
             'role' => $u['role'],
             'tg_user_id' => $u['tg_user_id'] ? (string)$u['tg_user_id'] : null,
+            'has_password' => ($u['password_hash'] ?? '') !== '',
             'disabled' => (int)$u['disabled'],
             'created_at' => (int)$u['created_at'],
             'last_login' => $u['last_login'] ? (int)$u['last_login'] : null,
