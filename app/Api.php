@@ -1604,15 +1604,12 @@ class Api
     {
         $row = $this->memberRow($m);
         $row['group_title'] = $group['title'] ?? $m['title'] ?? null;
+        // Danh sách hình phạt đang có (chỉ để hiển thị) + 1 giá ân xá toàn bộ
         $row['punishments'] = [];
         foreach (Amnesty::punishments($m, $cfg) as $k => $desc) {
-            $row['punishments'][] = ['kind' => $k, 'label' => Amnesty::KINDS[$k][1], 'icon' => Amnesty::KINDS[$k][2], 'desc' => $desc, 'price' => $cfg['prices'][$k]];
+            $row['punishments'][] = ['kind' => $k, 'label' => Amnesty::KINDS[$k][1], 'icon' => Amnesty::KINDS[$k][2], 'desc' => $desc];
         }
-        // Gói gỡ tất cả trong 1 lần (đặt lên đầu)
-        if ($c = Amnesty::combo($m, $cfg)) {
-            array_unshift($row['punishments'], ['kind' => 'all', 'label' => Amnesty::ALL[1], 'icon' => Amnesty::ALL[2], 'desc' => Amnesty::comboLabel($c['parts']),
-                'price' => $c['price'], 'full' => $c['full'], 'combo' => true]);
-        }
+        $row['price'] = $row['punishments'] ? $cfg['price'] : null;
         return $row;
     }
 
@@ -1638,9 +1635,8 @@ class Api
         $recent = DB::all("SELECT t.*, u.display_name, u.username FROM wallet_tx t JOIN app_users u ON u.id = t.user_id WHERE t.type = 'amnesty' ORDER BY t.id DESC LIMIT 10");
         return [
             'enabled' => $cfg['enabled'],
-            'prices' => $cfg['prices'],
+            'price' => $cfg['price'],
             'kinds' => array_map(fn($k) => ['label' => $k[1], 'icon' => $k[2]], Amnesty::KINDS),
-            'combo' => $cfg['combo'] ? ['discount' => $cfg['combo_discount']] : null,
             'allow_others' => $cfg['allow_others'] || Access::isWebAdmin($u),
             'note' => $cfg['note'],
             'balance' => Wallet::balance((int)$u['id']),

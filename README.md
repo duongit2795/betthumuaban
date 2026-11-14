@@ -62,7 +62,7 @@ Web PHP (chạy tốt trên **aaPanel**) để quản lý nhóm Telegram bằng 
 | Lệnh | Ai dùng | Tác dụng |
 |---|---|---|
 | `/help` `/rules` `/me` `/top` `/info` `/id` | Mọi người | Trợ giúp, nội quy, điểm của tôi, xếp hạng, thông tin, ID |
-| `/anxa` (reply) | Mọi người | Bảng giá ân xá, hình phạt của người được reply, nút mở trang Ân xá |
+| `/anxa` (reply) | Mọi người | Giá ân xá, hình phạt của người được reply, nút mở trang Ân xá |
 | `/warn [lý do]` `/unwarn` `/resetwarn` | Admin | Cảnh cáo (reply hoặc `@username` / ID) |
 | `/mute [30m\|2h\|1d] [lý do]` `/unmute` | Admin | Cấm chat |
 | `/kick` `/ban` `/unban` | Admin | Đuổi / cấm / gỡ cấm |
@@ -80,8 +80,7 @@ Chat riêng với bot: `/start`, `/login MÃ` (hoặc `/dangnhap`), `/link MÃ`,
 - Link API chứa thông tin đăng nhập ngân hàng: chỉ lưu trong database, **không bao giờ hiện lại** trên web và không nằm trong mã nguồn. Nút *Kiểm tra API* để thử kết nối (không cộng tiền).
 - Giao dịch sai nội dung / dưới mức tối thiểu nằm ở tab *Giao dịch NH* để **cộng tay** cho đúng tài khoản hoặc bỏ qua. Admin cộng / trừ số dư ở *Tài khoản web*.
 
-**🕊 Ân xá thành viên** (trang *Ân xá*): dùng số dư ví để **gỡ cấm chat / gỡ cấm khỏi nhóm / xoá cảnh cáo** cho mình hoặc cho người khác trong nhóm (tuỳ chọn). Admin đặt giá từng loại (0 = tắt). Bot thực hiện ngay trên Telegram, **thông báo trong nhóm** (sửa được nội dung, có biến `{member}` `{payer}` `{price}`…), nhắn riêng cho người được ân xá; gỡ cấm thì kèm **link mời dùng 1 lần**. Telegram báo lỗi → **tự hoàn tiền**. Mọi lượt ân xá được ghi vào Nhật ký và lịch sử ví.
-- **🕊 Ân xá toàn bộ**: người có từ 2 hình phạt (VD cấm chat + cảnh cáo, hoặc bị cấm + cảnh cáo) gỡ **tất cả trong 1 lần**, trừ tiền 1 lần, giá = tổng giá lẻ − % giảm (admin đặt, mặc định 10%). Bật/tắt và chỉnh % ở tab Ân xá.
+**🕊 Ân xá thành viên** (trang *Ân xá*): **1 giá duy nhất** (admin đặt, mặc định 50.000đ) để **gỡ toàn bộ hình phạt** đang có trong 1 lần: cấm chat hoặc cấm khỏi nhóm + xoá hết cảnh cáo. Ân xá cho mình hoặc cho người khác trong nhóm (tuỳ chọn). Bot thực hiện ngay trên Telegram, **thông báo trong nhóm** (sửa được nội dung, có biến `{member}` `{payer}` `{price}` `{kind}`…), nhắn riêng cho người được ân xá; gỡ cấm thì kèm **link mời dùng 1 lần**. Telegram báo lỗi → **tự hoàn tiền**. Mọi lượt ân xá được ghi vào Nhật ký và lịch sử ví.
 - **Ân xá theo ID Telegram**: người bị cấm *trước khi có web* (chưa có trong danh sách) → chọn nhóm, nhập ID, bot hỏi Telegram trạng thái thật (bị cấm / cấm chat) rồi cho ân xá. Trước khi trừ tiền bot luôn kiểm tra lại trên Telegram, hình phạt đã được gỡ thì không trừ tiền.
 
 ## Yêu cầu

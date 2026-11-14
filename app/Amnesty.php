@@ -2,7 +2,7 @@
 defined('APP') or exit;
 
 /**
- * Ân xá thành viên: trả VND từ ví để gỡ cấm chat / gỡ cấm khỏi nhóm / xoá cảnh cáo.
+ * Ân xá thành viên: trả 1 giá VND từ ví để gỡ toàn bộ hình phạt (cấm chat / cấm khỏi nhóm + cảnh cáo).
  * Trừ tiền trước, thực hiện trên Telegram, lỗi thì hoàn tiền tự động.
  */
 class Amnesty
@@ -24,29 +24,24 @@ class Amnesty
         $g = fn($k, $d) => Settings::get($k) ?? $d;
         return [
             'enabled' => $g('amnesty_enabled', '0') === '1',
-            'prices' => [
-                'unmute' => (int)$g('amnesty_price_unmute', '20000'),
-                'unban' => (int)$g('amnesty_price_unban', '50000'),
-                'unwarn' => (int)$g('amnesty_price_unwarn', '10000'),
-            ],
+            'price' => max(1000, (int)$g('amnesty_price', '50000')), // 1 giá duy nhất: gỡ toàn bộ hình phạt
             'allow_others' => $g('amnesty_allow_others', '1') === '1',
             'notify' => $g('amnesty_notify', '1') === '1',
             'invite' => $g('amnesty_invite', '1') === '1',
             'message' => (string)($g('amnesty_message', '') ?: self::DEFAULT_MESSAGE),
             'note' => (string)$g('amnesty_note', ''),
-            'combo' => $g('amnesty_combo', '1') === '1',
-            'combo_discount' => max(0, min(90, (int)$g('amnesty_combo_discount', '10'))),
         ];
     }
 
     public static function saveConfig(array $in): array
     {
-        if (isset($in['combo_discount'])) Settings::set('amnesty_combo_discount', (string)max(0, min(90, (int)$in['combo_discount'])));
-        foreach (['enabled', 'allow_others', 'notify', 'invite', 'combo'] as $k) {
+        foreach (['enabled', 'allow_others', 'notify', 'invite'] as $k) {
             if (array_key_exists($k, $in)) Settings::set("amnesty_$k", !empty($in[$k]) ? '1' : '0');
         }
-        foreach (array_keys(self::KINDS) as $k) {
-            if (isset($in['prices'][$k])) Settings::set("amnesty_price_$k", (string)max(0, min(1000000000, (int)$in['prices'][$k])));
+        if (isset($in['price'])) {
+            $p = (int)$in['price'];
+            if ($p < 1000) throw new HttpError('Giá ân xá tối thiểu 1.000đ');
+            Settings::set('amnesty_price', (string)min(1000000000, $p));
         }
         if (isset($in['message'])) {
             $m = trim((string)$in['message']);
@@ -56,41 +51,30 @@ class Amnesty
         return self::config();
     }
 
-    /** Các hình phạt đang có của 1 thành viên → [kind => mô tả] (chỉ loại đang bật giá > 0) */
+    /**
+     * Các hình phạt đang có → [kind => mô tả], theo thứ tự xử lý:
+     * thao tác Telegram trước (lỗi thì hoàn tiền toàn bộ), xoá cảnh cáo sau cùng.
+     */
     public static function punishments(array $m, ?array $cfg = null): array
     {
-        $cfg ??= self::config();
         $out = [];
-        $t = now();
-        if ($m['status'] === 'muted' && (!$m['muted_until'] || (int)$m['muted_until'] > $t)) {
+        if ($m['status'] === 'banned') $out['unban'] = 'Bị cấm khỏi nhóm';
+        if ($m['status'] === 'muted' && (!$m['muted_until'] || (int)$m['muted_until'] > now())) {
             $out['unmute'] = $m['muted_until'] ? 'Cấm chat đến ' . date('H:i d/m/Y', (int)$m['muted_until']) : 'Cấm chat vĩnh viễn';
         }
-        if ($m['status'] === 'banned') $out['unban'] = 'Bị cấm khỏi nhóm';
-        if ((int)$m['warns'] > 0 && $m['status'] !== 'banned') $out['unwarn'] = 'Đang có ' . (int)$m['warns'] . ' cảnh cáo';
-        return array_filter($out, fn($k) => ($cfg['prices'][$k] ?? 0) > 0, ARRAY_FILTER_USE_KEY);
+        if ((int)$m['warns'] > 0) $out['unwarn'] = 'Đang có ' . (int)$m['warns'] . ' cảnh cáo';
+        return $out;
     }
 
-    /**
-     * Gói "Ân xá toàn bộ": các hình phạt sẽ gỡ + giá (đã giảm). null nếu không áp dụng (dưới 2 hình phạt).
-     * Người bị cấm mà còn cảnh cáo: gỡ cấm + xoá cảnh cáo.
-     * @return array{parts: array<string,string>, full: int, price: int}|null
-     */
+    /** Ân xá toàn bộ: các hình phạt sẽ gỡ + giá. null nếu không có hình phạt nào. */
     public static function combo(array $m, ?array $cfg = null): ?array
     {
         $cfg ??= self::config();
-        if (!$cfg['combo']) return null;
         $parts = self::punishments($m, $cfg);
-        if ($m['status'] === 'banned' && (int)$m['warns'] > 0 && $cfg['prices']['unwarn'] > 0) $parts['unwarn'] = 'Đang có ' . (int)$m['warns'] . ' cảnh cáo';
-        if (count($parts) < 2) return null;
-        // Thứ tự: thao tác Telegram trước (lỗi thì hoàn tiền toàn bộ), xoá cảnh cáo sau cùng
-        uksort($parts, fn($a, $b) => array_search($a, ['unban', 'unmute', 'unwarn']) <=> array_search($b, ['unban', 'unmute', 'unwarn']));
-        $full = array_sum(array_map(fn($k) => $cfg['prices'][$k], array_keys($parts)));
-        $price = $full - intdiv($full * $cfg['combo_discount'], 100);
-        if ($price >= 1000) $price = (int)(ceil($price / 1000) * 1000); // làm tròn nghìn
-        return ['parts' => $parts, 'full' => $full, 'price' => min($price, $full)];
+        return $parts ? ['parts' => $parts, 'price' => $cfg['price']] : null;
     }
 
-    /** Nhãn gói toàn bộ, VD "Gỡ cấm chat + Xoá toàn bộ cảnh cáo" */
+    /** VD "Gỡ cấm chat + Xoá toàn bộ cảnh cáo" */
     public static function comboLabel(array $parts): string
     {
         return implode(' + ', array_map(fn($k) => self::KINDS[$k][1], array_keys($parts)));
@@ -182,7 +166,7 @@ class Amnesty
     {
         $cfg = self::config();
         if (!$cfg['enabled']) throw new HttpError('Tính năng ân xá đang tắt');
-        if (!isset(self::KINDS[$kind]) && $kind !== 'all') throw new HttpError('Loại ân xá không hợp lệ');
+        $kind = 'all'; // chỉ còn 1 gói: gỡ toàn bộ hình phạt
         $m = DB::get('SELECT * FROM tg_members WHERE id = ?', [$memberId]) ?: throw new HttpError('Không tìm thấy thành viên', 404);
         $group = Repo::group((int)$m['group_id']);
         if (!$group || !$group['active']) throw new HttpError('Nhóm không còn hoạt động');
@@ -190,22 +174,12 @@ class Amnesty
         // Kiểm tra lại trạng thái thật trên Telegram trước khi trừ tiền (tránh trả tiền cho hình phạt đã hết)
         if ($kind !== 'unwarn') $m = self::syncTelegram($group, $m['tg_user_id']) ?: $m;
 
-        if ($kind === 'all') {
-            $combo = self::combo($m, $cfg);
-            if (!$combo) throw new HttpError('Gói ân xá toàn bộ chỉ dùng khi thành viên có từ 2 hình phạt trở lên');
-            $parts = $combo['parts'];
-            $price = $combo['price'];
-            [, , $icon] = self::ALL;
-            $label = self::ALL[1];
-            $kindText = self::comboLabel($parts);
-        } else {
-            $list = self::punishments($m, $cfg);
-            if (!isset($list[$kind])) throw new HttpError('Thành viên không có hình phạt này (hoặc đã hết hạn)');
-            $parts = [$kind => $list[$kind]];
-            $price = $cfg['prices'][$kind];
-            [, $label, $icon] = self::KINDS[$kind];
-            $kindText = $label;
-        }
+        $combo = self::combo($m, $cfg);
+        if (!$combo) throw new HttpError('Thành viên không còn hình phạt nào (có thể đã hết hạn hoặc đã được gỡ)');
+        $parts = $combo['parts'];
+        $price = $combo['price'];
+        [, $label, $icon] = self::ALL;
+        $kindText = self::comboLabel($parts);
         $self = $u['tg_user_id'] && (string)$u['tg_user_id'] === (string)$m['tg_user_id'];
         $payer = $u['display_name'] ?: $u['username'];
         $who = Repo::name($m);
@@ -222,7 +196,7 @@ class Amnesty
             try {
                 $after = Moderation::perform(self::KINDS[$k][0], $group, [
                     'tgUserId' => $m['tg_user_id'], 'actor' => $payer . ' (ân xá)', 'source' => 'amnesty', 'actorTgId' => $u['tg_user_id'],
-                    'reason' => ($kind === 'all' ? 'Ân xá toàn bộ, trả phí ' : 'Ân xá trả phí ') . Wallet::money($price) . ($self ? ' (tự ân xá)' : ''), 'notify' => false,
+                    'reason' => 'Ân xá toàn bộ, trả phí ' . Wallet::money($price) . ($self ? ' (tự ân xá)' : ''), 'notify' => false,
                     'meta' => ['amnesty' => ['kind' => $kind, 'part' => $k, 'price' => $price, 'payer_id' => (int)$u['id'], 'payer' => $payer, 'self' => $self, 'before' => $desc]],
                 ]);
                 $done[$k] = $desc;
@@ -232,12 +206,11 @@ class Amnesty
                     $balance = Wallet::credit((int)$u['id'], $price, 'refund', "Hoàn tiền ân xá thất bại — $who", null, ['error' => mb_substr($e->getMessage(), 0, 200)]);
                     throw new HttpError('Không thực hiện được trên Telegram (' . $e->getMessage() . '). Đã hoàn lại ' . Wallet::money($price) . ' vào ví.');
                 }
-                // Phần sau lỗi (hiếm): hoàn tiền phần chưa làm theo giá lẻ
-                $back = min($price, (int)$cfg['prices'][$k]);
-                if ($back > 0) $balance = Wallet::credit((int)$u['id'], $back, 'refund', 'Hoàn tiền phần ân xá lỗi: ' . self::KINDS[$k][1] . " — $who");
+                // Phần sau lỗi (hiếm, chỉ là thao tác database): ghi nhật ký để admin xử lý
+                Repo::log((int)$group['id'], 'system', 'system', $m, 'Ân xá: lỗi khi ' . self::KINDS[$k][1] . ': ' . mb_substr($e->getMessage(), 0, 150));
             }
         }
-        if ($kind === 'all') $kindText = self::comboLabel($done);
+        $kindText = self::comboLabel($done);
 
         $api = Repo::apiForGroup($group);
         // 3. Gỡ cấm → tạo link mời dùng 1 lần cho thành viên
