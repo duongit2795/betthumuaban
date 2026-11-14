@@ -64,6 +64,10 @@ class Api
             'users' => 'users',
             'users/save' => 'userSave',
             'users/delete' => 'userDelete',
+            'rules' => 'rules',
+            'rules/save' => 'ruleSave',
+            'rules/delete' => 'ruleDelete',
+            'rules/toggle' => 'ruleToggle',
             'system' => 'system',
             'system/settings' => 'systemSettings',
             'system/check-update' => 'checkUpdate',
@@ -345,7 +349,7 @@ class Api
                 'allowed_updates' => ['message', 'edited_message', 'chat_member', 'my_chat_member', 'callback_query'],
                 'max_connections' => 40,
             ]);
-            $api->registerCommands();
+            $this->registerMenus($api);
             DB::run("UPDATE tg_bots SET status = 'running', last_error = NULL WHERE id = ?", [$bot['id']]);
         } catch (TelegramException $e) {
             DB::run("UPDATE tg_bots SET status = 'error', last_error = ? WHERE id = ?", [$e->getMessage(), $bot['id']]);
@@ -806,6 +810,74 @@ class Api
         $id = $this->int('id');
         if ($id === (int)$me['id']) fail('Không thể xoá chính mình');
         DB::run('DELETE FROM app_users WHERE id = ?', [$id]);
+        return [];
+    }
+
+    // ---- Lệnh tự tạo ----
+    private function registerMenus(Telegram $api): void
+    {
+        $mem = [];
+        $adm = [];
+        foreach (DB::all("SELECT * FROM tg_rules WHERE enabled = 1 AND show_in_menu = 1 AND trigger_type = 'command' AND group_id IS NULL") as $r) {
+            $c = json_decode($r['conditions'] ?: '{}', true) ?: [];
+            $item = ['command' => $r['trigger_value'], 'description' => mb_substr($r['name'], 0, 250)];
+            if (($c['who'] ?? 'all') !== 'admin') $mem[] = $item;
+            $adm[] = $item;
+        }
+        $api->registerCommands($mem, $adm);
+    }
+
+    private function rules(): array
+    {
+        Auth::requireAdmin();
+        $gid = $this->int('group_id');
+        $sql = 'SELECT r.*, g.title AS group_title FROM tg_rules r LEFT JOIN tg_groups g ON g.id = r.group_id';
+        $rows = $gid ? DB::all("$sql WHERE r.group_id IS NULL OR r.group_id = ? ORDER BY r.group_id IS NULL, r.priority DESC, r.id", [$gid])
+            : DB::all("$sql ORDER BY r.group_id IS NOT NULL, r.priority DESC, r.id");
+        return [
+            'rules' => array_map([Rules::class, 'row'], $rows),
+            'groups' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title']], DB::all('SELECT id, title FROM tg_groups ORDER BY active DESC, title')),
+        ];
+    }
+
+    private function ruleSave(): array
+    {
+        $u = Auth::requireAdmin();
+        $data = Rules::sanitize($this->in);
+        $id = $this->int('id');
+        if ($data['trigger_type'] === 'command') {
+            $dup = DB::get("SELECT id FROM tg_rules WHERE trigger_type = 'command' AND trigger_value = ? AND id <> ? AND ((group_id IS NULL AND ? IS NULL) OR group_id = ?)",
+                [$data['trigger_value'], $id, $data['group_id'], $data['group_id']]);
+            if ($dup) fail('Đã có lệnh /' . $data['trigger_value'] . ' trong phạm vi này');
+        }
+        if ($id) {
+            DB::get('SELECT id FROM tg_rules WHERE id = ?', [$id]) ?: fail('Không tìm thấy lệnh', 404);
+            DB::update('tg_rules', $data, 'id = ?', [$id]);
+        } else {
+            $data['created_at'] = now();
+            $id = DB::insert('tg_rules', $data);
+        }
+        Repo::log($data['group_id'], $u['username'], 'rule', null, 'Lưu lệnh: ' . $data['name']);
+        $errors = Rules::syncMenus();
+        return ['rule' => Rules::row(DB::get('SELECT r.*, g.title AS group_title FROM tg_rules r LEFT JOIN tg_groups g ON g.id = r.group_id WHERE r.id = ?', [$id])), 'menu_errors' => $errors];
+    }
+
+    private function ruleDelete(): array
+    {
+        $u = Auth::requireAdmin();
+        $r = DB::get('SELECT * FROM tg_rules WHERE id = ?', [$this->int('id')]) ?: fail('Không tìm thấy lệnh', 404);
+        DB::run('DELETE FROM tg_rules WHERE id = ?', [$r['id']]);
+        DB::run('DELETE FROM tg_rule_hits WHERE rule_id = ?', [$r['id']]);
+        Repo::log($r['group_id'] ? (int)$r['group_id'] : null, $u['username'], 'rule', null, 'Xoá lệnh: ' . $r['name']);
+        Rules::syncMenus();
+        return [];
+    }
+
+    private function ruleToggle(): array
+    {
+        Auth::requireAdmin();
+        DB::run('UPDATE tg_rules SET enabled = ? WHERE id = ?', [$this->in('enabled') ? 1 : 0, $this->int('id')]);
+        Rules::syncMenus();
         return [];
     }
 

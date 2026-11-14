@@ -160,21 +160,28 @@ class BotHandler
             }
         }
 
-        // Đếm tin nhắn & điểm tương tác
-        $hasMedia = (bool)array_intersect(array_keys($msg), ['photo', 'video', 'voice', 'audio', 'document', 'sticker', 'animation', 'video_note']);
-        $upd = ['messages' => (int)$member['messages'] + 1, 'last_active' => $t];
+        // Lệnh tự tạo chạy trước (ưu tiên hơn lệnh có sẵn trùng tên)
         $isCommand = str_starts_with($text, '/');
-        if ($s['points_enabled'] && !$isCommand && empty($from['is_bot'])
-            && (mb_strlen(trim($text)) >= $s['points_min_length'] || $hasMedia)
-            && $t - (int)$member['last_point_at'] >= $s['points_cooldown']) {
-            $upd['points'] = (int)$member['points'] + (int)$s['points_per_message'];
-            $upd['last_point_at'] = $t;
-        }
-        if ($member['status'] === 'left') $upd['status'] = 'member';
-        DB::update('tg_members', $upd, 'id = ?', [$member['id']]);
-        Repo::stat($gid, 'messages');
+        $flags = Rules::run($this->api, $this->botUsername, $this->botTgId, $group, $msg, $member, $isAdmin, $text,
+            fn(int $uid) => $this->isAdmin($group, $uid));
 
-        if ($isCommand && $s['commands_enabled']) {
+        // Đếm tin nhắn & điểm tương tác (tin bị lệnh tự tạo xoá thì không tính)
+        $member = DB::get('SELECT * FROM tg_members WHERE id = ?', [$member['id']]);
+        if (!($flags & Rules::DELETED)) {
+            $hasMedia = (bool)array_intersect(array_keys($msg), ['photo', 'video', 'voice', 'audio', 'document', 'sticker', 'animation', 'video_note']);
+            $upd = ['messages' => (int)$member['messages'] + 1, 'last_active' => $t];
+            if ($s['points_enabled'] && !$isCommand && empty($from['is_bot'])
+                && (mb_strlen(trim($text)) >= $s['points_min_length'] || $hasMedia)
+                && $t - (int)$member['last_point_at'] >= $s['points_cooldown']) {
+                $upd['points'] = (int)$member['points'] + (int)$s['points_per_message'];
+                $upd['last_point_at'] = $t;
+            }
+            if ($member['status'] === 'left') $upd['status'] = 'member';
+            DB::update('tg_members', $upd, 'id = ?', [$member['id']]);
+            Repo::stat($gid, 'messages');
+        }
+
+        if ($isCommand && $s['commands_enabled'] && !($flags & Rules::HANDLED)) {
             $member = DB::get('SELECT * FROM tg_members WHERE id = ?', [$member['id']]);
             $this->onCommand($group, $s, $msg, $member, $isAdmin, $text);
         }
@@ -300,6 +307,8 @@ class BotHandler
                 case 'help':
                 case 'start':
                     $t = "📖 <b>Lệnh thành viên</b>\n/rules – Nội quy\n/me – Điểm của bạn\n/top – Bảng xếp hạng\n/info – Thông tin (reply)\n/id – Xem ID";
+                    $custom = Rules::helpLines($gid, $isAdmin);
+                    if ($custom) $t .= "\n\n✨ <b>Lệnh riêng của nhóm</b>\n" . implode("\n", $custom);
                     if ($isAdmin) $t .= "\n\n🛡 <b>Lệnh quản trị</b> (reply tin nhắn hoặc @username/ID)\n/warn [lý do] · /unwarn · /resetwarn\n/mute [30m|2h|1d] [lý do] · /unmute\n/kick [lý do] · /ban [lý do] · /unban\n/del · /pin · /unpin\n/addpoints &lt;số&gt; [lý do]\n/setrules &lt;nội dung&gt;\n/reload – Làm mới danh sách admin";
                     $this->reply($msg, $t);
                     return;

@@ -15,6 +15,13 @@ Web PHP (chạy tốt trên **aaPanel**) để quản lý nhóm Telegram bằng 
 - **Cài đặt từng nhóm**: lời chào / tạm biệt (có biến `{mention} {name} {group}`…), nội quy, xoá tin hệ thống,
   chặn link (có danh sách tên miền cho phép), chặn forward, chống flood, từ cấm, khoá ảnh/video/sticker/GIF/tệp/âm thanh/bình chọn,
   giới hạn cảnh cáo + hành động tự động (mute/kick/ban), cấu hình điểm (điểm mỗi tin, giãn cách, độ dài tối thiểu, thưởng mời bạn)
+- **Lệnh tự tạo** (Khi… Nếu… Thì…), dùng chung mọi nhóm hoặc riêng từng nhóm:
+  - **Khi**: gõ `/lệnh`, tin chứa từ khoá, đúng nguyên câu, bắt đầu bằng, hoặc regex
+  - **Nếu**: ai được dùng (mọi người / chỉ admin / không phải admin), điểm tối thiểu, bắt buộc reply, thời gian chờ mỗi người, tỉ lệ thành công %
+  - **Thì** (nhiều hành động nối tiếp): trả lời, gửi tin, cộng/trừ điểm, xoá, ghim, cảnh cáo, cấm chat, đuổi, cấm, gỡ cấm. Mỗi hành động áp dụng cho người gửi hoặc người được reply
+  - Biến: `{mention} {name} {points} {rank} {args} {target_mention} {target_points} {group} {count} {random} {date} {time}`
+  - Mẫu dựng sẵn: điểm danh hằng ngày, cảm ơn tặng điểm, quay số may mắn, tự trả lời từ khoá, chặn từ khoá + cảnh cáo, lệnh admin xử lý spam nhanh
+  - Tự hiện trong menu lệnh của Telegram, lệnh tự tạo được ưu tiên hơn lệnh có sẵn nếu trùng tên
 - **Nhật ký** mọi hành động (từ web, từ lệnh bot, tự động)
 - **Tài khoản web**: tạo/sửa/khoá, phân quyền admin / thành viên
 - **Hệ thống**: cài đặt chung, **Kiểm tra & Cập nhật từ GitHub**, link cron

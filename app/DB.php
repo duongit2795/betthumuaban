@@ -6,7 +6,7 @@ class DB
 {
     private static ?PDO $pdo = null;
     private static string $driver = 'sqlite';
-    const SCHEMA_VERSION = 1;
+    const SCHEMA_VERSION = 2;
 
     public static function connect(?array $c = null): PDO
     {
@@ -177,6 +177,28 @@ class DB
                 target_name $str,
                 detail TEXT,
                 created_at INT NOT NULL
+            )",
+            "CREATE TABLE IF NOT EXISTS tg_rules (
+                id $pk,
+                group_id INT,
+                name $str NOT NULL,
+                trigger_type VARCHAR(16) NOT NULL,
+                trigger_value TEXT NOT NULL,
+                conditions TEXT,
+                actions TEXT,
+                enabled INT NOT NULL DEFAULT 1,
+                show_in_menu INT NOT NULL DEFAULT 0,
+                priority INT NOT NULL DEFAULT 0,
+                uses INT NOT NULL DEFAULT 0,
+                last_used INT,
+                created_at INT NOT NULL
+            )",
+            "CREATE TABLE IF NOT EXISTS tg_rule_hits (
+                rule_id INT NOT NULL,
+                group_id INT NOT NULL,
+                tg_user_id $big NOT NULL,
+                last_at INT NOT NULL,
+                PRIMARY KEY (rule_id, group_id, tg_user_id)
             )",
             "CREATE TABLE IF NOT EXISTS daily_stats (
                 group_id INT NOT NULL,

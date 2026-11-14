@@ -22,6 +22,7 @@ ignore_user_abort(true);
 if (!is_array($update)) exit;
 try {
     DB::connect();
+    if ((int)(Settings::get('schema_version') ?? 0) < DB::SCHEMA_VERSION) DB::migrate();
     $bot = DB::get('SELECT * FROM tg_bots WHERE id = ? AND enabled = 1', [$botId]);
     if (!$bot) exit;
     (new BotHandler($bot))->handle($update);

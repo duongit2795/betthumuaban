@@ -84,7 +84,8 @@ class Telegram
         }
     }
 
-    public function registerCommands(): void
+    /** @return array{0: array, 1: array} [lệnh thành viên, lệnh admin] */
+    public static function baseCommands(): array
     {
         $member = [
             ['command' => 'help', 'description' => 'Danh sách lệnh'],
@@ -107,8 +108,20 @@ class Telegram
             ['command' => 'addpoints', 'description' => 'Cộng/trừ điểm: /addpoints 10'],
             ['command' => 'setrules', 'description' => 'Đặt nội quy nhóm'],
         ]);
-        $this->tryCall('setMyCommands', ['commands' => $member, 'scope' => ['type' => 'all_group_chats']]);
-        $this->tryCall('setMyCommands', ['commands' => $admin, 'scope' => ['type' => 'all_chat_administrators']]);
+        return [$member, $admin];
+    }
+
+    /** Đăng ký menu lệnh; $memberExtra/$adminExtra là lệnh tự tạo dùng chung mọi nhóm */
+    public function registerCommands(array $memberExtra = [], array $adminExtra = []): void
+    {
+        [$member, $admin] = self::baseCommands();
+        $merge = function (array $a, array $b) {
+            $o = [];
+            foreach (array_merge($a, $b) as $c) $o[$c['command']] = $c;
+            return array_slice(array_values($o), 0, 100);
+        };
+        $this->tryCall('setMyCommands', ['commands' => $merge($member, $memberExtra), 'scope' => ['type' => 'all_group_chats']]);
+        $this->tryCall('setMyCommands', ['commands' => $merge($admin, $adminExtra), 'scope' => ['type' => 'all_chat_administrators']]);
         $this->tryCall('setMyCommands', ['commands' => [
             ['command' => 'start', 'description' => 'Bắt đầu'],
             ['command' => 'link', 'description' => 'Liên kết tài khoản web: /link MÃ'],

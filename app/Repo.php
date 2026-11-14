@@ -214,6 +214,8 @@ class Repo
         DB::run('DELETE FROM tg_members WHERE group_id = ?', [$id]);
         DB::run('DELETE FROM app_logs WHERE group_id = ?', [$id]);
         DB::run('DELETE FROM daily_stats WHERE group_id = ?', [$id]);
+        DB::run('DELETE FROM tg_rules WHERE group_id = ?', [$id]);
+        DB::run('DELETE FROM tg_rule_hits WHERE group_id = ?', [$id]);
         DB::run('DELETE FROM tg_groups WHERE id = ?', [$id]);
     }
 

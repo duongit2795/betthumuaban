@@ -50,6 +50,7 @@
     external: '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/>',
     key: '<circle cx="7.5" cy="15.5" r="4.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/>',
     database: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
+    terminal: '<path d="m4 17 6-6-6-6M12 19h8"/>',
     globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
   };
   const icon = (n, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24" aria-hidden="true">${P[n] || ''}</svg>`;
@@ -103,7 +104,7 @@
     join: ['Vào nhóm', 'plus', 'green'], leave: ['Rời nhóm', 'minus', ''], send: ['Gửi tin', 'send', 'blue'],
     settings: ['Cài đặt', 'settings', ''], bot_added: ['Thêm bot vào nhóm', 'bot', 'green'], bot_removed: ['Bot rời nhóm', 'bot', 'red'],
     bot_add: ['Thêm bot', 'bot', 'blue'], bot_delete: ['Xoá bot', 'bot', 'red'], bot_on: ['Bật bot', 'power', 'green'], bot_off: ['Tắt bot', 'power', ''],
-    update: ['Cập nhật hệ thống', 'download', 'blue'], system: ['Hệ thống', 'settings', ''], pin: ['Ghim tin', 'pin', 'blue'], unpin: ['Bỏ ghim', 'pin', ''],
+    rule: ['Lệnh tự tạo', 'terminal', 'blue'], update: ['Cập nhật hệ thống', 'download', 'blue'], system: ['Hệ thống', 'settings', ''], pin: ['Ghim tin', 'pin', 'blue'], unpin: ['Bỏ ghim', 'pin', ''],
   };
 
   // ================= State & API =================
@@ -291,7 +292,7 @@
     if (S.user.role === 'admin') {
       return {
         tab: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/logs', 'list', 'Nhật ký'], ['/more', 'grid', 'Thêm']],
-        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ['/account', 'user', 'Tài khoản']],
+        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh tự tạo'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ['/account', 'user', 'Tài khoản']],
       };
     }
     const m = [['/', 'star', 'Của tôi'], ['/rank', 'trophy', 'Xếp hạng'], ['/account', 'user', 'Tài khoản']];
@@ -317,7 +318,7 @@
     }
     const items = navItems();
     const path = current();
-    const isActive = (p) => (p === '/' ? path === '/' : path === p || path.startsWith(p + '/') || (p === '/groups' && path.startsWith('/group/')) || (p === '/more' && ['/users', '/system', '/account', '/me'].some((x) => path.startsWith(x))));
+    const isActive = (p) => (p === '/' ? path === '/' : path === p || path.startsWith(p + '/') || (p === '/groups' && path.startsWith('/group/')) || (p === '/more' && ['/users', '/system', '/account', '/me', '/rules'].some((x) => path.startsWith(x))));
     $('#tabbar').innerHTML = items.tab.map(([p, ic, t]) => `<a href="#${p}" class="${isActive(p) ? 'active' : ''}">${icon(ic)}<span>${t}</span></a>`).join('');
     $('#sidebar').innerHTML = `<div class="brand"><img src="assets/icon.svg" alt="">${esc(S.site)}</div>`
       + items.side.map(([p, ic, t]) => `<a href="#${p}" class="nav ${isActive(p) && !(p === '/more') ? 'active' : ''}">${icon(ic)}${t}</a>`).join('')
@@ -515,7 +516,7 @@
   async function viewGroup(id, tab) {
     const d = await api('group', undefined, { query: { id } });
     const g = d.group;
-    const tabs = [['overview', 'Tổng quan'], ['members', 'Thành viên'], ['settings', 'Cài đặt'], ['send', 'Gửi tin'], ['logs', 'Nhật ký']];
+    const tabs = [['overview', 'Tổng quan'], ['members', 'Thành viên'], ['settings', 'Cài đặt'], ['rules', 'Lệnh'], ['send', 'Gửi tin'], ['logs', 'Nhật ký']];
     const tabsHtml = `<div class="tabs">${tabs.map(([k, t]) => `<button data-tab="${k}" class="${k === tab ? 'active' : ''}">${t}</button>`).join('')}</div>`;
     let body = '';
     let mount = () => {};
@@ -523,6 +524,7 @@
     else if (tab === 'settings') ({ body, mount } = groupSettings(d));
     else if (tab === 'send') ({ body, mount } = groupSend(d));
     else if (tab === 'logs') ({ body, mount } = groupLogs(d));
+    else if (tab === 'rules') ({ body, mount } = rulesBlock(g.id));
     else ({ body, mount } = groupOverview(d));
     return {
       title: g.title,
@@ -920,12 +922,264 @@
     };
   }, { admin: true, title: 'Bot' });
 
+  // ================= Admin: Lệnh tự tạo =================
+  const TRIGGER = {
+    command: ['Lệnh /', 'Người dùng gõ lệnh, VD: /diemdanh'],
+    contains: ['Chứa từ', 'Tin nhắn có chứa từ khoá (nhiều từ cách nhau bằng |)'],
+    exact: ['Đúng câu', 'Tin nhắn đúng nguyên câu (không phân biệt hoa thường)'],
+    starts: ['Bắt đầu bằng', 'Tin nhắn bắt đầu bằng cụm từ, phần sau là {args}'],
+    regex: ['Regex', 'Biểu thức chính quy nâng cao, nhóm (…) đầu tiên là {args}'],
+  };
+  const RACT = {
+    reply: ['💬 Trả lời tin nhắn', true],
+    send: ['📢 Gửi tin vào nhóm', false],
+    points: ['⭐ Cộng / trừ điểm', true],
+    delete: ['🗑 Xoá tin nhắn', true],
+    pin: ['📌 Ghim tin nhắn', true],
+    warn: ['⚠️ Cảnh cáo', true],
+    mute: ['🔇 Cấm chat', true],
+    unmute: ['🔊 Bỏ cấm chat', true],
+    kick: ['👢 Đuổi khỏi nhóm', true],
+    ban: ['⛔ Cấm', true],
+    unban: ['✅ Gỡ cấm', true],
+  };
+  const VARS = ['{mention}', '{name}', '{points}', '{rank}', '{args}', '{target_mention}', '{target_points}', '{group}', '{count}', '{random}', '{date}', '{time}'];
+  const RULE_TEMPLATES = [
+    { icon: '📅', title: 'Điểm danh hằng ngày', desc: '/diemdanh · +5 điểm, mỗi người 1 lần/ngày',
+      rule: { name: 'Điểm danh hằng ngày', trigger_type: 'command', trigger_value: 'diemdanh', show_in_menu: 1, conditions: { who: 'all', cooldown: 86400 },
+        actions: [{ type: 'points', who: 'sender', amount: 5 }, { type: 'reply', who: 'sender', text: '✅ {mention} điểm danh thành công! <b>+5 điểm</b>\nTổng: {points} điểm · Hạng #{rank}' }] } },
+    { icon: '💖', title: 'Cảm ơn tặng điểm', desc: 'Reply rồi gõ /camon · người kia +1 điểm',
+      rule: { name: 'Cảm ơn thành viên', trigger_type: 'command', trigger_value: 'camon', show_in_menu: 1, conditions: { who: 'all', require_reply: true, cooldown: 60 },
+        actions: [{ type: 'points', who: 'target', amount: 1 }, { type: 'reply', who: 'sender', text: '💖 {name} đã cảm ơn {target_mention}! <b>+1 điểm</b> (tổng {target_points})' }] } },
+    { icon: '🎰', title: 'Quay số may mắn', desc: '/quay · 30% trúng +10 điểm, 1 giờ/lần',
+      rule: { name: 'Quay số may mắn', trigger_type: 'command', trigger_value: 'quay', show_in_menu: 1, conditions: { who: 'all', cooldown: 3600, chance: 30 },
+        actions: [{ type: 'points', who: 'sender', amount: 10 }, { type: 'reply', who: 'sender', text: '🎉 Chúc mừng {mention} quay trúng <b>+10 điểm</b>! Tổng: {points}' }] } },
+    { icon: '💬', title: 'Tự trả lời từ khoá', desc: 'Ai hỏi "giá" → bot trả lời sẵn',
+      rule: { name: 'Trả lời hỏi giá', trigger_type: 'contains', trigger_value: 'giá bao nhiêu|bảng giá|báo giá', conditions: { who: 'all', cooldown: 30 },
+        actions: [{ type: 'reply', who: 'sender', text: '💬 Chào {name}! Bảng giá xem tại tin nhắn ghim của nhóm nhé.' }] } },
+    { icon: '🚫', title: 'Chặn từ khoá + cảnh cáo', desc: 'Xoá tin và cảnh cáo người gửi',
+      rule: { name: 'Chặn lừa đảo', trigger_type: 'contains', trigger_value: 'lừa đảo|nhận tiền miễn phí', conditions: { who: 'member' },
+        actions: [{ type: 'delete', who: 'sender' }, { type: 'warn', who: 'sender', reason: 'Nội dung cấm' }] } },
+    { icon: '🛡', title: 'Lệnh admin nhanh', desc: 'Reply /spam → xoá tin + cấm chat 1 ngày',
+      rule: { name: 'Xử lý spam nhanh', trigger_type: 'command', trigger_value: 'spam', show_in_menu: 1, conditions: { who: 'admin', require_reply: true },
+        actions: [{ type: 'delete', who: 'target' }, { type: 'mute', who: 'target', minutes: 1440, reason: 'Spam' }] } },
+  ];
+
+  const triggerChip = (r) => r.trigger_type === 'command'
+    ? `<span class="badge blue mono">/${esc(r.trigger_value)}</span>`
+    : `<span class="badge">${TRIGGER[r.trigger_type][0]}: ${esc(r.trigger_value.length > 28 ? r.trigger_value.slice(0, 28) + '…' : r.trigger_value)}</span>`;
+
+  function ruleSummary(r) {
+    const c = r.conditions || {};
+    const ifs = [];
+    if (c.who === 'admin') ifs.push('chỉ admin');
+    if (c.who === 'member') ifs.push('chỉ thành viên');
+    if (c.min_points) ifs.push(`≥ ${c.min_points} điểm`);
+    if (c.require_reply) ifs.push('phải reply');
+    if (c.cooldown) ifs.push('chờ ' + humanSec(c.cooldown));
+    if (c.chance && c.chance < 100) ifs.push(c.chance + '% may mắn');
+    const thens = (r.actions || []).map((a) => {
+      const t = (RACT[a.type] || [a.type])[0].replace(/^\S+\s/, '');
+      const who = a.who === 'target' ? ' (người được reply)' : '';
+      if (a.type === 'points') return `${a.amount > 0 ? '+' : ''}${a.amount} điểm${who}`;
+      if (a.type === 'mute') return `cấm chat ${a.minutes ? humanSec(a.minutes * 60) : 'vĩnh viễn'}${who}`;
+      return t.toLowerCase() + (['reply', 'send'].includes(a.type) ? '' : who);
+    });
+    return `<b>Nếu</b> ${ifs.length ? ifs.join(', ') : 'bất kỳ ai'} → <b>Thì</b> ${thens.join(', ')}`;
+  }
+  function humanSec(s) {
+    if (s % 86400 === 0) return s / 86400 + ' ngày';
+    if (s % 3600 === 0) return s / 3600 + ' giờ';
+    if (s % 60 === 0) return s / 60 + ' phút';
+    return s + ' giây';
+  }
+
+  function rulesBlock(groupId) {
+    const body = `
+      <div class="row between" style="margin-bottom:12px"><div class="small muted grow">${groupId ? 'Lệnh riêng của nhóm và lệnh dùng chung mọi nhóm' : 'Tự tạo lệnh theo kiểu <b>Khi… Nếu… Thì…</b>'}</div>
+        <button class="btn primary sm" data-newrule>${icon('plus', 'sm')}Tạo lệnh</button></div>
+      <div id="rlist">${loading()}</div>`;
+    const mount = (root) => {
+      let groups = [];
+      const load = async () => {
+        const d = await api('rules', undefined, { query: groupId ? { group_id: groupId } : {} });
+        groups = d.groups;
+        $('#rlist', root).innerHTML = d.rules.length ? `<div class="list">${d.rules.map((r) => `
+          <div class="list-item" style="align-items:flex-start">
+            <button class="grow" data-rule='${esc(JSON.stringify(r))}' style="all:unset;cursor:pointer;flex:1;min-width:0">
+              <div class="row wrap" style="gap:6px">${triggerChip(r)}<b class="ellipsis">${esc(r.name)}</b></div>
+              <div class="xs text-2" style="margin-top:4px">${ruleSummary(r)}</div>
+              <div class="xs muted" style="margin-top:3px">${r.group_id ? esc(r.group_title || 'Nhóm') : 'Tất cả nhóm'} · ${num(r.uses)} lượt dùng${r.last_used ? ' · ' + ago(r.last_used) : ''}</div>
+            </button>
+            <label class="switch" style="margin-top:2px"><input type="checkbox" data-rtoggle="${r.id}" ${r.enabled ? 'checked' : ''}><span></span></label>
+          </div>`).join('')}</div>`
+          : `<div class="card">${empty('terminal', 'Chưa có lệnh nào. Nhấn <b>Tạo lệnh</b> để bắt đầu từ mẫu có sẵn.')}</div>`;
+      };
+      const pickTemplate = () => sheet(`<div class="sheet-head"><h2>Tạo lệnh mới</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
+        <button class="list-item card" data-tpl="-1" style="border-radius:14px;margin-bottom:10px;border:1px solid var(--border)"><span style="font-size:22px">✏️</span><div class="grow"><b>Tạo từ đầu</b><div class="xs muted">Tự thiết lập mọi thứ</div></div>${icon('chevron')}</button>
+        <div class="small muted" style="margin:14px 2px 8px">Hoặc chọn mẫu có sẵn</div>
+        <div class="list">${RULE_TEMPLATES.map((t, i) => `<button class="list-item" data-tpl="${i}"><span style="font-size:22px">${t.icon}</span><div class="grow"><b>${t.title}</b><div class="xs muted">${esc(t.desc)}</div></div>${icon('chevron')}</button>`).join('')}</div>`,
+      (el, close) => el.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-tpl]');
+        if (!b) return;
+        close();
+        const i = Number(b.dataset.tpl);
+        const base = i < 0 ? { trigger_type: 'command', trigger_value: '', name: '', conditions: { who: 'all' }, actions: [{ type: 'reply', who: 'sender', text: '' }], show_in_menu: 1 } : JSON.parse(JSON.stringify(RULE_TEMPLATES[i].rule));
+        base.enabled = 1;
+        base.group_id = groupId || null;
+        ruleEditor(base, groups, load);
+      }));
+      root.addEventListener('click', (e) => {
+        if (e.target.closest('[data-newrule]')) pickTemplate();
+        const r = e.target.closest('[data-rule]');
+        if (r) ruleEditor(JSON.parse(r.dataset.rule), groups, load);
+      });
+      root.addEventListener('change', async (e) => {
+        const t = e.target.closest('[data-rtoggle]');
+        if (!t) return;
+        try { await api('rules/toggle', { id: t.dataset.rtoggle, enabled: t.checked }); toast(t.checked ? 'Đã bật lệnh' : 'Đã tắt lệnh'); } catch (err) { toast(err.message, 'err'); }
+      });
+      load();
+    };
+    return { body, mount };
+  }
+
+  function ruleEditor(rule, groups, onSaved) {
+    const r = JSON.parse(JSON.stringify(rule));
+    r.conditions = { who: 'all', min_points: 0, require_reply: false, cooldown: 0, chance: 100, ...(r.conditions || {}) };
+    const cd = r.conditions.cooldown || 0;
+    const unit = cd && cd % 86400 === 0 ? 86400 : cd && cd % 3600 === 0 ? 3600 : cd && cd % 60 === 0 ? 60 : 1;
+    let lastText = null;
+
+    const actionHtml = (a, i) => {
+      const [label, hasWho] = RACT[a.type] || ['?', false];
+      let f = '';
+      if (hasWho) f += `<div class="segmented" style="margin-top:10px"><button type="button" data-aw="${i}" data-v="sender" class="${a.who !== 'target' ? 'active' : ''}">${a.type === 'reply' ? 'Reply người gửi' : 'Người gửi lệnh'}</button><button type="button" data-aw="${i}" data-v="target" class="${a.who === 'target' ? 'active' : ''}">Người được reply</button></div>`;
+      if (['reply', 'send'].includes(a.type)) f += `<textarea class="input" data-af="${i}" data-k="text" style="margin-top:10px;min-height:80px" placeholder="Nội dung… dùng biến như {mention}, {points}">${esc(a.text || '')}</textarea>`;
+      if (a.type === 'points') f += `<div class="row" style="margin-top:10px"><input class="input" type="number" data-af="${i}" data-k="amount" value="${a.amount ?? 1}" style="text-align:center;font-weight:700"><span class="small muted nowrap">điểm (âm = trừ)</span></div>`;
+      if (a.type === 'mute') f += `<div class="row" style="margin-top:10px"><input class="input" type="number" min="0" data-af="${i}" data-k="minutes" value="${a.minutes ?? 60}"><span class="small muted nowrap">phút (0 = vĩnh viễn)</span></div>`;
+      if (['warn', 'mute', 'kick', 'ban'].includes(a.type)) f += `<input class="input" data-af="${i}" data-k="reason" value="${esc(a.reason || '')}" placeholder="Lý do (tuỳ chọn)" style="margin-top:10px">`;
+      return `<div class="card card-pad" style="box-shadow:none;margin-bottom:10px;background:var(--surface-2)">
+        <div class="row"><span class="badge blue">${i + 1}</span><select class="input" data-at="${i}" style="height:38px;flex:1">${Object.entries(RACT).map(([k, v]) => `<option value="${k}" ${k === a.type ? 'selected' : ''}>${v[0]}</option>`).join('')}</select>
+        <button type="button" class="btn icon sm ghost" data-adel="${i}" aria-label="Xoá">${icon('trash', 'sm')}</button></div>${f}</div>`;
+    };
+
+    const html = () => {
+      const c = r.conditions;
+      const isCmd = r.trigger_type === 'command';
+      const usesTarget = r.actions.some((a) => a.who === 'target');
+      return `
+      <div class="sheet-head"><h2>${r.id ? 'Sửa lệnh' : 'Tạo lệnh'}</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
+      <form id="fr" class="stack-lg">
+        <div class="stack">
+          <div class="row" style="gap:8px"><span class="badge blue">KHI</span><b>Kích hoạt khi</b></div>
+          <div class="chips" style="flex-wrap:wrap">${Object.entries(TRIGGER).map(([k, v]) => `<button type="button" class="chip ${k === r.trigger_type ? 'active' : ''}" data-tt="${k}">${v[0]}</button>`).join('')}</div>
+          <label class="field">${isCmd ? `<div class="input-icon"><span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);font-weight:700;color:var(--muted)">/</span><input class="input mono" name="trigger_value" value="${esc(r.trigger_value)}" placeholder="diemdanh" style="padding-left:28px" autocapitalize="off" required></div>`
+            : `<input class="input" name="trigger_value" value="${esc(r.trigger_value)}" placeholder="${r.trigger_type === 'regex' ? '^gia (\\w+)$' : 'từ khoá 1|từ khoá 2'}" required>`}
+            <div class="hint">${TRIGGER[r.trigger_type][1]}${isCmd ? '. Chỉ chữ thường không dấu, số, dấu _' : ''}</div></label>
+          <label class="field"><span class="lbl">Tên / mô tả lệnh</span><input class="input" name="name" value="${esc(r.name || '')}" placeholder="VD: Điểm danh hằng ngày" maxlength="120"></label>
+          <label class="field"><span class="lbl">Áp dụng cho</span><select class="input" name="group_id"><option value="">Tất cả nhóm</option>${groups.map((g) => `<option value="${g.id}" ${g.id === r.group_id ? 'selected' : ''}>${esc(g.title)}</option>`).join('')}</select></label>
+        </div>
+
+        <div class="stack">
+          <div class="row" style="gap:8px"><span class="badge amber">NẾU</span><b>Điều kiện</b></div>
+          <div class="field"><span class="lbl">Ai được dùng</span><div class="segmented" id="who">${[['all', 'Mọi người'], ['admin', 'Chỉ admin'], ['member', 'Không phải admin']].map(([k, t]) => `<button type="button" data-who="${k}" class="${c.who === k ? 'active' : ''}">${t}</button>`).join('')}</div></div>
+          <div class="grid grid-2">
+            <label class="field"><span class="lbl">Điểm tối thiểu</span><input class="input" type="number" min="0" name="min_points" value="${c.min_points || 0}"></label>
+            <label class="field"><span class="lbl">Tỉ lệ thành công (%)</span><input class="input" type="number" min="1" max="100" name="chance" value="${c.chance || 100}"></label>
+          </div>
+          <div class="field"><span class="lbl">Thời gian chờ mỗi người</span><div class="row"><input class="input" type="number" min="0" name="cd_val" value="${cd / unit}"><select class="input" name="cd_unit" style="width:auto">${[[1, 'giây'], [60, 'phút'], [3600, 'giờ'], [86400, 'ngày']].map(([v, t]) => `<option value="${v}" ${v === unit ? 'selected' : ''}>${t}</option>`).join('')}</select></div><div class="hint">0 = không giới hạn. VD điểm danh: 1 ngày</div></div>
+          <div class="card" style="box-shadow:none">${sw('require_reply', c.require_reply, 'Bắt buộc reply tin nhắn', usesTarget ? 'Nên bật vì có hành động lên "người được reply"' : 'Phải reply tin của ai đó mới chạy')}</div>
+        </div>
+
+        <div class="stack">
+          <div class="row" style="gap:8px"><span class="badge green">THÌ</span><b>Hành động (chạy lần lượt)</b></div>
+          <div id="acts">${r.actions.map(actionHtml).join('')}</div>
+          <button type="button" class="btn soft block" data-addact>${icon('plus', 'sm')}Thêm hành động</button>
+          <div class="field"><span class="lbl">Biến dùng trong nội dung (chạm để chèn)</span><div class="chips" style="flex-wrap:wrap">${VARS.map((v) => `<button type="button" class="chip mono" data-var="${v}" style="height:30px;font-size:12px">${v}</button>`).join('')}</div>
+          <div class="hint">{args} = phần chữ gõ sau lệnh · {target_…} = người được reply · hỗ trợ HTML &lt;b&gt; &lt;i&gt; &lt;a&gt;</div></div>
+        </div>
+
+        <div class="card" style="box-shadow:none">
+          ${sw('enabled', r.enabled !== 0, 'Bật lệnh')}
+          ${isCmd ? sw('show_in_menu', !!r.show_in_menu, 'Hiện trong menu lệnh Telegram', 'Hiện khi gõ "/" trong nhóm') : ''}
+        </div>
+        ${r.actions.some((a) => ['kick', 'ban', 'mute', 'warn'].includes(a.type) && a.who === 'target') && c.who !== 'admin' ? `<div class="alert warn">${icon('alert')}<div class="small">Lệnh có hành động xử phạt người khác nhưng <b>ai cũng dùng được</b>. Nên chọn "Chỉ admin".</div></div>` : ''}
+        <div class="grid ${r.id ? 'grid-2' : ''}">${r.id ? `<button type="button" class="btn soft-danger" data-rdel>${icon('trash', 'sm')}Xoá</button>` : ''}<button class="btn primary" style="height:46px">${icon('check', 'sm')}Lưu lệnh</button></div>
+      </form>`;
+    };
+
+    // Đồng bộ giá trị form vào r trước khi vẽ lại
+    const collect = (el) => {
+      const f = $('#fr', el);
+      if (!f) return;
+      r.trigger_value = f.trigger_value.value;
+      r.name = f.name.value;
+      r.group_id = f.group_id.value ? Number(f.group_id.value) : null;
+      r.conditions.min_points = Number(f.min_points.value) || 0;
+      r.conditions.chance = Number(f.chance.value) || 100;
+      r.conditions.cooldown = (Number(f.cd_val.value) || 0) * Number(f.cd_unit.value);
+      r.conditions.require_reply = f.require_reply.checked;
+      r.enabled = f.enabled.checked ? 1 : 0;
+      if (f.show_in_menu) r.show_in_menu = f.show_in_menu.checked ? 1 : 0;
+      $$('[data-af]', el).forEach((x) => { const a = r.actions[x.dataset.af]; a[x.dataset.k] = x.type === 'number' ? Number(x.value) : x.value; });
+    };
+
+    sheet('<div id="redit"></div>', (el, close) => {
+      const box = $('#redit', el);
+      const draw = () => { box.innerHTML = html(); };
+      const redraw = () => { collect(el); draw(); };
+      draw();
+      el.addEventListener('focusin', (e) => { if (e.target.matches('textarea[data-af]')) lastText = e.target; });
+      el.addEventListener('change', (e) => {
+        const t = e.target.closest('[data-at]');
+        if (t) { collect(el); const a = r.actions[t.dataset.at]; a.type = t.value; if (!RACT[a.type][1]) a.who = 'sender'; draw(); }
+      });
+      el.addEventListener('click', async (e) => {
+        const b = e.target.closest('button');
+        if (!b) return;
+        if (b.dataset.tt) { collect(el); r.trigger_type = b.dataset.tt; if (r.trigger_type === 'command') r.trigger_value = r.trigger_value.replace(/[^a-z0-9_]/gi, '').toLowerCase(); draw(); }
+        else if (b.dataset.who) { collect(el); r.conditions.who = b.dataset.who; draw(); }
+        else if (b.dataset.aw !== undefined) { collect(el); r.actions[b.dataset.aw].who = b.dataset.v; draw(); }
+        else if (b.dataset.adel !== undefined) { collect(el); r.actions.splice(Number(b.dataset.adel), 1); draw(); }
+        else if (b.hasAttribute('data-addact')) { collect(el); r.actions.push({ type: 'reply', who: 'sender', text: '' }); draw(); }
+        else if (b.dataset.var) {
+          const ta = lastText && document.contains(lastText) ? lastText : $('textarea[data-af]', el);
+          if (!ta) return toast('Thêm hành động "Trả lời" hoặc "Gửi tin" trước', 'err');
+          const p = ta.selectionStart ?? ta.value.length;
+          ta.value = ta.value.slice(0, p) + b.dataset.var + ta.value.slice(ta.selectionEnd ?? p);
+          ta.focus(); ta.selectionStart = ta.selectionEnd = p + b.dataset.var.length;
+        } else if (b.hasAttribute('data-rdel')) {
+          if (!(await confirmBox('Xoá lệnh?', `Xoá lệnh <b>${esc(r.name)}</b>?`, { danger: true, ok: 'Xoá' }))) return;
+          await api('rules/delete', { id: r.id }); close(); toast('Đã xoá lệnh'); onSaved();
+        }
+      });
+      el.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        collect(el);
+        await withBtn(e.target.querySelector('button.primary'), async () => {
+          try {
+            const res = await api('rules/save', r);
+            close();
+            toast('Đã lưu lệnh' + (r.trigger_type === 'command' ? ' /' + res.rule.trigger_value : ''));
+            (res.menu_errors || []).length && toast('Không cập nhật được menu ở: ' + res.menu_errors.join(', '), 'err');
+            onSaved();
+          } catch (err) { toast(err.message, 'err'); }
+        });
+      });
+      void redraw;
+    });
+  }
+
+  route('/rules', async () => { const { body, mount } = rulesBlock(null); return { title: 'Lệnh tự tạo', html: body, mount }; }, { admin: true, title: 'Lệnh tự tạo' });
+
   // ================= Admin: More / Users / System =================
   route('/more', async () => ({
     title: 'Thêm',
     html: `
       <div class="card card-pad row" style="margin-bottom:14px">${avatar(S.user.display_name, S.user.id, 'lg')}<div class="grow"><h2>${esc(S.user.display_name)}</h2><div class="small muted">@${esc(S.user.username)} · Quản trị viên</div></div></div>
       <div class="list">
+        <a class="list-item" href="#/rules">${icon('terminal')}<div class="grow">Lệnh tự tạo</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/users">${icon('key')}<div class="grow">Tài khoản web</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/system">${icon('download')}<div class="grow">Hệ thống & cập nhật</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/me">${icon('star')}<div class="grow">Điểm của tôi</div><span class="chev">${icon('chevron')}</span></a>
