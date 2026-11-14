@@ -19,8 +19,9 @@ Web PHP (chạy tốt trên **aaPanel**) để quản lý nhóm Telegram bằng 
   - **Khi**: gõ `/lệnh`, tin chứa từ khoá, đúng nguyên câu, bắt đầu bằng, hoặc regex
   - **Nếu**: ai được dùng (mọi người / chỉ admin / không phải admin), điểm tối thiểu, bắt buộc reply, thời gian chờ mỗi người, tỉ lệ thành công %
   - **Thì** (nhiều hành động nối tiếp): trả lời, gửi tin, cộng/trừ điểm, xoá, ghim, cảnh cáo, cấm chat, đuổi, cấm, gỡ cấm. Mỗi hành động áp dụng cho người gửi hoặc người được reply
-  - Biến: `{mention} {name} {points} {rank} {args} {target_mention} {target_points} {group} {count} {random} {date} {time}`
-  - Mẫu dựng sẵn: điểm danh hằng ngày, cảm ơn tặng điểm, quay số may mắn, tự trả lời từ khoá, chặn từ khoá + cảnh cáo, lệnh admin xử lý spam nhanh
+  - Biến: `{mention} {name} {username} {id} {points} {rank} {messages} {warns} {args} {target_mention} {target_name} {target_points} {group} {member_count} {rules} {count} {random} {random:1-6} {date} {time}`
+  - 21 mẫu dựng sẵn chia 3 nhóm: Điểm & giải trí (điểm danh, cảm ơn, quay số, xúc xắc, bói vui, thưởng điểm…), Thông tin & tự trả lời (nội quy, ID, chào lại, hỏi giá, liên hệ…), Quản trị (chặn từ khoá, chặn link mời, xử lý spam, cấm chat nhanh, cảnh cáo nhanh, ghim, dọn tin)
+  - **Tự động xoá**: bật/tắt, xoá ngay hoặc sau 5 giây … 2 ngày; chọn xoá tin người gửi, tin bot trả lời, tin được reply (hoặc kết hợp)
   - Tự hiện trong menu lệnh của Telegram, lệnh tự tạo được ưu tiên hơn lệnh có sẵn nếu trùng tên
 - **Nhật ký** mọi hành động (từ web, từ lệnh bot, tự động)
 - **Tài khoản web**: tạo/sửa/khoá, phân quyền admin / thành viên
@@ -67,7 +68,7 @@ Chat riêng với bot: `/start`, `/link MÃ`, `/me`.
 8. Vào **Bot → Thêm bot**, dán token từ [@BotFather](https://t.me/BotFather). Web tự đặt webhook.
 9. Trong BotFather: `/setprivacy` → chọn bot → **Disable** (để bot đọc tin nhắn và tính điểm).
 10. Bấm **Thêm vào nhóm** ở thẻ bot, cấp quyền quản trị (xoá tin, cấm thành viên, ghim tin). Nhóm sẽ tự hiện trong mục **Nhóm**.
-11. (Tuỳ chọn) **Cron**: aaPanel → *Cron* → *Access URL* mỗi 5 phút, dán link ở trang **Hệ thống**.
+11. **Cron** (nên có): aaPanel → *Cron* → *Access URL* **mỗi 1 phút**, dán link ở trang **Hệ thống**. Cần cho tự động xoá tin hẹn trên 20 giây và dọn trạng thái cấm chat hết hạn.
 
 ## Cập nhật từ GitHub
 

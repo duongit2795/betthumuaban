@@ -26,6 +26,8 @@ try {
     $bot = DB::get('SELECT * FROM tg_bots WHERE id = ? AND enabled = 1', [$botId]);
     if (!$bot) exit;
     (new BotHandler($bot))->handle($update);
+    // Xoá các tin hẹn giờ (tự động xoá của lệnh tự tạo)
+    DelQueue::finishRequest();
 } catch (Throwable $e) {
     error_log('[tele-manager webhook] ' . $e);
     try { DB::run('UPDATE tg_bots SET last_error = ? WHERE id = ?', ['Xử lý: ' . mb_substr($e->getMessage(), 0, 300), $botId]); } catch (Throwable $x) {}

@@ -33,7 +33,16 @@ class Rules
             'require_reply' => !empty($c['require_reply']),
             'cooldown' => max(0, min(31536000, (int)($c['cooldown'] ?? 0))),
             'chance' => max(1, min(100, (int)($c['chance'] ?? 100))),
+            // Tự động xoá
+            'autodel' => !empty($c['autodel']),
+            'autodel_after' => max(0, min(172800, (int)($c['autodel_after'] ?? 30))),
+            'autodel_trigger' => !empty($c['autodel_trigger']),
+            'autodel_reply' => !empty($c['autodel_reply']),
+            'autodel_target' => !empty($c['autodel_target']),
         ];
+        if ($cond['autodel'] && !$cond['autodel_trigger'] && !$cond['autodel_reply'] && !$cond['autodel_target']) {
+            throw new HttpError('Tự động xoá: chọn ít nhất 1 loại tin cần xoá');
+        }
 
         $actions = [];
         foreach (array_slice((array)($in['actions'] ?? []), 0, 10) as $a) {
@@ -106,7 +115,7 @@ class Rules
     const HANDLED = 1;
     const DELETED = 2;
 
-    public static function run(Telegram $api, string $botUsername, int $botTgId, array $group, array $msg, array $member, bool $isAdmin, string $text, callable $isAdminFn): int
+    public static function run(Telegram $api, string $botUsername, int $botTgId, array $group, array $msg, array $member, bool $isAdmin, string $text, callable $isAdminFn, int $botId = 0): int
     {
         if ($text === '') return 0;
         $rules = DB::all('SELECT * FROM tg_rules WHERE enabled = 1 AND (group_id IS NULL OR group_id = ?) ORDER BY priority DESC, id ASC', [$group['id']]);
@@ -147,28 +156,51 @@ class Rules
             if ($r['trigger_type'] !== 'command' && $cmd !== null) continue; // từ khoá không bắt lệnh
 
             $isCmd = $r['trigger_type'] === 'command';
-            if (self::exec($api, $botTgId, $group, $msg, $member, $isAdmin, $r, $args, $isAdminFn, $isCmd)) $flags |= self::DELETED;
+            if (self::exec($api, $botId, $botTgId, $group, $msg, $member, $isAdmin, $r, $args, $isAdminFn, $isCmd)) $flags |= self::DELETED;
             if ($isCmd) return $flags | self::HANDLED;
             if (++$fired >= 3 || ($flags & self::DELETED)) break;
         }
         return $flags;
     }
 
-    private static function exec(Telegram $api, int $botTgId, array $group, array $msg, array $member, bool $isAdmin, array $r, string $args, callable $isAdminFn, bool $isCmd): bool
+    private static function exec(Telegram $api, int $botId, int $botTgId, array $group, array $msg, array $member, bool $isAdmin, array $r, string $args, callable $isAdminFn, bool $isCmd): bool
+    {
+        $sent = [];
+        $state = ['ran' => false, 'skip' => false];
+        $deleted = self::execInner($api, $botTgId, $group, $msg, $member, $isAdmin, $r, $args, $isAdminFn, $isCmd, $sent, $state);
+
+        // 🧹 Tự động xoá: lệnh /… luôn dọn (kể cả khi báo lỗi điều kiện); từ khoá chỉ dọn khi đã chạy
+        $c = json_decode($r['conditions'] ?: '{}', true) ?: [];
+        if (!empty($c['autodel']) && !$state['skip'] && ($isCmd || $state['ran'])) {
+            $after = (int)($c['autodel_after'] ?? 30);
+            $chatId = $msg['chat']['id'];
+            $ids = [];
+            if (!empty($c['autodel_trigger']) && !$deleted) $ids[] = $msg['message_id'];
+            if (!empty($c['autodel_reply'])) $ids = array_merge($ids, $sent);
+            if (!empty($c['autodel_target']) && isset($msg['reply_to_message']['message_id'])) $ids[] = $msg['reply_to_message']['message_id'];
+            DelQueue::add($api, $botId, $chatId, array_unique($ids), $after);
+            if (!empty($c['autodel_trigger']) && $after === 0) $deleted = true;
+        }
+        return $deleted;
+    }
+
+    private static function execInner(Telegram $api, int $botTgId, array $group, array $msg, array $member, bool $isAdmin, array $r, string $args, callable $isAdminFn, bool $isCmd, array &$sent, array &$state): bool
     {
         $deleted = false;
         $c = json_decode($r['conditions'] ?: '{}', true) ?: [];
         $actions = json_decode($r['actions'] ?: '[]', true) ?: [];
         $chatId = $msg['chat']['id'];
         $gid = (int)$group['id'];
-        $say = function (string $t) use ($api, $msg, $isCmd) {
-            if ($isCmd) $api->trySend($msg['chat']['id'], $t, ['reply_parameters' => ['message_id' => $msg['message_id'], 'allow_sending_without_reply' => true]]);
+        $say = function (string $t) use ($api, $msg, $isCmd, &$sent) {
+            if (!$isCmd) return;
+            $res = $api->trySend($msg['chat']['id'], $t, ['reply_parameters' => ['message_id' => $msg['message_id'], 'allow_sending_without_reply' => true]]);
+            if (!empty($res['message_id'])) $sent[] = $res['message_id'];
         };
 
         // ---- NẾU: điều kiện ----
         $who = $c['who'] ?? 'all';
         if ($who === 'admin' && !$isAdmin) { $say('⛔ Chỉ quản trị viên dùng được lệnh này.'); return $deleted; }
-        if ($who === 'member' && $isAdmin) return false;
+        if ($who === 'member' && $isAdmin) { $state['skip'] = true; return false; }
         $minPts = (int)($c['min_points'] ?? 0);
         if ($minPts > 0 && (int)$member['points'] < $minPts) { $say("⭐ Cần ít nhất <b>$minPts</b> điểm để dùng lệnh này (bạn có {$member['points']})."); return $deleted; }
 
@@ -195,6 +227,7 @@ class Rules
             }
         }
         DB::run('UPDATE tg_rules SET uses = uses + 1, last_used = ? WHERE id = ?', [now(), $r['id']]);
+        $state['ran'] = true;
         if (!$lucky) { $say('🎲 Lần này không may rồi, thử lại sau nhé!'); return $deleted; }
 
         // ---- THÌ: hành động ----
@@ -213,7 +246,8 @@ class Rules
                             $extra['reply_parameters'] = ['message_id' => $replyTo, 'allow_sending_without_reply' => true];
                         }
                         if (isset($msg['message_thread_id']) && !empty($msg['is_topic_message'])) $extra['message_thread_id'] = $msg['message_thread_id'];
-                        $api->trySend($chatId, $txt, $extra);
+                        $res = $api->trySend($chatId, $txt, $extra);
+                        if (!empty($res['message_id'])) $sent[] = $res['message_id'];
                         break;
                     case 'delete':
                         $mid = $isTarget ? ($targetMsg['message_id'] ?? null) : $msg['message_id'];
@@ -274,6 +308,13 @@ class Rules
             '{time}' => date('H:i'),
             '{random}' => (string)random_int(1, 100),
         ];
+        $map['{rules}'] = (string)(Repo::settings($group)['rules_text'] ?? '');
+        $map['{member_count}'] = (string)$group['member_count'];
+        // {random:1-6} → số ngẫu nhiên trong khoảng
+        $text = preg_replace_callback('/\{random:(-?\d+)-(-?\d+)\}/', function ($m) {
+            [$a, $b] = [(int)$m[1], (int)$m[2]];
+            return (string)random_int(min($a, $b), max($a, $b));
+        }, $text);
         if ($target) {
             $target = DB::get('SELECT * FROM tg_members WHERE id = ?', [$target['id']]) ?: $target;
             $map += [

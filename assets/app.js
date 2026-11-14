@@ -943,26 +943,77 @@
     ban: ['⛔ Cấm', true],
     unban: ['✅ Gỡ cấm', true],
   };
-  const VARS = ['{mention}', '{name}', '{points}', '{rank}', '{args}', '{target_mention}', '{target_points}', '{group}', '{count}', '{random}', '{date}', '{time}'];
+  const VARS = ['{mention}', '{name}', '{username}', '{id}', '{points}', '{rank}', '{messages}', '{warns}', '{args}', '{target_mention}', '{target_name}', '{target_points}', '{group}', '{member_count}', '{rules}', '{count}', '{random}', '{random:1-6}', '{date}', '{time}'];
+  // Mẫu lệnh có sẵn (cat: nhóm hiển thị)
   const RULE_TEMPLATES = [
-    { icon: '📅', title: 'Điểm danh hằng ngày', desc: '/diemdanh · +5 điểm, mỗi người 1 lần/ngày',
-      rule: { name: 'Điểm danh hằng ngày', trigger_type: 'command', trigger_value: 'diemdanh', show_in_menu: 1, conditions: { who: 'all', cooldown: 86400 },
+    // ---- Điểm & giải trí ----
+    { cat: '⭐ Điểm & giải trí', icon: '📅', title: 'Điểm danh hằng ngày', desc: '/diemdanh · +5 điểm, 1 lần/ngày',
+      rule: { name: 'Điểm danh hằng ngày', trigger_type: 'command', trigger_value: 'diemdanh', show_in_menu: 1, conditions: { who: 'all', cooldown: 86400, autodel: true, autodel_after: 5, autodel_trigger: true, autodel_reply: false, autodel_target: false },
         actions: [{ type: 'points', who: 'sender', amount: 5 }, { type: 'reply', who: 'sender', text: '✅ {mention} điểm danh thành công! <b>+5 điểm</b>\nTổng: {points} điểm · Hạng #{rank}' }] } },
-    { icon: '💖', title: 'Cảm ơn tặng điểm', desc: 'Reply rồi gõ /camon · người kia +1 điểm',
+    { cat: '⭐ Điểm & giải trí', icon: '💖', title: 'Cảm ơn tặng điểm', desc: 'Reply + /camon · người kia +1 điểm',
       rule: { name: 'Cảm ơn thành viên', trigger_type: 'command', trigger_value: 'camon', show_in_menu: 1, conditions: { who: 'all', require_reply: true, cooldown: 60 },
         actions: [{ type: 'points', who: 'target', amount: 1 }, { type: 'reply', who: 'sender', text: '💖 {name} đã cảm ơn {target_mention}! <b>+1 điểm</b> (tổng {target_points})' }] } },
-    { icon: '🎰', title: 'Quay số may mắn', desc: '/quay · 30% trúng +10 điểm, 1 giờ/lần',
-      rule: { name: 'Quay số may mắn', trigger_type: 'command', trigger_value: 'quay', show_in_menu: 1, conditions: { who: 'all', cooldown: 3600, chance: 30 },
+    { cat: '⭐ Điểm & giải trí', icon: '💰', title: 'Xem điểm nhanh', desc: '/diem · tự xoá sau 30 giây',
+      rule: { name: 'Xem điểm của tôi', trigger_type: 'command', trigger_value: 'diem', show_in_menu: 1, conditions: { who: 'all', autodel: true, autodel_after: 30, autodel_trigger: true, autodel_reply: true, autodel_target: false },
+        actions: [{ type: 'reply', who: 'sender', text: '⭐ {mention}: <b>{points}</b> điểm · hạng #{rank} · {messages} tin nhắn' }] } },
+    { cat: '⭐ Điểm & giải trí', icon: '🎰', title: 'Quay số may mắn', desc: '/quay · 30% trúng +10 điểm, 1 giờ/lần',
+      rule: { name: 'Quay số may mắn', trigger_type: 'command', trigger_value: 'quay', show_in_menu: 1, conditions: { who: 'all', cooldown: 3600, chance: 30, autodel: true, autodel_after: 60, autodel_trigger: true, autodel_reply: true, autodel_target: false },
         actions: [{ type: 'points', who: 'sender', amount: 10 }, { type: 'reply', who: 'sender', text: '🎉 Chúc mừng {mention} quay trúng <b>+10 điểm</b>! Tổng: {points}' }] } },
-    { icon: '💬', title: 'Tự trả lời từ khoá', desc: 'Ai hỏi "giá" → bot trả lời sẵn',
+    { cat: '⭐ Điểm & giải trí', icon: '🎲', title: 'Tung xúc xắc', desc: '/xucxac · ra số 1–6',
+      rule: { name: 'Tung xúc xắc', trigger_type: 'command', trigger_value: 'xucxac', show_in_menu: 1, conditions: { who: 'all', cooldown: 10 },
+        actions: [{ type: 'reply', who: 'sender', text: '🎲 {name} tung được <b>{random:1-6}</b>!' }] } },
+    { cat: '⭐ Điểm & giải trí', icon: '🔮', title: 'Bói vui', desc: '/boi câu hỏi · trả lời ngẫu nhiên %',
+      rule: { name: 'Bói vui', trigger_type: 'command', trigger_value: 'boi', show_in_menu: 1, conditions: { who: 'all', cooldown: 30 },
+        actions: [{ type: 'reply', who: 'sender', text: '🔮 "{args}"\nKhả năng xảy ra: <b>{random}%</b>' }] } },
+    { cat: '⭐ Điểm & giải trí', icon: '🎁', title: 'Admin thưởng điểm', desc: 'Reply + /thuong · người kia +10 điểm',
+      rule: { name: 'Thưởng điểm', trigger_type: 'command', trigger_value: 'thuong', show_in_menu: 1, conditions: { who: 'admin', require_reply: true, autodel: true, autodel_after: 0, autodel_trigger: true, autodel_reply: false, autodel_target: false },
+        actions: [{ type: 'points', who: 'target', amount: 10 }, { type: 'send', who: 'sender', text: '🎁 {target_mention} được admin thưởng <b>+10 điểm</b>! Tổng: {target_points}' }] } },
+
+    // ---- Thông tin & tự trả lời ----
+    { cat: '💬 Thông tin & tự trả lời', icon: '📜', title: 'Xem nội quy', desc: '/noiquy · tự xoá sau 2 phút',
+      rule: { name: 'Nội quy nhóm', trigger_type: 'command', trigger_value: 'noiquy', show_in_menu: 1, conditions: { who: 'all', autodel: true, autodel_after: 120, autodel_trigger: true, autodel_reply: true, autodel_target: false },
+        actions: [{ type: 'reply', who: 'sender', text: '📜 <b>Nội quy {group}</b>\n\n{rules}' }] } },
+    { cat: '💬 Thông tin & tự trả lời', icon: '🆔', title: 'Xem ID', desc: '/myid · tự xoá sau 30 giây',
+      rule: { name: 'Xem ID của tôi', trigger_type: 'command', trigger_value: 'myid', show_in_menu: 1, conditions: { who: 'all', autodel: true, autodel_after: 30, autodel_trigger: true, autodel_reply: true, autodel_target: false },
+        actions: [{ type: 'reply', who: 'sender', text: '🆔 {name}: <code>{id}</code>' }] } },
+    { cat: '💬 Thông tin & tự trả lời', icon: '👋', title: 'Chào lại', desc: 'Ai nhắn "hi / xin chào" → bot chào lại',
+      rule: { name: 'Chào lại', trigger_type: 'exact', trigger_value: 'hi|hello|chào|xin chào|chào cả nhà', conditions: { who: 'all', cooldown: 300 },
+        actions: [{ type: 'reply', who: 'sender', text: 'Chào {name} 👋 Chúc bạn một ngày vui vẻ!' }] } },
+    { cat: '💬 Thông tin & tự trả lời', icon: '💬', title: 'Trả lời hỏi giá', desc: 'Ai hỏi "giá bao nhiêu" → trả lời sẵn',
       rule: { name: 'Trả lời hỏi giá', trigger_type: 'contains', trigger_value: 'giá bao nhiêu|bảng giá|báo giá', conditions: { who: 'all', cooldown: 30 },
         actions: [{ type: 'reply', who: 'sender', text: '💬 Chào {name}! Bảng giá xem tại tin nhắn ghim của nhóm nhé.' }] } },
-    { icon: '🚫', title: 'Chặn từ khoá + cảnh cáo', desc: 'Xoá tin và cảnh cáo người gửi',
+    { cat: '💬 Thông tin & tự trả lời', icon: '📞', title: 'Thông tin liên hệ', desc: 'Hỏi "liên hệ / admin đâu" → gửi liên hệ',
+      rule: { name: 'Thông tin liên hệ', trigger_type: 'contains', trigger_value: 'liên hệ|admin đâu|hotline|số điện thoại', conditions: { who: 'all', cooldown: 60, autodel: true, autodel_after: 300, autodel_trigger: false, autodel_reply: true, autodel_target: false },
+        actions: [{ type: 'reply', who: 'sender', text: '📞 Liên hệ admin: @ten_admin\n⏰ Hỗ trợ 8h–22h hằng ngày' }] } },
+    { cat: '💬 Thông tin & tự trả lời', icon: '🌙', title: 'Chúc ngủ ngon', desc: '"ngủ ngon" → bot chúc lại',
+      rule: { name: 'Chúc ngủ ngon', trigger_type: 'contains', trigger_value: 'ngủ ngon|good night', conditions: { who: 'all', cooldown: 600 },
+        actions: [{ type: 'reply', who: 'sender', text: '🌙 Chúc {name} ngủ ngon, mơ đẹp nhé!' }] } },
+    { cat: '💬 Thông tin & tự trả lời', icon: '🎉', title: 'Admin chào mừng', desc: 'Reply + /chaomung · chào thành viên mới',
+      rule: { name: 'Chào mừng thành viên', trigger_type: 'command', trigger_value: 'chaomung', show_in_menu: 1, conditions: { who: 'admin', require_reply: true, autodel: true, autodel_after: 0, autodel_trigger: true, autodel_reply: false, autodel_target: false },
+        actions: [{ type: 'send', who: 'sender', text: '🎉 Chào mừng {target_mention} đến với <b>{group}</b>! Nhóm hiện có {member_count} thành viên. Gõ /noiquy để xem nội quy nhé.' }] } },
+
+    // ---- Quản trị ----
+    { cat: '🛡 Quản trị', icon: '🚫', title: 'Chặn từ khoá + cảnh cáo', desc: 'Xoá tin và cảnh cáo người gửi',
       rule: { name: 'Chặn lừa đảo', trigger_type: 'contains', trigger_value: 'lừa đảo|nhận tiền miễn phí', conditions: { who: 'member' },
         actions: [{ type: 'delete', who: 'sender' }, { type: 'warn', who: 'sender', reason: 'Nội dung cấm' }] } },
-    { icon: '🛡', title: 'Lệnh admin nhanh', desc: 'Reply /spam → xoá tin + cấm chat 1 ngày',
-      rule: { name: 'Xử lý spam nhanh', trigger_type: 'command', trigger_value: 'spam', show_in_menu: 1, conditions: { who: 'admin', require_reply: true },
+    { cat: '🛡 Quản trị', icon: '🔗', title: 'Chặn link mời nhóm khác', desc: 'Xoá link t.me/+… và cảnh cáo',
+      rule: { name: 'Chặn link mời nhóm', trigger_type: 'regex', trigger_value: 't\\.me/(\\+|joinchat)', conditions: { who: 'member' },
+        actions: [{ type: 'delete', who: 'sender' }, { type: 'warn', who: 'sender', reason: 'Gửi link mời nhóm khác' }] } },
+    { cat: '🛡 Quản trị', icon: '🛡', title: 'Xử lý spam nhanh', desc: 'Reply + /spam · xoá tin + cấm chat 1 ngày',
+      rule: { name: 'Xử lý spam nhanh', trigger_type: 'command', trigger_value: 'spam', show_in_menu: 1, conditions: { who: 'admin', require_reply: true, autodel: true, autodel_after: 10, autodel_trigger: true, autodel_reply: true, autodel_target: false },
         actions: [{ type: 'delete', who: 'target' }, { type: 'mute', who: 'target', minutes: 1440, reason: 'Spam' }] } },
+    { cat: '🛡 Quản trị', icon: '🤐', title: 'Cấm chat 1 giờ', desc: 'Reply + /im · cấm chat 60 phút',
+      rule: { name: 'Cấm chat 1 giờ', trigger_type: 'command', trigger_value: 'im', show_in_menu: 1, conditions: { who: 'admin', require_reply: true, autodel: true, autodel_after: 10, autodel_trigger: true, autodel_reply: true, autodel_target: false },
+        actions: [{ type: 'mute', who: 'target', minutes: 60, reason: '' }] } },
+    { cat: '🛡 Quản trị', icon: '⚠️', title: 'Cảnh cáo nhanh', desc: 'Reply + /cc lý do · cảnh cáo, tự dọn lệnh',
+      rule: { name: 'Cảnh cáo nhanh', trigger_type: 'command', trigger_value: 'cc', show_in_menu: 1, conditions: { who: 'admin', require_reply: true, autodel: true, autodel_after: 0, autodel_trigger: true, autodel_reply: false, autodel_target: false },
+        actions: [{ type: 'warn', who: 'target', reason: '' }] } },
+    { cat: '🛡 Quản trị', icon: '📌', title: 'Ghim tin nhanh', desc: 'Reply + /ghim · ghim và xoá lệnh ngay',
+      rule: { name: 'Ghim tin nhắn', trigger_type: 'command', trigger_value: 'ghim', show_in_menu: 1, conditions: { who: 'admin', require_reply: true, autodel: true, autodel_after: 0, autodel_trigger: true, autodel_reply: false, autodel_target: false },
+        actions: [{ type: 'pin', who: 'target' }] } },
+    { cat: '🛡 Quản trị', icon: '🧹', title: 'Dọn tin nhắn', desc: 'Reply + /xoa · xoá tin đó và lệnh',
+      rule: { name: 'Xoá tin nhắn', trigger_type: 'command', trigger_value: 'xoa', show_in_menu: 1, conditions: { who: 'admin', require_reply: true, autodel: true, autodel_after: 0, autodel_trigger: true, autodel_reply: true, autodel_target: true },
+        actions: [{ type: 'delete', who: 'target' }] } },
   ];
 
   const triggerChip = (r) => r.trigger_type === 'command'
@@ -978,6 +1029,11 @@
     if (c.require_reply) ifs.push('phải reply');
     if (c.cooldown) ifs.push('chờ ' + humanSec(c.cooldown));
     if (c.chance && c.chance < 100) ifs.push(c.chance + '% may mắn');
+    let tail = '';
+    if (c.autodel) {
+      const k = [c.autodel_trigger && 'người gửi', c.autodel_reply && 'bot', c.autodel_target && 'tin được reply'].filter(Boolean).join(' + ');
+      tail = ` · 🧹 xoá ${k} ${c.autodel_after ? 'sau ' + humanSec(c.autodel_after) : 'ngay'}`;
+    }
     const thens = (r.actions || []).map((a) => {
       const t = (RACT[a.type] || [a.type])[0].replace(/^\S+\s/, '');
       const who = a.who === 'target' ? ' (người được reply)' : '';
@@ -985,7 +1041,7 @@
       if (a.type === 'mute') return `cấm chat ${a.minutes ? humanSec(a.minutes * 60) : 'vĩnh viễn'}${who}`;
       return t.toLowerCase() + (['reply', 'send'].includes(a.type) ? '' : who);
     });
-    return `<b>Nếu</b> ${ifs.length ? ifs.join(', ') : 'bất kỳ ai'} → <b>Thì</b> ${thens.join(', ')}`;
+    return `<b>Nếu</b> ${ifs.length ? ifs.join(', ') : 'bất kỳ ai'} → <b>Thì</b> ${thens.join(', ')}${tail}`;
   }
   function humanSec(s) {
     if (s % 86400 === 0) return s / 86400 + ' ngày';
@@ -1030,8 +1086,9 @@
       let ids = [];
       const pickTemplate = () => sheet(`<div class="sheet-head"><h2>Tạo lệnh mới</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
         <button class="list-item card" data-tpl="-1" style="border-radius:14px;margin-bottom:10px;border:1px solid var(--border)"><span style="font-size:22px">✏️</span><div class="grow"><b>Tạo từ đầu</b><div class="xs muted">Tự thiết lập mọi thứ</div></div>${icon('chevron')}</button>
-        <div class="small muted" style="margin:14px 2px 8px">Hoặc chọn mẫu có sẵn</div>
-        <div class="list">${RULE_TEMPLATES.map((t, i) => `<button class="list-item" data-tpl="${i}"><span style="font-size:22px">${t.icon}</span><div class="grow"><b>${t.title}</b><div class="xs muted">${esc(t.desc)}</div></div>${icon('chevron')}</button>`).join('')}</div>`,
+        <div class="small muted" style="margin:14px 2px 0">Hoặc chọn mẫu có sẵn (${RULE_TEMPLATES.length} mẫu)</div>
+        ${[...new Set(RULE_TEMPLATES.map((t) => t.cat))].map((cat) => `<div class="small" style="margin:14px 2px 8px;font-weight:600">${cat}</div>
+          <div class="list">${RULE_TEMPLATES.map((t, i) => t.cat !== cat ? '' : `<button class="list-item" data-tpl="${i}"><span style="font-size:22px">${t.icon}</span><div class="grow"><b>${t.title}</b><div class="xs muted">${esc(t.desc)}</div></div>${icon('chevron')}</button>`).join('')}</div>`).join('')}`,
       (el, close) => el.addEventListener('click', (e) => {
         const b = e.target.closest('[data-tpl]');
         if (!b) return;
@@ -1080,7 +1137,7 @@
 
   function ruleEditor(rule, groups, onSaved) {
     const r = JSON.parse(JSON.stringify(rule));
-    r.conditions = { who: 'all', min_points: 0, require_reply: false, cooldown: 0, chance: 100, ...(r.conditions || {}) };
+    r.conditions = { who: 'all', min_points: 0, require_reply: false, cooldown: 0, chance: 100, autodel: false, autodel_after: 30, autodel_trigger: true, autodel_reply: true, autodel_target: false, ...(r.conditions || {}) };
     const cd = r.conditions.cooldown || 0;
     const unit = cd && cd % 86400 === 0 ? 86400 : cd && cd % 3600 === 0 ? 3600 : cd && cd % 60 === 0 ? 60 : 1;
     let lastText = null;
@@ -1134,6 +1191,35 @@
           <div class="hint">{args} = phần chữ gõ sau lệnh · {target_…} = người được reply · hỗ trợ HTML &lt;b&gt; &lt;i&gt; &lt;a&gt;</div></div>
         </div>
 
+        <div class="stack">
+          <div class="row" style="gap:8px"><span class="badge">🧹</span><b>Tự động xoá</b></div>
+          <div class="card" style="box-shadow:none">
+            ${sw('autodel', c.autodel, 'Tự động xoá tin nhắn', c.autodel ? 'Giữ nhóm gọn gàng sau khi dùng lệnh' : 'Đang tắt: tin nhắn được giữ lại')}
+            ${c.autodel ? (() => {
+              const after = Number(c.autodel_after) || 0;
+              const u = after && after % 86400 === 0 ? 86400 : after && after % 3600 === 0 ? 3600 : after && after % 60 === 0 ? 60 : 1;
+              const kinds = [['autodel_trigger', '🙋 Tin người gửi'], ['autodel_reply', '🤖 Tin bot trả lời'], ['autodel_target', '↩️ Tin được reply']];
+              const sel = kinds.filter(([k]) => c[k]).length;
+              return `<div class="form-group stack">
+                <div class="field"><span class="lbl">Xoá sau</span>
+                  <div class="chips" style="flex-wrap:wrap">${[[0, 'Ngay lập tức'], [5, '5 giây'], [10, '10 giây'], [30, '30 giây'], [60, '1 phút'], [300, '5 phút'], [3600, '1 giờ'], [86400, '1 ngày']].map(([v, t]) => `<button type="button" class="chip ${v === after ? 'active' : ''}" data-ad="${v}">${t}</button>`).join('')}</div>
+                  <div class="row" style="margin-top:8px"><input class="input" type="number" min="0" name="ad_val" value="${after / u}"><select class="input" name="ad_unit" style="width:auto">${[[1, 'giây'], [60, 'phút'], [3600, 'giờ'], [86400, 'ngày']].map(([v, t]) => `<option value="${v}" ${v === u ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+                  <div class="hint">Tối đa 2 ngày (giới hạn của Telegram)</div></div>
+                <div class="field"><span class="lbl">Xoá tin nào (chọn nhiều)</span>
+                  <div class="chips" style="flex-wrap:wrap">${kinds.map(([k, t]) => `<button type="button" class="chip ${c[k] ? 'active' : ''}" data-adk="${k}">${c[k] ? '✓ ' : ''}${t}</button>`).join('')}</div>
+                  <div class="row wrap" style="gap:6px;margin-top:8px"><span class="xs muted">Chọn nhanh:</span>
+                    ${(() => {
+                      const cur = [c.autodel_trigger, c.autodel_reply, c.autodel_target].map((x) => (x ? 1 : 0)).join('');
+                      return [['sender', '100', 'Chỉ người gửi'], ['bot', '010', 'Chỉ bot'], ['both', '110', 'Cả 2'], ['all', '111', 'Tất cả']]
+                        .map(([k, code, t]) => `<button type="button" class="btn sm ${cur === code ? 'soft' : 'ghost'}" data-adp="${k}">${t}</button>`).join('');
+                    })()}</div>
+                  ${sel ? '' : `<div class="hint" style="color:var(--danger)">Chọn ít nhất 1 loại tin</div>`}</div>
+                <div class="alert info">${icon('info')}<div class="xs">Bot cần quyền <b>Xoá tin nhắn</b>. Hẹn trên 20 giây nên đặt Cron mỗi 1 phút (trang Hệ thống) để xoá đúng giờ.</div></div>
+              </div>`;
+            })() : ''}
+          </div>
+        </div>
+
         <div class="card" style="box-shadow:none">
           ${sw('enabled', r.enabled !== 0, 'Bật lệnh')}
           ${isCmd ? sw('show_in_menu', !!r.show_in_menu, 'Hiện trong menu lệnh Telegram', 'Hiện khi gõ "/" trong nhóm') : ''}
@@ -1154,6 +1240,8 @@
       r.conditions.chance = Number(f.chance.value) || 100;
       r.conditions.cooldown = (Number(f.cd_val.value) || 0) * Number(f.cd_unit.value);
       r.conditions.require_reply = f.require_reply.checked;
+      r.conditions.autodel = f.autodel.checked;
+      if (f.ad_val) r.conditions.autodel_after = Math.min(172800, (Number(f.ad_val.value) || 0) * Number(f.ad_unit.value));
       r.enabled = f.enabled.checked ? 1 : 0;
       if (f.show_in_menu) r.show_in_menu = f.show_in_menu.checked ? 1 : 0;
       $$('[data-af]', el).forEach((x) => { const a = r.actions[x.dataset.af]; a[x.dataset.k] = x.type === 'number' ? Number(x.value) : x.value; });
@@ -1168,11 +1256,20 @@
       el.addEventListener('change', (e) => {
         const t = e.target.closest('[data-at]');
         if (t) { collect(el); const a = r.actions[t.dataset.at]; a.type = t.value; if (!RACT[a.type][1]) a.who = 'sender'; draw(); }
+        if (e.target.name === 'autodel') { collect(el); draw(); }
       });
       el.addEventListener('click', async (e) => {
         const b = e.target.closest('button');
         if (!b) return;
         if (b.dataset.tt) { collect(el); r.trigger_type = b.dataset.tt; if (r.trigger_type === 'command') r.trigger_value = r.trigger_value.replace(/[^a-z0-9_]/gi, '').toLowerCase(); draw(); }
+        else if (b.dataset.ad !== undefined) { collect(el); r.conditions.autodel_after = Number(b.dataset.ad); draw(); }
+        else if (b.dataset.adk) { collect(el); r.conditions[b.dataset.adk] = !r.conditions[b.dataset.adk]; draw(); }
+        else if (b.dataset.adp) {
+          collect(el);
+          const m = { sender: [1, 0, 0], bot: [0, 1, 0], both: [1, 1, 0], all: [1, 1, 1] }[b.dataset.adp];
+          [r.conditions.autodel_trigger, r.conditions.autodel_reply, r.conditions.autodel_target] = m.map(Boolean);
+          draw();
+        }
         else if (b.dataset.who) { collect(el); r.conditions.who = b.dataset.who; draw(); }
         else if (b.dataset.aw !== undefined) { collect(el); r.actions[b.dataset.aw].who = b.dataset.v; draw(); }
         else if (b.dataset.adel !== undefined) { collect(el); r.actions.splice(Number(b.dataset.adel), 1); draw(); }
@@ -1291,8 +1388,8 @@
         <button class="btn primary block" style="height:46px;margin-top:14px">${icon('check')}Lưu cài đặt</button>
       </form>
 
-      <div class="section-title"><h2>Tác vụ định kỳ (tuỳ chọn)</h2></div>
-      <div class="card card-pad stack"><div class="small text-2">aaPanel → <b>Cron</b> → Add → Type: <b>Access URL</b>, mỗi 5 phút:</div>
+      <div class="section-title"><h2>Tác vụ định kỳ (Cron)</h2></div>
+      <div class="card card-pad stack"><div class="small text-2">aaPanel → <b>Cron</b> → Add → Type: <b>Access URL</b>, <b>mỗi 1 phút</b> (cần cho tự động xoá tin hẹn giờ):</div>
         <div class="row"><input class="input mono" readonly value="${esc(d.cron_url)}"><button class="btn icon" data-copy="${esc(d.cron_url)}">${icon('copy')}</button></div></div>
 
       <div class="section-title"><h2>Môi trường</h2></div>
