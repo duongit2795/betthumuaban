@@ -72,10 +72,10 @@ class UpdateNotifier
             . ($test && !$c['has_update'] ? "ℹ️ Đây là tin thử: web đang ở bản mới nhất, nút cập nhật sẽ không làm gì.\n" : "Bấm <b>Cập nhật ngay</b> để web tự tải và cài bản mới. Dữ liệu được giữ nguyên.");
         $short = substr($new['sha'], 0, 12);
         $kb = [[
-            ['text' => '✅ Cập nhật ngay', 'callback_data' => 'upd_ok:' . $short],
-            ['text' => '⏭ Bỏ qua bản này', 'callback_data' => 'upd_skip:' . $short],
+            ['text' => '✅ Cập nhật ngay', 'callback_data' => 'upd_ok:' . $short, 'style' => 'success'],
+            ['text' => '⏭ Bỏ qua bản này', 'callback_data' => 'upd_skip:' . $short, 'style' => 'danger'],
         ]];
-        if (!empty($new['url'])) $kb[] = [['text' => '🔗 Xem trên GitHub', 'url' => $new['url']]];
+        if (!empty($new['url'])) $kb[] = [['text' => '🔗 Xem trên GitHub', 'url' => $new['url'], 'style' => 'primary']];
 
         $results = [];
         $sent = [];

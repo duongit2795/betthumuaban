@@ -112,7 +112,7 @@ class UsernameGuard
         if ($action === 'kick') $text .= "\n\n👢 Bạn đã bị mời ra khỏi nhóm. Đặt username rồi vào lại nhé.";
         $extra = [];
         if ($action !== 'kick') {
-            $extra['reply_markup'] = ['inline_keyboard' => [[['text' => '✅ Tôi đã đặt username', 'callback_data' => 'uname:' . $user['id']]]]];
+            $extra['reply_markup'] = ['inline_keyboard' => [[['text' => '✅ Tôi đã đặt username', 'callback_data' => 'uname:' . $user['id'], 'style' => 'success']]]];
         }
         $sent = $api->trySend($chat, $text, $extra);
         if ($sent && !empty($sent['message_id']) && $c['autodel'] > 0) {

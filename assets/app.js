@@ -2096,7 +2096,7 @@
     (buttons || []).forEach((b) => { (rows[b.row] = rows[b.row] || []).push(b); });
     return `<div class="tgpost">${img ? `<img src="${esc(img)}" alt="">` : `<div class="tgpost-noimg">${icon('image')}<span>Chưa có ảnh</span></div>`}
       <div class="tgpost-cap">${caption ? previewText(caption) : '<span class="muted">Nội dung bài quảng cáo…</span>'}</div></div>
-      ${rows.filter(Boolean).map((r) => `<div class="tgpost-btns">${r.map((b) => `<span class="tgpost-btn">${esc(b.text || 'Nút')}<i>↗</i></span>`).join('')}</div>`).join('')}`;
+      ${rows.filter(Boolean).map((r) => `<div class="tgpost-btns">${r.map((b) => `<span class="tgpost-btn ${b.style ? 'st-' + b.style : ''}">${b.emoji ? '✨ ' : ''}${esc(b.text || 'Nút')}<i>↗</i></span>`).join('')}</div>`).join('')}`;
   }
 
   route('/ads', async () => {
@@ -2125,7 +2125,7 @@
             <button type="button" class="grow ad-info" data-editad="${a.id}" data-camp="${c.id}">
               <div class="row wrap" style="gap:6px"><b class="ellipsis">${esc(a.title || 'Bài ' + (i + 1))}</b>${a.enabled ? '' : '<span class="badge">Tắt</span>'}${c.posts.some((p) => p.ad_id === a.id) ? '<span class="badge blue">Đang hiện</span>' : ''}</div>
               <div class="xs text-2 ad-cap">${esc(stripTags(a.caption).slice(0, 90))}</div>
-              <div class="xs muted">${a.buttons.length} nút · hiện ${num(a.shows)} lần</div>
+              <div class="xs muted">${a.buttons.length} nút${a.buttons.some((b) => b.style) ? ' ' + a.buttons.filter((b) => b.style).map((b) => ({ primary: '🔵', success: '🟢', danger: '🔴' })[b.style]).join('') : ''} · hiện ${num(a.shows)} lần</div>
             </button>
             <div class="ad-move"><button class="btn icon sm ghost" data-move="${a.id}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="Lên">${icon('up', 'sm')}</button><button class="btn icon sm ghost" data-move="${a.id}" data-dir="1" ${i === c.ads.length - 1 ? 'disabled' : ''} aria-label="Xuống">${icon('down', 'sm')}</button></div>
           </div>`).join('')}
@@ -2256,11 +2256,15 @@
       imgUrl: a?.has_image ? adImg(a) : null,
       buttons: (a?.buttons || []).map((b, i, arr) => ({ ...b, same: i > 0 && b.row === arr[i - 1].row })),
     };
-    const rowsOf = () => { let r = -1; return st.buttons.map((b, i) => ({ text: b.text, url: b.url, row: (r = i > 0 && b.same ? r : r + 1) })); };
+    const rowsOf = () => { let r = -1; return st.buttons.map((b, i) => ({ text: b.text, url: b.url, style: b.style || '', emoji: b.emoji || '', row: (r = i > 0 && b.same ? r : r + 1) })); };
     const btnsHtml = () => st.buttons.map((b, i) => `<div class="ad-btn-edit">
         <div class="row" style="gap:6px"><input class="input" data-bt="${i}" data-k="text" value="${esc(b.text)}" placeholder="Chữ trên nút, VD: Mua Ngay" maxlength="64">
         <button type="button" class="btn icon sm ghost" data-rmbtn="${i}" aria-label="Xoá nút">${icon('trash', 'sm')}</button></div>
         <input class="input mono" data-bt="${i}" data-k="url" value="${esc(b.url)}" placeholder="https://… hoặc @username" style="margin-top:6px">
+        <div class="btn-colors">${[['', 'Mặc định'], ['primary', 'Xanh dương'], ['success', 'Xanh lá'], ['danger', 'Đỏ']].map(([v, t]) => `<button type="button" class="btn-color ${v ? 'st-' + v : 'st-default'} ${(b.style || '') === v ? 'active' : ''}" data-bstyle="${i}" data-v="${v}" title="${t}">${(b.style || '') === v ? '✓ ' : ''}${t}</button>`).join('')}</div>
+        <details class="xs" style="margin-top:6px"${b.emoji ? ' open' : ''}><summary class="muted" style="cursor:pointer">✨ Emoji động trước chữ (tuỳ chọn, cần Telegram Premium)</summary>
+          <input class="input mono" data-bt="${i}" data-k="emoji" value="${esc(b.emoji || '')}" placeholder="ID custom emoji, VD 5368324170671202286" inputmode="numeric" style="margin-top:6px">
+          <div class="muted" style="margin-top:4px">Chỉ hoạt động khi chủ bot có Telegram Premium. Lấy ID bằng cách gửi emoji cho bot như @getidsbot.</div></details>
         ${i > 0 ? `<label class="row xs" style="margin-top:6px;gap:6px;cursor:pointer"><input type="checkbox" data-bt="${i}" data-k="same" ${b.same ? 'checked' : ''}> Cùng hàng với nút phía trên</label>` : ''}
       </div>`).join('');
     const html = `
@@ -2302,7 +2306,9 @@
       });
       el.addEventListener('change', (e) => { const b = e.target.closest('[data-bt][type=checkbox]'); if (b) { st.buttons[b.dataset.bt].same = b.checked; pv(); } });
       el.addEventListener('click', async (e) => {
-        if (e.target.closest('[data-addbtn]')) { st.buttons.push({ text: '', url: '', same: false }); $('#adbtns', el).innerHTML = btnsHtml(); pv(); $$('[data-k=text]', el).pop()?.focus(); }
+        const bs = e.target.closest('[data-bstyle]');
+        if (bs) { st.buttons[bs.dataset.bstyle].style = bs.dataset.v; $('#adbtns', el).innerHTML = btnsHtml(); pv(); return; }
+        if (e.target.closest('[data-addbtn]')) { st.buttons.push({ text: '', url: '', style: '', emoji: '', same: false }); $('#adbtns', el).innerHTML = btnsHtml(); pv(); $$('[data-k=text]', el).pop()?.focus(); }
         const rm = e.target.closest('[data-rmbtn]');
         if (rm) { st.buttons.splice(Number(rm.dataset.rmbtn), 1); if (st.buttons[0]) st.buttons[0].same = false; $('#adbtns', el).innerHTML = btnsHtml(); pv(); }
         if (e.target.closest('[data-delad]')) {

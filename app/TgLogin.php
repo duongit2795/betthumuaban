@@ -127,8 +127,8 @@ class TgLogin
             . "👤 Tài khoản: " . ($acc ? '<b>' . tg_esc($acc['username']) . '</b>' : 'tạo mới từ Telegram của bạn') . "\n\n"
             . "⚠️ Chỉ bấm <b>Xác nhận</b> nếu <b>chính bạn</b> vừa lấy mã này trên web. Không gửi mã cho người khác.", [
             'reply_markup' => ['inline_keyboard' => [[
-                ['text' => '✅ Xác nhận đăng nhập', 'callback_data' => 'login_ok:' . $row['code']],
-                ['text' => '❌ Huỷ', 'callback_data' => 'login_no:' . $row['code']],
+                ['text' => '✅ Xác nhận đăng nhập', 'callback_data' => 'login_ok:' . $row['code'], 'style' => 'success'],
+                ['text' => '❌ Huỷ', 'callback_data' => 'login_no:' . $row['code'], 'style' => 'danger'],
             ]]],
         ]);
         return true;

@@ -11,6 +11,8 @@ class Ads
     const IMG_DIR = DATA_DIR . '/ads';
     const INTERVALS = [10, 15, 20, 30, 60, 120, 300, 600, 900, 1800, 3600];
     const CAPTION_MAX = 1024;
+    /** Màu nút Telegram (trường style): rỗng = màu mặc định của ứng dụng */
+    const STYLES = ['' => 'Mặc định', 'primary' => 'Xanh dương', 'success' => 'Xanh lá', 'danger' => 'Đỏ'];
 
     // ================= Dữ liệu =================
     public static function campaignRow(array $c): array
@@ -61,7 +63,11 @@ class Ads
             if ($text === '') throw new HttpError('Nút bấm cần có chữ hiển thị');
             if (str_starts_with($url, '@')) $url = 'https://t.me/' . substr($url, 1);
             if (!preg_match('~^(https?://|tg://)\S+$~i', $url)) throw new HttpError("Link của nút \"$text\" không hợp lệ (cần https://… hoặc @username)");
-            $out[] = ['text' => $text, 'url' => $url, 'row' => max(0, (int)($b['row'] ?? count($out)))];
+            $style = (string)($b['style'] ?? '');
+            $emoji = preg_replace('/\D/', '', (string)($b['emoji'] ?? ''));
+            $out[] = ['text' => $text, 'url' => $url, 'row' => max(0, (int)($b['row'] ?? count($out)))]
+                + (isset(self::STYLES[$style]) && $style !== '' ? ['style' => $style] : [])
+                + ($emoji !== '' ? ['emoji' => $emoji] : []);
         }
         return $out;
     }
@@ -70,7 +76,12 @@ class Ads
     {
         if (!$buttons) return null;
         $rows = [];
-        foreach ($buttons as $b) $rows[(int)$b['row']][] = ['text' => $b['text'], 'url' => $b['url']];
+        foreach ($buttons as $b) {
+            $btn = ['text' => $b['text'], 'url' => $b['url']];
+            if (!empty($b['style'])) $btn['style'] = $b['style'];                     // đỏ / xanh lá / xanh dương
+            if (!empty($b['emoji'])) $btn['icon_custom_emoji_id'] = $b['emoji'];    // emoji động (cần Premium)
+            $rows[(int)$b['row']][] = $btn;
+        }
         ksort($rows);
         return ['inline_keyboard' => array_values(array_map(fn($r) => array_slice($r, 0, 4), $rows))];
     }
@@ -125,7 +136,7 @@ class Ads
     }
 
     /** Đăng bài mới (ảnh + nội dung + nút) */
-    public static function send(Telegram $api, string $botKey, $chatId, array $ad): array
+    private static function sendRaw(Telegram $api, string $botKey, $chatId, array $ad): array
     {
         $kb = self::keyboard(json_decode((string)$ad['buttons'], true) ?: []);
         $params = ['chat_id' => $chatId, 'caption' => mb_substr((string)$ad['caption'], 0, self::CAPTION_MAX), 'parse_mode' => 'HTML'];
@@ -145,7 +156,7 @@ class Ads
     }
 
     /** Sửa tin đang ghim sang bài khác */
-    public static function edit(Telegram $api, string $botKey, $chatId, int $messageId, array $ad): void
+    private static function editRaw(Telegram $api, string $botKey, $chatId, int $messageId, array $ad): void
     {
         $kb = self::keyboard(json_decode((string)$ad['buttons'], true) ?: []);
         $media = ['type' => 'photo', 'caption' => mb_substr((string)$ad['caption'], 0, self::CAPTION_MAX), 'parse_mode' => 'HTML'];
@@ -163,6 +174,37 @@ class Ads
         } catch (TelegramException $e) {
             if (stripos($e->getMessage(), 'not modified') !== false) return; // nội dung giống hệt
             throw $e;
+        }
+    }
+
+    /** Bỏ emoji động khỏi nút (khi bot không có quyền dùng custom emoji) */
+    private static function withoutIcons(array $ad): ?array
+    {
+        $btns = json_decode((string)$ad['buttons'], true) ?: [];
+        if (!array_filter($btns, fn($b) => !empty($b['emoji']))) return null;
+        $ad['buttons'] = json_encode(array_map(function ($b) { unset($b['emoji']); return $b; }, $btns), JSON_UNESCAPED_UNICODE);
+        return $ad;
+    }
+
+    public static function send(Telegram $api, string $botKey, $chatId, array $ad): array
+    {
+        try {
+            return self::sendRaw($api, $botKey, $chatId, $ad);
+        } catch (TelegramException $e) {
+            $plain = preg_match('/emoji|icon/i', $e->getMessage()) ? self::withoutIcons($ad) : null;
+            if (!$plain) throw $e;
+            return self::sendRaw($api, $botKey, $chatId, $plain); // gửi lại không kèm emoji động
+        }
+    }
+
+    public static function edit(Telegram $api, string $botKey, $chatId, int $messageId, array $ad): void
+    {
+        try {
+            self::editRaw($api, $botKey, $chatId, $messageId, $ad);
+        } catch (TelegramException $e) {
+            $plain = preg_match('/emoji|icon/i', $e->getMessage()) ? self::withoutIcons($ad) : null;
+            if (!$plain) throw $e;
+            self::editRaw($api, $botKey, $chatId, $messageId, $plain);
         }
     }
 
