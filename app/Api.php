@@ -1369,7 +1369,7 @@ class Api
         $old = $id ? (DB::get('SELECT * FROM tg_ads WHERE id = ?', [$id]) ?: fail('Không tìm thấy bài', 404)) : null;
         $c = DB::get('SELECT * FROM tg_ad_campaigns WHERE id = ?', [$old ? $old['campaign_id'] : $this->int('campaign_id')]) ?: fail('Không tìm thấy chiến dịch', 404);
         $caption = trim((string)$this->in('caption', ''));
-        if (mb_strlen($caption) > Ads::CAPTION_MAX) fail('Nội dung tối đa ' . Ads::CAPTION_MAX . ' ký tự (giới hạn chú thích ảnh của Telegram)');
+        if (mb_strlen(html_entity_decode(strip_tags($caption), ENT_QUOTES | ENT_HTML5, 'UTF-8')) > Ads::CAPTION_MAX) fail('Nội dung tối đa ' . Ads::CAPTION_MAX . ' ký tự (giới hạn chú thích ảnh của Telegram)');
         $data = [
             'title' => trim(mb_substr((string)$this->in('title', ''), 0, 120)),
             'caption' => $caption,

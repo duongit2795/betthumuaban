@@ -541,3 +541,25 @@ img, svg, video { max-width: 100%; }
 .btn-color.st-primary { background: #3390ec; }
 .btn-color.st-success { background: #31a24c; }
 .btn-color.st-danger { background: #e53935; }
+
+/* ================= Trình soạn thảo trực quan ================= */
+.rich { border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); overflow: hidden; }
+.rich:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent); background: var(--surface); }
+.rich-bar { display: flex; align-items: center; gap: 2px; padding: 4px; border-bottom: 1px solid var(--border); background: var(--surface); overflow-x: auto; scrollbar-width: none; }
+.rich-bar::-webkit-scrollbar { display: none; }
+.rich-btn { flex: none; min-width: 32px; height: 30px; padding: 0 7px; border: 0; border-radius: 8px; background: transparent; color: var(--text-2); font-size: 14px; cursor: pointer; }
+.rich-btn:hover { background: var(--surface-3); color: var(--text); }
+.rich-btn.on { background: var(--primary-soft); color: var(--primary); }
+.rich-mode { font-size: 11px; font-weight: 700; letter-spacing: .03em; }
+.rich-ed.input { border: 0; border-radius: 0; box-shadow: none !important; background: transparent; height: auto; padding: 10px 12px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; outline: none; max-height: 420px; overflow-y: auto; }
+.rich-ed { position: relative; }
+.rich.empty .rich-ed:before { content: attr(data-ph); color: var(--muted); pointer-events: none; position: absolute; }
+.rich-ed code, .pv-body code { font-family: ui-monospace, monospace; font-size: 13px; background: var(--surface-3); padding: 0 4px; border-radius: 4px; }
+.rich-ed a { color: var(--primary); text-decoration: underline; }
+tg-spoiler, .tg-spoiler { background: color-mix(in srgb, var(--text) 18%, transparent); border-radius: 4px; padding: 0 2px; background-image: radial-gradient(color-mix(in srgb, var(--text) 35%, transparent) 1px, transparent 1px); background-size: 4px 4px; }
+.rich-src { display: none !important; }
+.rich.html-mode .rich-src { display: block !important; border: 0; border-radius: 0; font-family: ui-monospace, monospace; font-size: 13px; min-height: 120px; }
+.rich.html-mode .rich-ed { display: none; }
+.rich.html-mode .rich-btn:not(.rich-mode) { opacity: .35; pointer-events: none; }
+.rich.disabled { opacity: .7; }
+.rich.disabled .rich-bar { pointer-events: none; }
