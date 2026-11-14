@@ -28,6 +28,12 @@ class Repo
         'lock_poll' => false,
         'violation_warn' => true,
 
+        'mod_notify' => true,
+        'mod_notify_detail' => true,
+        'mod_show_admin' => true,
+        'mod_show_evidence' => true,
+        'mod_delete_evidence' => false,
+
         'warn_limit' => 3,
         'warn_action' => 'mute',
         'mute_minutes' => 60,
@@ -163,9 +169,15 @@ class Repo
         }
     }
 
-    public static function log(?int $groupId, string $actor, string $action, ?array $target = null, ?string $detail = null): void
+    /**
+     * Ghi nhật ký. $meta: chi tiết (nguồn, thời hạn, cảnh cáo, link…); $evidence: nội dung tin vi phạm.
+     */
+    public static function log(?int $groupId, string $actor, string $action, ?array $target = null, ?string $detail = null, ?array $meta = null, ?array $evidence = null): void
     {
+        $meta = $meta ? array_filter($meta, fn($v) => $v !== null && $v !== '') : null;
         DB::insert('app_logs', [
+            'meta' => $meta ? json_encode($meta, JSON_UNESCAPED_UNICODE) : null,
+            'evidence' => $evidence ? json_encode($evidence, JSON_UNESCAPED_UNICODE) : null,
             'group_id' => $groupId,
             'actor' => mb_substr($actor ?: 'system', 0, 190),
             'action' => $action,
@@ -201,8 +213,12 @@ class Repo
         return $ids;
     }
 
+    /** Chỉ dùng khi kiểm thử: thay Telegram API thật bằng bản giả */
+    public static ?Telegram $testApi = null;
+
     public static function apiForGroup(array $group): ?Telegram
     {
+        if (self::$testApi) return self::$testApi;
         $bot = null;
         if ($group['bot_id']) $bot = DB::get('SELECT token FROM tg_bots WHERE id = ?', [$group['bot_id']]);
         if (!$bot) $bot = DB::get('SELECT token FROM tg_bots WHERE enabled = 1 ORDER BY id LIMIT 1');

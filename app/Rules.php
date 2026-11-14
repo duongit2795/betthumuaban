@@ -273,7 +273,8 @@ class Rules
                         }
                         $cur = (int)DB::val('SELECT points FROM tg_members WHERE id = ?', [$subject['id']]);
                         DB::run('UPDATE tg_members SET points = ? WHERE id = ?', [max(0, $cur + (int)$a['amount']), $subject['id']]);
-                        Repo::log($gid, $actor, 'points', $subject, ($a['amount'] > 0 ? '+' : '') . $a['amount']);
+                        Repo::log($gid, $actor, 'points', $subject, ($a['amount'] > 0 ? '+' : '') . $a['amount'],
+                            ['source' => 'rule', 'amount' => (int)$a['amount'], 'before' => $cur, 'after' => max(0, $cur + (int)$a['amount']), 'actor_tg_id' => $member['tg_user_id']]);
                         break;
                     default: // warn, mute, unmute, kick, ban, unban
                         if (!$subject || !in_array($a['type'], self::MOD_ACTIONS, true)) break;
@@ -284,6 +285,9 @@ class Rules
                         Moderation::perform($a['type'], $group, [
                             'tgUserId' => $subject['tg_user_id'],
                             'actor' => $actor,
+                            'actorTgId' => $member['tg_user_id'],
+                            'source' => 'rule',
+                            'evidence' => Moderation::evidence($isTarget ? $targetMsg : $msg),
                             'reason' => $a['reason'] ?? '',
                             'minutes' => $a['minutes'] ?? null,
                         ]);
