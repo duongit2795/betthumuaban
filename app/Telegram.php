@@ -150,6 +150,7 @@ class Telegram
         $this->tryCall('setMyCommands', ['commands' => $merge($admin, $adminExtra), 'scope' => ['type' => 'all_chat_administrators']]);
         $this->tryCall('setMyCommands', ['commands' => [
             ['command' => 'start', 'description' => 'Bắt đầu'],
+            ['command' => 'login', 'description' => 'Đăng nhập web: /login MÃ'],
             ['command' => 'link', 'description' => 'Liên kết tài khoản web: /link MÃ'],
             ['command' => 'me', 'description' => 'Điểm của tôi'],
         ], 'scope' => ['type' => 'all_private_chats']]);

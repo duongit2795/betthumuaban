@@ -36,6 +36,8 @@ class Api
             'auth/login' => 'login',
             'auth/register' => 'register',
             'auth/logout' => 'logout',
+            'auth/tg-code' => 'tgCode',
+            'auth/tg-check' => 'tgCheck',
             'me' => 'me',
             'me/update' => 'meUpdate',
             'me/link-code' => 'meLinkCode',
@@ -100,6 +102,7 @@ class Api
             'access' => $inst && Auth::user() ? Access::summary(Auth::user()) : null,
             'site_name' => $inst ? Settings::get('site_name') : 'Tele Manager',
             'allow_register' => $inst ? Settings::get('allow_register') === '1' : false,
+            'tg_login' => $inst && TgLogin::enabled() ? ['bots' => TgLogin::bots()] : null,
             'version' => APP_VERSION,
             'php' => PHP_VERSION,
             'checks' => $inst ? null : [
@@ -169,6 +172,7 @@ class Api
     {
         Auth::throttle('login');
         $u = DB::get('SELECT * FROM app_users WHERE LOWER(username) = LOWER(?)', [trim((string)$this->in('username'))]);
+        if ($u && $u['password_hash'] === '') fail('Tài khoản này chưa đặt mật khẩu. Hãy dùng "Đăng nhập bằng Telegram".', 401);
         if (!$u || !password_verify((string)$this->in('password'), $u['password_hash'])) fail('Sai tên đăng nhập hoặc mật khẩu', 401);
         if ($u['disabled']) fail('Tài khoản đã bị khoá', 403);
         Auth::login($u);
@@ -194,6 +198,21 @@ class Api
         $u = DB::get('SELECT * FROM app_users WHERE id = ?', [$id]);
         Auth::login($u);
         return ['user' => Auth::publicUser($u)];
+    }
+
+    /** Tạo mã đăng nhập bằng Telegram cho phiên trình duyệt hiện tại */
+    private function tgCode(): array
+    {
+        if (!TgLogin::enabled()) fail('Đăng nhập bằng Telegram đang tắt', 403);
+        Auth::throttle('tgcode', 15, 600);
+        $r = TgLogin::create();
+        $r['bots'] = TgLogin::bots();
+        return $r;
+    }
+
+    private function tgCheck(): array
+    {
+        return TgLogin::check((string)$this->in('code', ''));
     }
 
     private function logout(): array
@@ -250,7 +269,8 @@ class Api
         if ($name !== '') $upd['display_name'] = mb_substr($name, 0, 60);
         $new = (string)$this->in('new_password', '');
         if ($new !== '') {
-            if (!password_verify((string)$this->in('current_password'), $u['password_hash'])) fail('Mật khẩu hiện tại không đúng');
+            // Tài khoản tạo từ Telegram chưa có mật khẩu: được đặt mới không cần mật khẩu cũ
+            if ($u['password_hash'] !== '' && !password_verify((string)$this->in('current_password'), $u['password_hash'])) fail('Mật khẩu hiện tại không đúng');
             if (strlen($new) < 6) fail('Mật khẩu mới tối thiểu 6 ký tự');
             $upd['password_hash'] = password_hash($new, PASSWORD_DEFAULT);
         }
@@ -1149,6 +1169,7 @@ class Api
             foreach (Access::PERMS as $k => $_) $perms[$k] = !empty($in['group_admin_perms'][$k]);
             Settings::set('group_admin_perms', json_encode($perms));
         }
+        if (array_key_exists('tg_login', $in)) Settings::set('tg_login', $in['tg_login'] ? '1' : '0');
         foreach (['site_name', 'site_url', 'allow_register', 'update_repo', 'update_branch', 'update_token'] as $k) {
             if (!array_key_exists($k, $in)) continue;
             $v = trim((string)$in[$k]);

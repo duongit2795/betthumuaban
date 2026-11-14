@@ -43,6 +43,13 @@ Web PHP (chạy tốt trên **aaPanel**) để quản lý nhóm Telegram bằng 
 - **Tài khoản web**: tạo/sửa/khoá, phân quyền admin / thành viên
 - **Hệ thống**: cài đặt chung, **Kiểm tra & Cập nhật từ GitHub**, link cron
 
+**🔐 Đăng nhập bằng Telegram (không cần mật khẩu)**
+- Trang đăng nhập → *Đăng nhập bằng Telegram* → web hiện mã 6 ký tự (hiệu lực 5 phút)
+- Bấm *Mở bot* (mã tự gửi) hoặc nhắn `/login MÃ` cho bot trong chat riêng
+- Bot hỏi xác nhận kèm thiết bị/IP → bấm ✅ → web tự đăng nhập
+- Telegram chưa có tài khoản web sẽ được tự tạo (nếu đang cho phép đăng ký); có thể đặt mật khẩu sau ở trang Tài khoản
+- Mã gắn với trình duyệt đã lấy mã; chỉ chính người gửi mã mới bấm xác nhận được. Bật/tắt ở *Hệ thống → Cài đặt chung*
+
 **Thành viên (member)**
 - Đăng ký tài khoản, **liên kết Telegram** bằng mã (bấm 1 nút mở bot)
 - Xem tổng điểm, hạng, số tin, cảnh cáo, trạng thái cấm chat ở từng nhóm

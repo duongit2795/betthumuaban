@@ -111,11 +111,11 @@
     join: ['Vào nhóm', 'plus', 'green'], leave: ['Rời nhóm', 'minus', ''], send: ['Gửi tin', 'send', 'blue'],
     settings: ['Cài đặt', 'settings', ''], bot_added: ['Thêm bot vào nhóm', 'bot', 'green'], bot_removed: ['Bot rời nhóm', 'bot', 'red'],
     bot_add: ['Thêm bot', 'bot', 'blue'], bot_delete: ['Xoá bot', 'bot', 'red'], bot_on: ['Bật bot', 'power', 'green'], bot_off: ['Tắt bot', 'power', ''],
-    rule: ['Lệnh tự tạo', 'terminal', 'blue'], update: ['Cập nhật hệ thống', 'download', 'blue'], system: ['Hệ thống', 'settings', ''], pin: ['Ghim tin', 'pin', 'blue'], unpin: ['Bỏ ghim', 'pin', ''],
+    rule: ['Lệnh tự tạo', 'terminal', 'blue'], login: ['Đăng nhập', 'key', 'green'], update: ['Cập nhật hệ thống', 'download', 'blue'], system: ['Hệ thống', 'settings', ''], pin: ['Ghim tin', 'pin', 'blue'], unpin: ['Bỏ ghim', 'pin', ''],
   };
 
   // ================= State & API =================
-  const S = { user: null, csrf: '', site: window.SITE_NAME || 'Tele Manager', allowRegister: false, status: null, access: null };
+  const S = { user: null, csrf: '', site: window.SITE_NAME || 'Tele Manager', allowRegister: false, status: null, access: null, tgLogin: null };
   // Phân quyền: admin web (toàn quyền) / quản trị viên nhóm (nhóm của mình) / thành viên
   const isWebAdmin = () => !!S.access?.web_admin;
   const isManager = () => !!S.access?.manager;
@@ -389,6 +389,71 @@
       ${inner}</div></div>`;
   }
 
+  // ===== Đăng nhập bằng Telegram: lấy mã → nhắn cho bot → xác nhận =====
+  function tgLoginBox(box, onBack) {
+    stopTimers();
+    let code = null, expiresAt = 0, checking = false;
+    const bots = S.tgLogin?.bots || [];
+    const fmt = (sec) => `${Math.floor(sec / 60)}:${pad(sec % 60)}`;
+    const draw = (state = 'pending', name = '') => {
+      const left = Math.max(0, expiresAt - Math.floor(Date.now() / 1000));
+      const expired = state === 'expired' || (code && left <= 0);
+      box.innerHTML = `<div class="card card-pad stack fade-in">
+        <div class="row"><div class="tg-ico">${icon('send')}</div><div class="grow"><h3>Đăng nhập bằng Telegram</h3><div class="xs muted">Không cần mật khẩu</div></div></div>
+        ${!code ? `<div class="center" style="padding:16px"><div class="spinner" style="margin:0 auto"></div></div>` : expired ? `
+          <div class="alert warn">${icon('alert')}<div class="small">Mã đã hết hạn${state === 'denied' ? ' hoặc đã bị huỷ' : ''}.</div></div>
+          <button type="button" class="btn primary block" data-newcode>${icon('refresh', 'sm')}Lấy mã mới</button>` : `
+          <ol class="tg-steps">
+            <li><b>Mở bot</b> và bấm <b>Bắt đầu / Start</b> (mã được gửi tự động)</li>
+            <li>Bot hỏi xác nhận → bấm <b>✅ Xác nhận đăng nhập</b></li>
+          </ol>
+          <div class="code-box tg-code"><span>${esc(code)}</span><button type="button" class="btn icon sm ghost" data-copy="/login ${esc(code)}" aria-label="Sao chép">${icon('copy', 'sm')}</button></div>
+          ${bots.map((b) => `<a class="btn primary block" style="height:48px" href="https://t.me/${esc(b)}?start=login_${esc(code)}" target="_blank" rel="noopener">${icon('send', 'sm')}Mở @${esc(b)}</a>`).join('')}
+          <div class="xs muted center">Hoặc tự nhắn <code>/login ${esc(code)}</code> cho bot trong chat riêng</div>
+          <div class="tg-status ${state === 'waiting' ? 'ok' : ''}">${state === 'waiting'
+            ? `${icon('check', 'sm')}<span>Bot đã nhận mã từ <b>${esc(name)}</b>. Bấm <b>Xác nhận</b> trong Telegram…</span>`
+            : `<div class="spinner"></div><span>Đang chờ bạn gửi mã cho bot · còn <b data-left>${fmt(left)}</b></span>`}</div>`}
+        <button type="button" class="btn ghost block sm" data-back>${icon('back', 'sm')}${onBack ? 'Quay lại' : 'Đăng nhập bằng mật khẩu'}</button>
+      </div>`;
+    };
+    const newCode = async () => {
+      code = null; draw();
+      try {
+        const r = await api('auth/tg-code', {}, { noRedirect: true });
+        code = r.code; expiresAt = Math.floor(Date.now() / 1000) + r.expires_in;
+        if (r.bots?.length) S.tgLogin = { bots: r.bots };
+        draw();
+      } catch (e) { box.innerHTML = `<div class="alert err">${icon('alert')}<div>${esc(e.message)}</div></div>`; }
+    };
+    let lastState = 'pending';
+    every(async () => {
+      if (!code || checking) return;
+      const left = expiresAt - Math.floor(Date.now() / 1000);
+      const lb = $('[data-left]', box);
+      if (lb) lb.textContent = fmt(Math.max(0, left));
+      if (left <= -60) return;
+      checking = true;
+      try {
+        const r = await api('auth/tg-check', { code }, { noRedirect: true });
+        if (r.status === 'done') {
+          stopTimers();
+          toast(r.created ? 'Đã tạo tài khoản từ Telegram và đăng nhập!' : 'Đăng nhập thành công!');
+          S.user = r.user; await boot(); $('#app').innerHTML = ''; go('/');
+        } else if (r.status !== lastState) {
+          lastState = r.status;
+          if (['expired', 'denied', 'invalid', 'used'].includes(r.status)) { expiresAt = 0; draw('expired'); }
+          else draw(r.status, r.name || '');
+        }
+      } catch (e) { stopTimers(); toast(e.message, 'err'); draw('expired'); }
+      checking = false;
+    }, 2000);
+    box.addEventListener('click', (e) => {
+      if (e.target.closest('[data-newcode]')) { lastState = 'pending'; newCode(); }
+      if (e.target.closest('[data-back]')) { stopTimers(); (onBack || renderLogin)(); }
+    });
+    newCode();
+  }
+
   function renderLogin() {
     authWrap(`
       <h1 class="center">${esc(S.site)}</h1>
@@ -398,7 +463,15 @@
         <label class="field"><span class="lbl">Mật khẩu</span><div class="input-icon">${icon('lock')}<input class="input" type="password" name="password" autocomplete="current-password" required></div></label>
         <button class="btn primary block" style="height:46px">Đăng nhập</button>
       </form>
+      ${S.tgLogin ? `<div class="divider"><span>hoặc</span></div>
+        <button type="button" class="btn block tg-btn" id="tglogin">${icon('send')}Đăng nhập bằng Telegram</button>` : ''}
+      <div id="tgbox"></div>
       ${S.allowRegister ? `<p class="center small" style="margin-top:16px">Chưa có tài khoản? <a href="#/register">Đăng ký thành viên</a></p>` : ''}`);
+    stopTimers();
+    $('#tglogin')?.addEventListener('click', () => {
+      $('#f').classList.add('hidden'); $('#tglogin').classList.add('hidden'); $('.divider')?.classList.add('hidden');
+      tgLoginBox($('#tgbox'), () => renderLogin());
+    });
     $('#f').onsubmit = async (e) => {
       e.preventDefault();
       const btn = e.target.querySelector('button');
@@ -412,6 +485,7 @@
   }
 
   function renderRegister() {
+    stopTimers();
     authWrap(`
       <h1 class="center">Đăng ký thành viên</h1>
       <p class="center muted" style="margin:6px 0 22px">Sau khi đăng ký, liên kết Telegram để xem điểm tương tác</p>
@@ -420,6 +494,7 @@
         <label class="field"><span class="lbl">Tên đăng nhập</span><input class="input" name="username" autocomplete="username" required pattern="[a-zA-Z0-9_.]{3,32}"><div class="hint">3-32 ký tự: chữ, số, dấu _ hoặc .</div></label>
         <label class="field"><span class="lbl">Mật khẩu</span><input class="input" type="password" name="password" autocomplete="new-password" required minlength="6"></label>
         <button class="btn primary block" style="height:46px">Tạo tài khoản</button>
+        ${S.tgLogin ? `<button type="button" class="btn block tg-btn" id="tgreg">${icon('send')}Đăng ký nhanh bằng Telegram</button>` : ''}
       </form>
       <p class="center small" style="margin-top:16px">Đã có tài khoản? <a href="#/login">Đăng nhập</a></p>`);
     $('#f').onsubmit = async (e) => {
@@ -429,6 +504,10 @@
         catch (err) { toast(err.message, 'err'); }
       });
     };
+    $('#tgreg')?.addEventListener('click', () => {
+      const f = $('#f'); const box = document.createElement('div'); f.replaceWith(box);
+      tgLoginBox(box, () => renderRegister());
+    });
   }
 
   function renderInstall() {
@@ -1853,7 +1932,8 @@
         <div class="card">
           <div class="form-group"><label class="field"><span class="lbl">Tên website</span><input class="input" name="site_name" value="${esc(s.site_name)}"></label></div>
           <div class="form-group"><label class="field"><span class="lbl">Địa chỉ web (dùng cho webhook)</span><input class="input" name="site_url" value="${esc(s.site_url)}" placeholder="${esc(d.detected_url)}"><div class="hint">Phải là <b>https://</b>. Tự nhận: ${esc(d.detected_url)}</div></label></div>
-          ${sw('allow_register', s.allow_register === '1', 'Cho phép đăng ký thành viên', 'Thành viên tự tạo tài khoản để xem điểm')}
+          ${sw('allow_register', s.allow_register === '1', 'Cho phép đăng ký thành viên', 'Thành viên tự tạo tài khoản (kể cả tự tạo khi đăng nhập bằng Telegram lần đầu)')}
+          ${sw('tg_login', s.tg_login !== '0', 'Đăng nhập bằng Telegram', 'Lấy mã trên web → nhắn cho bot → bấm xác nhận')}
         </div>
         <div class="section-title"><h2>Nguồn cập nhật</h2></div>
         <div class="card">
@@ -2039,8 +2119,9 @@
       <form class="card card-pad stack" id="fp">
         <h3>Thông tin</h3>
         <label class="field"><span class="lbl">Tên hiển thị</span><input class="input" name="display_name" value="${esc(u.display_name)}"></label>
-        <h3 style="margin-top:10px">Đổi mật khẩu</h3>
-        <label class="field"><span class="lbl">Mật khẩu hiện tại</span><input class="input" type="password" name="current_password" autocomplete="current-password"></label>
+        <h3 style="margin-top:10px">${u.has_password ? 'Đổi mật khẩu' : 'Đặt mật khẩu'}</h3>
+        ${u.has_password ? `<label class="field"><span class="lbl">Mật khẩu hiện tại</span><input class="input" type="password" name="current_password" autocomplete="current-password"></label>`
+          : `<div class="alert info">${icon('info')}<div class="xs">Tài khoản tạo từ Telegram, chưa có mật khẩu. Bạn vẫn đăng nhập được bằng Telegram; đặt mật khẩu nếu muốn đăng nhập bằng tên <b>${esc(u.username)}</b>.</div></div>`}
         <label class="field"><span class="lbl">Mật khẩu mới</span><input class="input" type="password" name="new_password" minlength="6" autocomplete="new-password"></label>
         <button class="btn primary block">Lưu</button>
       </form>
@@ -2056,7 +2137,7 @@
         });
         $('#fp', root).onsubmit = async (e) => {
           e.preventDefault();
-          try { const r = await api('me/update', formData(e.target)); S.user = r.user; toast('Đã lưu'); e.target.current_password.value = ''; e.target.new_password.value = ''; shell('', 'Tài khoản', isManager() ? '/more' : null); $('#page-title').textContent = 'Tài khoản'; }
+          try { const r = await api('me/update', formData(e.target)); const hadPw = S.user.has_password; S.user = r.user; toast('Đã lưu'); if (!hadPw && r.user.has_password) render(); if (e.target.current_password) e.target.current_password.value = ''; e.target.new_password.value = ''; shell('', 'Tài khoản', isManager() ? '/more' : null); $('#page-title').textContent = 'Tài khoản'; }
           catch (err) { toast(err.message, 'err'); }
         };
       },
@@ -2069,7 +2150,7 @@
   async function boot() {
     try {
       const st = await api('status', undefined, { noRedirect: true });
-      S.status = st; S.csrf = st.csrf; S.user = st.user; S.site = st.site_name; S.allowRegister = st.allow_register; S.access = st.access;
+      S.status = st; S.csrf = st.csrf; S.user = st.user; S.site = st.site_name; S.allowRegister = st.allow_register; S.access = st.access; S.tgLogin = st.tg_login;
     } catch (e) {
       $('#app').innerHTML = `<div class="auth"><div class="alert err">${icon('alert')}<div>${esc(e.message)}</div></div></div>`;
       throw e;

@@ -23,6 +23,7 @@ class BotHandler
         elseif (isset($u['chat_member'])) $this->onChatMember($u['chat_member']);
         elseif (isset($u['message'])) $this->onMessage($u['message']);
         elseif (isset($u['edited_message'])) $this->onMessage($u['edited_message'], true);
+        elseif (isset($u['callback_query'])) TgLogin::onCallback($this->api, $u['callback_query']);
     }
 
     private function isGroup(array $chat): bool
@@ -466,6 +467,15 @@ class BotHandler
     {
         $text = trim((string)($msg['text'] ?? ''));
         $from = $msg['from'];
+
+        // Đăng nhập web bằng mã: /start login_ABC123, /login ABC123, /dangnhap ABC123 hoặc chỉ gửi mã
+        if (preg_match('~^(?:/start(?:@\w+)?\s+login_|/(?:login|dangnhap)(?:@\w+)?\s+)?([A-Za-z0-9]{6})$~', $text, $lm)
+            && TgLogin::onCode($this->api, $msg, $lm[1])) return;
+        if (preg_match('~^/(?:login|dangnhap)\b~', $text)) {
+            $this->reply($msg, '🔐 Để đăng nhập web: mở trang web → <b>Đăng nhập bằng Telegram</b> → gửi mã 6 ký tự cho tôi, ví dụ <code>/login K7QX4P</code>');
+            return;
+        }
+
         $code = null;
         if (preg_match('~^/start(?:@\w+)?\s+link_([A-Za-z0-9]+)~', $text, $mm)) $code = $mm[1];
         elseif (preg_match('~^/link(?:@\w+)?\s+([A-Za-z0-9]+)~', $text, $mm)) $code = $mm[1];
@@ -488,6 +498,7 @@ class BotHandler
         $site = Settings::get('site_name');
         $this->reply($msg, "👋 Xin chào <b>" . tg_esc($from['first_name']) . "</b>!\nTôi là bot quản lý nhóm của <b>" . tg_esc($site) . "</b>.\n\n"
             . "➕ Thêm tôi vào nhóm và cấp quyền quản trị để bắt đầu.\n"
+            . "🔐 Đăng nhập web: /login MÃ (lấy mã ở trang đăng nhập)\n"
             . "🔗 Liên kết tài khoản web: /link MÃ\n⭐ Xem điểm: /me\n\nID của bạn: <code>{$from['id']}</code>");
     }
 

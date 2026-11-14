@@ -13,6 +13,7 @@ class Settings
         'cron_key' => '',
         'menu_admin_only' => '0',
         'group_admin_access' => '1',
+        'tg_login' => '1',
         'group_admin_perms' => '',
     ];
     private static array $cache = [];
