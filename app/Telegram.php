@@ -112,6 +112,13 @@ class Telegram
     }
 
     /** Đăng ký menu lệnh; $memberExtra/$adminExtra là lệnh tự tạo dùng chung mọi nhóm */
+    /** Menu "/" chỉ hiện cho quản trị viên nhóm? (cài đặt toàn hệ thống) */
+    public static function menuAdminOnly(): bool
+    {
+        return Settings::get('menu_admin_only') === '1';
+    }
+
+    /** Đăng ký menu lệnh; $memberExtra/$adminExtra là lệnh tự tạo dùng chung mọi nhóm */
     public function registerCommands(array $memberExtra = [], array $adminExtra = []): void
     {
         [$member, $admin] = self::baseCommands();
@@ -120,7 +127,13 @@ class Telegram
             foreach (array_merge($a, $b) as $c) $o[$c['command']] = $c;
             return array_slice(array_values($o), 0, 100);
         };
-        $this->tryCall('setMyCommands', ['commands' => $merge($member, $memberExtra), 'scope' => ['type' => 'all_group_chats']]);
+        if (self::menuAdminOnly()) {
+            // Thành viên thường không thấy menu: xoá menu nhóm và menu mặc định
+            $this->tryCall('deleteMyCommands', ['scope' => ['type' => 'all_group_chats']]);
+            $this->tryCall('deleteMyCommands', ['scope' => ['type' => 'default']]);
+        } else {
+            $this->tryCall('setMyCommands', ['commands' => $merge($member, $memberExtra), 'scope' => ['type' => 'all_group_chats']]);
+        }
         $this->tryCall('setMyCommands', ['commands' => $merge($admin, $adminExtra), 'scope' => ['type' => 'all_chat_administrators']]);
         $this->tryCall('setMyCommands', ['commands' => [
             ['command' => 'start', 'description' => 'Bắt đầu'],

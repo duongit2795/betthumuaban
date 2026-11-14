@@ -1007,12 +1007,14 @@
         const cmds = d.rules.filter((r) => r.trigger_type === 'command');
         const allOn = d.rules.length && d.rules.every((r) => r.enabled);
         const allMenu = cmds.length && cmds.every((r) => r.show_in_menu);
-        const master = d.rules.length ? `<div class="card" style="margin-bottom:12px">
-            <label class="switch-row"><div class="txt"><b>Bật tất cả lệnh</b><span>${d.rules.filter((r) => r.enabled).length}/${d.rules.length} lệnh đang bật</span></div>
+        const master = `<div class="card" style="margin-bottom:12px">
+            <label class="switch-row"><div class="txt"><b>🔒 Chỉ admin thấy menu lệnh</b><span>${d.menu_admin_only ? 'Thành viên gõ "/" sẽ không thấy danh sách lệnh' : 'Đang tắt: mọi thành viên đều thấy menu khi gõ "/"'}</span></div>
+              <div class="switch"><input type="checkbox" data-menumode ${d.menu_admin_only ? 'checked' : ''}><span></span></div></label>
+            ${d.rules.length ? `<label class="switch-row"><div class="txt"><b>Bật tất cả lệnh</b><span>${d.rules.filter((r) => r.enabled).length}/${d.rules.length} lệnh đang bật</span></div>
               <div class="switch"><input type="checkbox" data-bulk="enabled" ${allOn ? 'checked' : ''}><span></span></div></label>
             ${cmds.length ? `<label class="switch-row"><div class="txt"><b>Hiện tất cả trong menu lệnh Telegram</b><span>Hiện khi gõ "/" trong nhóm · ${cmds.filter((r) => r.show_in_menu).length}/${cmds.length} lệnh</span></div>
-              <div class="switch"><input type="checkbox" data-bulk="show_in_menu" ${allMenu ? 'checked' : ''}><span></span></div></label>` : ''}
-          </div>` : '';
+              <div class="switch"><input type="checkbox" data-bulk="show_in_menu" ${allMenu ? 'checked' : ''}><span></span></div></label>` : ''}` : ''}
+          </div>`;
         ids = d.rules.map((r) => r.id);
         $('#rlist', root).innerHTML = master + (d.rules.length ? `<div class="list">${d.rules.map((r) => `
           <div class="list-item" style="align-items:flex-start">
@@ -1046,6 +1048,16 @@
         if (r) ruleEditor(JSON.parse(r.dataset.rule), groups, load);
       });
       root.addEventListener('change', async (e) => {
+        const mm = e.target.closest('[data-menumode]');
+        if (mm) {
+          mm.disabled = true;
+          try {
+            const r = await api('rules/menu-mode', { admin_only: mm.checked });
+            toast(r.admin_only ? 'Từ giờ chỉ admin thấy menu lệnh' : 'Mọi thành viên đều thấy menu lệnh');
+            (r.menu_errors || []).length && toast('Không cập nhật được menu ở: ' + r.menu_errors.join(', '), 'err');
+          } catch (err) { toast(err.message, 'err'); }
+          return load();
+        }
         const bk = e.target.closest('[data-bulk]');
         if (bk) {
           bk.disabled = true;
