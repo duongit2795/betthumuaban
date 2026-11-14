@@ -101,6 +101,7 @@ class Api
             'amnesty' => 'amnesty',
             'amnesty/search' => 'amnestySearch',
             'amnesty/do' => 'amnestyDo',
+            'amnesty/lookup' => 'amnestyLookup',
             'payments' => 'payments',
             'payments/save' => 'paymentsSave',
             'payments/test' => 'paymentsTest',
@@ -1640,6 +1641,7 @@ class Api
             'linked' => (bool)$u['tg_user_id'],
             'mine' => $mine,
             'groups' => $groups,
+            'all_groups' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title']], DB::all('SELECT id, title FROM tg_groups WHERE active = 1 ORDER BY title')),
             'recent' => array_map(fn($t) => ['payer' => $t['display_name'] ?: $t['username'], 'note' => preg_replace('/^Ân xá: /u', '', (string)$t['note']), 'amount' => -(int)$t['amount'], 'created_at' => (int)$t['created_at']], $recent),
         ];
     }
@@ -1666,10 +1668,29 @@ class Api
         return ['group' => ['id' => (int)$g['id'], 'title' => $g['title']], 'rows' => array_values(array_filter(array_map(fn($m) => $this->amnestyMember($m, $cfg, $g), $rows), fn($r) => $r['punishments']))];
     }
 
+    /** Ân xá theo ID Telegram: hỏi Telegram trạng thái thật (kể cả người bị cấm trước khi có web) */
+    private function amnestyLookup(): array
+    {
+        $u = Auth::requireUser();
+        $cfg = Amnesty::config();
+        if (!$cfg['enabled']) fail('Tính năng ân xá đang tắt');
+        $g = Repo::group($this->int('group_id'));
+        if (!$g || !$g['active']) fail('Chọn nhóm', 404);
+        $key = 'amnesty_lookup_' . $u['id'];
+        $hits = array_filter((array)($_SESSION[$key] ?? []), fn($t) => $t > now() - 60);
+        if (count($hits) >= 15) fail('Tra cứu quá nhanh, thử lại sau 1 phút', 429);
+        $hits[] = now();
+        $_SESSION[$key] = array_values($hits);
+        $m = Amnesty::lookup($u, $g, (string)$this->in('who', ''));
+        $row = $this->amnestyMember($m, $cfg, $g);
+        if (!$row['punishments']) fail(Repo::name($m) . ' (' . $m['tg_user_id'] . ') hiện không bị cấm, cấm chat hay có cảnh cáo trong nhóm này.', 404);
+        return $row;
+    }
+
     private function amnestyDo(): array
     {
         $u = Auth::requireUser();
-        $r = Amnesty::perform($u, $this->int('member_id'), (string)$this->in('kind'));
+        $r = Amnesty::perform($u, $this->int('member_id'), (string)$this->in('kind'), (bool)$this->in('by_id'));
         return ['balance' => $r['balance'], 'price' => $r['price'], 'label' => $r['label'], 'invite_link' => $r['invite_link'], 'member' => $this->memberRow($r['member'])];
     }
 

@@ -2920,11 +2920,11 @@
   }, { title: 'Ví của tôi' });
 
   // ================= Ân xá =================
-  const punishCard = (m, showGroup) => `<div class="card card-pad amnesty-card">
+  const punishCard = (m, showGroup, byId = false) => `<div class="card card-pad amnesty-card">
     <div class="row">${avatar(m.name, m.tg_user_id)}<div class="grow" style="min-width:0"><div class="ellipsis" style="font-weight:600">${esc(m.name)}${m.username ? ` <span class="xs muted">@${esc(m.username)}</span>` : ''}</div>
       <div class="xs muted ellipsis">${showGroup ? esc(m.group_title || '') + ' · ' : ''}<span class="mono">${esc(m.tg_user_id)}</span></div></div>${statusBadge(m)}</div>
     <div class="stack" style="gap:8px;margin-top:12px">${m.punishments.map((p) => `<div class="punish-row"><span class="p-ico">${p.icon}</span><div class="grow" style="min-width:0"><div class="small" style="font-weight:600">${esc(p.label)}</div><div class="xs muted">${esc(p.desc)}</div></div>
-      <button class="btn sm primary nowrap" data-amnesty='${esc(JSON.stringify({ id: m.id, kind: p.kind, price: p.price, label: p.label, icon: p.icon, desc: p.desc, name: m.name, group: m.group_title }))}'>${icon('heart', 'sm')}${money(p.price)}</button></div>`).join('')}</div></div>`;
+      <button class="btn sm primary nowrap" data-amnesty='${esc(JSON.stringify({ id: m.id, kind: p.kind, price: p.price, label: p.label, icon: p.icon, desc: p.desc, name: m.name, group: m.group_title, by_id: byId }))}'>${icon('heart', 'sm')}${money(p.price)}</button></div>`).join('')}</div></div>`;
 
   route('/amnesty', async () => {
     const d = await api('amnesty');
@@ -2943,6 +2943,15 @@
       <div class="section-title"><h2>Hình phạt của bạn</h2></div>
       ${!d.linked ? `<div class="card">${empty('link', 'Liên kết Telegram ở trang <a href="#/account">Tài khoản</a> để xem và ân xá hình phạt của bạn.')}</div>`
         : d.mine.length ? `<div class="stack">${d.mine.map((m) => punishCard(m, true)).join('')}</div>` : `<div class="card">${empty('check', 'Bạn không có hình phạt nào 🎉')}</div>`}
+      ${d.enabled && d.all_groups.length ? `
+      <div class="section-title"><h2>Ân xá theo ID Telegram</h2></div>
+      <form class="card card-pad stack" id="flookup">
+        <div class="xs muted">Người bị cấm <b>trước khi có web</b> không có trong danh sách: nhập ID Telegram, bot sẽ kiểm tra trực tiếp trên Telegram xem người đó đang bị cấm hay cấm chat.${d.allow_others ? '' : ' <b>Admin chỉ cho tự ân xá cho chính mình.</b>'}</div>
+        <label class="field"><span class="lbl">Nhóm</span><select class="input" name="group_id">${d.all_groups.map((g) => `<option value="${g.id}">${esc(g.title)}</option>`).join('')}</select></label>
+        <div class="row" style="gap:8px"><input class="input grow" name="who" required placeholder="ID Telegram, VD 123456789" inputmode="text" autocomplete="off"><button class="btn primary nowrap">${icon('search', 'sm')}Tra cứu</button></div>
+        <div class="xs muted">Chưa biết ID? Người bị cấm nhắn <b>/start</b> cho bot (hoặc @userinfobot) để xem ID của mình.</div>
+        <div data-lookup></div>
+      </form>` : ''}
       ${d.allow_others && d.groups.length ? `
       <div class="section-title"><h2>Ân xá người khác</h2></div>
       <div class="chips" data-groups>${d.groups.map((g, i) => `<button class="chip ${i === 0 ? 'active' : ''}" data-g="${g.id}">${esc(g.title)}${g.punished ? ` · ${g.punished}` : ''}</button>`).join('')}</div>
@@ -2963,6 +2972,16 @@
         };
         load();
         $('[data-q]', root)?.addEventListener('input', debounce(load, 350));
+        $('#flookup', root)?.addEventListener('submit', (e) => {
+          e.preventDefault();
+          const out = $('[data-lookup]', root);
+          withBtn(e.target.querySelector('button'), async () => {
+            try {
+              const r = await api('amnesty/lookup', formData(e.target));
+              out.innerHTML = punishCard(r, true, true);
+            } catch (err) { out.innerHTML = `<div class="alert ${err.status === 404 ? 'info' : 'err'}">${icon(err.status === 404 ? 'info' : 'alert')}<div class="small">${esc(err.message)}</div></div>`; }
+          });
+        });
         root.addEventListener('click', (e) => {
           const g = e.target.closest('[data-g]');
           if (g) { gid = +g.dataset.g; $$('[data-g]', root).forEach((x) => x.classList.toggle('active', x === g)); load(); return; }
@@ -2988,7 +3007,7 @@
           (el, close) => {
             $('[data-go]', el)?.addEventListener('click', (ev) => withBtn(ev.currentTarget, async () => {
               try {
-                const r = await api('amnesty/do', { member_id: a.id, kind: a.kind });
+                const r = await api('amnesty/do', { member_id: a.id, kind: a.kind, by_id: !!a.by_id });
                 balance = r.balance;
                 close();
                 sheet(`<div class="center" style="padding:10px 0 4px"><div style="font-size:54px">🕊</div><h2>Ân xá thành công</h2>
