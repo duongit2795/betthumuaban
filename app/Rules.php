@@ -295,44 +295,96 @@ class Rules
         return $deleted;
     }
 
+    const WEEKDAYS = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy'];
+
+    /** Thay biến {…} trong nội dung. Giá trị do người dùng nhập đều được escape. */
     public static function vars(string $text, array $group, array $m, ?array $target, string $args, array $rule): string
     {
+        if (!str_contains($text, '{')) return $text;
+        $need = fn(string ...$keys) => (bool)array_filter($keys, fn($k) => str_contains($text, $k));
         $m = DB::get('SELECT * FROM tg_members WHERE id = ?', [$m['id']]) ?: $m;
+        $s = Repo::settings($group);
         $rank = fn($x) => 1 + (int)DB::val('SELECT COUNT(*) FROM tg_members WHERE group_id = ? AND is_bot = 0 AND points > ?', [$group['id'], $x['points']]);
-        $map = [
-            '{name}' => tg_esc(Repo::name($m)),
-            '{mention}' => Repo::mention($m),
-            '{username}' => $m['username'] ? '@' . tg_esc($m['username']) : tg_esc(Repo::name($m)),
-            '{id}' => (string)$m['tg_user_id'],
-            '{points}' => (string)$m['points'],
-            '{rank}' => (string)$rank($m),
-            '{warns}' => (string)$m['warns'],
-            '{messages}' => (string)$m['messages'],
-            '{group}' => tg_esc($group['title']),
-            '{args}' => tg_esc($args),
-            '{count}' => (string)((int)$rule['uses'] + 1),
-            '{date}' => date('d/m/Y'),
-            '{time}' => date('H:i'),
-            '{random}' => (string)random_int(1, 100),
-        ];
-        $map['{rules}'] = (string)(Repo::settings($group)['rules_text'] ?? '');
-        $map['{member_count}'] = (string)$group['member_count'];
-        // {random:1-6} → số ngẫu nhiên trong khoảng
-        $text = preg_replace_callback('/\{random:(-?\d+)-(-?\d+)\}/', function ($m) {
-            [$a, $b] = [(int)$m[1], (int)$m[2]];
-            return (string)random_int(min($a, $b), max($a, $b));
-        }, $text);
+        $user = function (array $x, string $p) use ($rank, $s, $need) {
+            $out = [
+                "{{$p}name}" => tg_esc(Repo::name($x)),
+                "{{$p}first_name}" => tg_esc($x['first_name'] ?? ''),
+                "{{$p}last_name}" => tg_esc($x['last_name'] ?? ''),
+                "{{$p}mention}" => Repo::mention($x),
+                "{{$p}username}" => !empty($x['username']) ? '@' . tg_esc($x['username']) : tg_esc(Repo::name($x)),
+                "{{$p}id}" => (string)$x['tg_user_id'],
+                "{{$p}points}" => (string)$x['points'],
+                "{{$p}messages}" => (string)$x['messages'],
+                "{{$p}warns}" => (string)$x['warns'],
+                "{{$p}role}" => !empty($x['is_admin']) ? 'Quản trị viên' : 'Thành viên',
+                "{{$p}joined}" => !empty($x['joined_at']) ? date('d/m/Y', (int)$x['joined_at']) : '—',
+                "{{$p}days}" => !empty($x['joined_at']) ? (string)max(0, (int)floor((now() - (int)$x['joined_at']) / 86400)) : '0',
+            ];
+            if ($need("{{$p}rank}")) $out["{{$p}rank}"] = (string)$rank($x);
+            return $out;
+        };
+
+        $map = $user($m, '');
+        $map['{fullname}'] = $map['{name}'];
+        $map['{warn_limit}'] = (string)$s['warn_limit'];
+        $map['{warns_left}'] = (string)max(0, (int)$s['warn_limit'] - (int)$m['warns']);
+
+        // Người được reply
         if ($target) {
             $target = DB::get('SELECT * FROM tg_members WHERE id = ?', [$target['id']]) ?: $target;
-            $map += [
-                '{target_name}' => tg_esc(Repo::name($target)),
-                '{target_mention}' => Repo::mention($target),
-                '{target_points}' => (string)$target['points'],
-                '{target_rank}' => (string)$rank($target),
-            ];
+            $map += $user($target, 'target_');
         } else {
-            $map += ['{target_name}' => '', '{target_mention}' => '', '{target_points}' => '', '{target_rank}' => ''];
+            foreach (['name', 'first_name', 'last_name', 'mention', 'username', 'id', 'points', 'messages', 'warns', 'role', 'joined', 'days', 'rank'] as $k) $map["{target_$k}"] = '';
         }
+
+        // Nhóm
+        $map['{group}'] = tg_esc($group['title']);
+        $map['{group_id}'] = (string)$group['chat_id'];
+        $map['{group_link}'] = $group['username'] ? 'https://t.me/' . tg_esc($group['username']) : '';
+        $map['{member_count}'] = (string)$group['member_count'];
+        $map['{rules}'] = (string)($s['rules_text'] ?? '');
+        if ($need('{messages_today}')) $map['{messages_today}'] = (string)(int)DB::val('SELECT messages FROM daily_stats WHERE group_id = ? AND day = ?', [$group['id'], date('Y-m-d')]);
+        if ($need('{top1}', '{top1_points}', '{top3}')) {
+            $top = DB::all("SELECT * FROM tg_members WHERE group_id = ? AND is_bot = 0 AND status <> 'banned' ORDER BY points DESC, messages DESC LIMIT 3", [$group['id']]);
+            $map['{top1}'] = $top ? tg_esc(Repo::name($top[0])) : '—';
+            $map['{top1_points}'] = $top ? (string)$top[0]['points'] : '0';
+            $medals = ['🥇', '🥈', '🥉'];
+            $map['{top3}'] = implode("\n", array_map(fn($x, $i) => $medals[$i] . ' ' . tg_esc(Repo::name($x)) . ' — ' . $x['points'] . ' điểm', $top, array_keys($top)));
+        }
+        if ($need('{bot}')) {
+            $b = $group['bot_id'] ? DB::val('SELECT username FROM tg_bots WHERE id = ?', [$group['bot_id']]) : null;
+            $map['{bot}'] = $b ? '@' . tg_esc($b) : '';
+        }
+
+        // Thời gian (giờ Việt Nam)
+        $map['{date}'] = date('d/m/Y');
+        $map['{time}'] = date('H:i');
+        $map['{datetime}'] = date('H:i d/m/Y');
+        $map['{weekday}'] = self::WEEKDAYS[(int)date('w')];
+        $map['{day}'] = date('d');
+        $map['{month}'] = date('m');
+        $map['{year}'] = date('Y');
+
+        // Phần chữ gõ sau lệnh
+        $words = preg_split('/\s+/u', trim($args), -1, PREG_SPLIT_NO_EMPTY);
+        $map['{args}'] = tg_esc($args);
+        for ($k = 1; $k <= 3; $k++) $map["{arg$k}"] = tg_esc($words[$k - 1] ?? '');
+
+        // Lệnh
+        $map['{count}'] = (string)((int)$rule['uses'] + 1);
+        $map['{command}'] = $rule['trigger_type'] === 'command' ? '/' . $rule['trigger_value'] : tg_esc($rule['name']);
+        $map['{random}'] = (string)random_int(1, 100);
+
+        // {random:1-6} và {choice:a|b|c}
+        $text = preg_replace_callback('/\{random:(-?\d+)-(-?\d+)\}/', function ($x) {
+            [$a, $b] = [(int)$x[1], (int)$x[2]];
+            return (string)random_int(min($a, $b), max($a, $b));
+        }, $text);
+        $text = preg_replace_callback('/\{choice:([^{}]*)\}/u', function ($x) {
+            $opts = array_values(array_filter(array_map('trim', explode('|', $x[1])), 'strlen'));
+            return $opts ? $opts[random_int(0, count($opts) - 1)] : '';
+        }, $text);
+
         return strtr($text, $map);
     }
 

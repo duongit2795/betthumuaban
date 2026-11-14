@@ -22,7 +22,12 @@ Web PHP (chạy tốt trên **aaPanel**) để quản lý nhóm Telegram bằng 
   - **Khi**: gõ `/lệnh`, tin chứa từ khoá, đúng nguyên câu, bắt đầu bằng, hoặc regex
   - **Nếu**: ai được dùng (mọi người / chỉ admin / không phải admin), điểm tối thiểu, bắt buộc reply, thời gian chờ mỗi người, tỉ lệ thành công %
   - **Thì** (nhiều hành động nối tiếp): trả lời, gửi tin, cộng/trừ điểm, xoá, ghim, cảnh cáo, cấm chat, đuổi, cấm, gỡ cấm. Mỗi hành động áp dụng cho người gửi hoặc người được reply
-  - Biến: `{mention} {name} {username} {id} {points} {rank} {messages} {warns} {args} {target_mention} {target_name} {target_points} {group} {member_count} {rules} {count} {random} {random:1-6} {date} {time}`
+  - **52 biến** chia 6 nhóm, có giải thích, ví dụ và ô tìm kiếm; **xem trước tin nhắn** với giá trị mẫu ngay khi gõ:
+    - Người gửi: `{mention} {name} {first_name} {last_name} {username} {id} {points} {rank} {messages} {warns} {warn_limit} {warns_left} {role} {joined} {days}`
+    - Người được reply: `{target_mention} {target_name} {target_first_name} {target_username} {target_id} {target_points} {target_rank} {target_messages} {target_warns} {target_role} {target_days}`
+    - Nhóm: `{group} {member_count} {messages_today} {rules} {top1} {top1_points} {top3} {group_link} {group_id} {bot}`
+    - Chữ sau lệnh: `{args} {arg1} {arg2} {arg3}` · Thời gian: `{time} {date} {datetime} {weekday} {day} {month} {year}`
+    - Ngẫu nhiên & khác: `{random} {random:1-6} {choice:Có|Không|Có thể} {count} {command}`
   - 21 mẫu dựng sẵn chia 3 nhóm: Điểm & giải trí (điểm danh, cảm ơn, quay số, xúc xắc, bói vui, thưởng điểm…), Thông tin & tự trả lời (nội quy, ID, chào lại, hỏi giá, liên hệ…), Quản trị (chặn từ khoá, chặn link mời, xử lý spam, cấm chat nhanh, cảnh cáo nhanh, ghim, dọn tin)
   - **Tự động xoá**: bật/tắt, đặt **thời gian riêng cho từng loại tin**: tin người gửi, tin bot trả lời, tin được reply (VD: người gửi xoá ngay, bot trả lời xoá sau 20 giây), từ ngay lập tức đến 2 ngày
   - Tự hiện trong menu lệnh của Telegram, lệnh tự tạo được ưu tiên hơn lệnh có sẵn nếu trùng tên
