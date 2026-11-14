@@ -98,6 +98,23 @@ class BotHandler
         $gid = (int)$group['id'];
         $s = Repo::settings($group);
 
+        // Lưu tin nhắn cho tab Chat trên web
+        if ($edited) ChatLog::edited($msg);
+        elseif (!empty($msg['new_chat_members'])) {
+            $names = implode(', ', array_map(fn($u) => trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? '')), $msg['new_chat_members']));
+            $by = $msg['from'] ?? null;
+            $self = $by && count($msg['new_chat_members']) === 1 && $msg['new_chat_members'][0]['id'] == $by['id'];
+            ChatLog::store($msg, $gid, 'service', '➕ ' . $names . ($self || !$by ? ' đã tham gia nhóm' : ' được ' . trim($by['first_name'] ?? '') . ' thêm vào nhóm'));
+        } elseif (!empty($msg['left_chat_member'])) {
+            ChatLog::store($msg, $gid, 'service', '➖ ' . trim(($msg['left_chat_member']['first_name'] ?? '') . ' ' . ($msg['left_chat_member']['last_name'] ?? '')) . ' đã rời nhóm');
+        } elseif (isset($msg['new_chat_title'])) {
+            ChatLog::store($msg, $gid, 'service', '✏️ Đổi tên nhóm thành "' . $msg['new_chat_title'] . '"');
+        } elseif (isset($msg['pinned_message'])) {
+            ChatLog::markPinned($chat['id'], $msg['pinned_message']['message_id']);
+        } else {
+            ChatLog::store($msg, $gid);
+        }
+
         if (!empty($msg['new_chat_members'])) {
             $this->onJoin($group, $s, $msg);
             return;
@@ -127,6 +144,7 @@ class BotHandler
             $violation = $this->checkViolation($msg, $s, $text);
             if ($violation) {
                 $this->del($chat['id'], $msg['message_id']);
+                ChatLog::markDeleted($chat['id'], $msg['message_id'], $violation);
                 Repo::log($gid, 'Bot', 'delete', $member, $violation);
                 if ($s['violation_warn']) {
                     $this->safe(fn() => Moderation::perform('warn', $group, ['tgUserId' => $from['id'], 'actor' => 'Bot', 'reason' => $violation]));

@@ -52,7 +52,20 @@ class Telegram
         if (!is_array($data) || empty($data['ok'])) {
             throw new TelegramException($data['description'] ?? 'Telegram lỗi', $data['error_code'] ?? null);
         }
+        self::afterCall($method, $params, $data['result']);
         return $data['result'];
+    }
+
+    /** Ghi lại tin bot gửi / tin bị xoá / tin được ghim cho tab Chat */
+    protected static function afterCall(string $method, array $params, $result): void
+    {
+        if (in_array($method, ['sendMessage', 'sendPhoto', 'sendDocument', 'sendAnimation', 'sendSticker', 'sendPoll'], true) && is_array($result)) {
+            ChatLog::store($result);
+        } elseif ($method === 'deleteMessage') {
+            ChatLog::markDeleted($params['chat_id'], $params['message_id']);
+        } elseif ($method === 'pinChatMessage') {
+            ChatLog::markPinned($params['chat_id'], $params['message_id']);
+        }
     }
 
     public function send($chatId, string $text, array $extra = [])

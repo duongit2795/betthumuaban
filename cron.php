@@ -14,6 +14,8 @@ if (PHP_SAPI !== 'cli' && !hash_equals((string)Settings::get('cron_key'), (strin
 Repo::sweepMutes();
 // Xoá tin nhắn hẹn giờ
 DelQueue::process(500);
+// Giữ lịch sử chat 30 ngày
+ChatLog::cleanup();
 // Xoá nhật ký cũ hơn 180 ngày
 DB::run('DELETE FROM app_logs WHERE created_at < ?', [now() - 180 * 86400]);
 // Dọn file throttle cũ
