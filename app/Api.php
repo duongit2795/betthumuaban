@@ -69,6 +69,7 @@ class Api
             'rules/delete' => 'ruleDelete',
             'rules/toggle' => 'ruleToggle',
             'rules/bulk' => 'ruleBulk',
+            'rules/menu-mode' => 'ruleMenuMode',
             'system' => 'system',
             'system/settings' => 'systemSettings',
             'system/check-update' => 'checkUpdate',
@@ -837,6 +838,7 @@ class Api
             : DB::all("$sql ORDER BY r.group_id IS NOT NULL, r.priority DESC, r.id");
         return [
             'rules' => array_map([Rules::class, 'row'], $rows),
+            'menu_admin_only' => Telegram::menuAdminOnly(),
             'groups' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title']], DB::all('SELECT id, title FROM tg_groups ORDER BY active DESC, title')),
         ];
     }
@@ -889,6 +891,16 @@ class Api
         Repo::log(null, $u['username'], 'rule', null, "$label ($n lệnh)");
         $errors = Rules::syncMenus();
         return ['updated' => $n, 'menu_errors' => $errors];
+    }
+
+    /** Ai thấy menu lệnh khi gõ "/" trong nhóm: mọi người hoặc chỉ admin */
+    private function ruleMenuMode(): array
+    {
+        $u = Auth::requireAdmin();
+        $on = (bool)$this->in('admin_only');
+        Settings::set('menu_admin_only', $on ? '1' : '0');
+        Repo::log(null, $u['username'], 'rule', null, $on ? 'Menu lệnh: chỉ admin thấy' : 'Menu lệnh: mọi người thấy');
+        return ['admin_only' => $on, 'menu_errors' => Rules::syncMenus()];
     }
 
     private function ruleToggle(): array

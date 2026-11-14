@@ -332,6 +332,7 @@ class Rules
             $api->registerCommands($gMem, $gAdm);
 
             // Menu riêng cho các nhóm có lệnh riêng
+            $adminOnly = Telegram::menuAdminOnly();
             $prev = json_decode((string)Settings::get('menu_chats_' . $b['id']), true) ?: [];
             $now = [];
             foreach (DB::all('SELECT * FROM tg_groups WHERE active = 1 AND (bot_id = ? OR bot_id IS NULL)', [$b['id']]) as $g) {
@@ -339,16 +340,18 @@ class Rules
                 if (!$own) continue;
                 [$m, $a] = $split($own);
                 [$baseM, $baseA] = Telegram::baseCommands();
-                $mm = self::mergeCmds($baseM, $gMem, $m);
-                $aa = self::mergeCmds($baseA, $gAdm, $a);
-                if (!$api->tryCall('setMyCommands', ['commands' => $mm, 'scope' => ['type' => 'chat', 'chat_id' => $g['chat_id']]])) $errors[] = $g['title'];
-                foreach (Repo::tgAdmins($g, $api) as $uid) {
-                    $api->tryCall('setMyCommands', ['commands' => $aa, 'scope' => ['type' => 'chat_member', 'chat_id' => $g['chat_id'], 'user_id' => $uid]]);
+                $chat = $g['chat_id'];
+                if ($adminOnly) {
+                    $api->tryCall('deleteMyCommands', ['scope' => ['type' => 'chat', 'chat_id' => $chat]]);
+                } elseif (!$api->tryCall('setMyCommands', ['commands' => self::mergeCmds($baseM, $gMem, $m), 'scope' => ['type' => 'chat', 'chat_id' => $chat]])) {
+                    $errors[] = $g['title'];
                 }
-                $now[] = (string)$g['chat_id'];
+                $api->tryCall('setMyCommands', ['commands' => self::mergeCmds($baseA, $gAdm, $a), 'scope' => ['type' => 'chat_administrators', 'chat_id' => $chat]]);
+                $now[] = (string)$chat;
             }
             foreach (array_diff($prev, $now) as $chat) {
                 $api->tryCall('deleteMyCommands', ['scope' => ['type' => 'chat', 'chat_id' => $chat]]);
+                $api->tryCall('deleteMyCommands', ['scope' => ['type' => 'chat_administrators', 'chat_id' => $chat]]);
             }
             Settings::set('menu_chats_' . $b['id'], json_encode(array_values($now)));
         }

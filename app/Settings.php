@@ -11,6 +11,7 @@ class Settings
         'update_branch' => 'main',
         'update_token' => '',
         'cron_key' => '',
+        'menu_admin_only' => '0',
     ];
     private static array $cache = [];
 
