@@ -81,6 +81,7 @@ Chat riêng với bot: `/start`, `/login MÃ` (hoặc `/dangnhap`), `/link MÃ`,
 - Giao dịch sai nội dung / dưới mức tối thiểu nằm ở tab *Giao dịch NH* để **cộng tay** cho đúng tài khoản hoặc bỏ qua. Admin cộng / trừ số dư ở *Tài khoản web*.
 
 **🕊 Ân xá thành viên** (trang *Ân xá*): dùng số dư ví để **gỡ cấm chat / gỡ cấm khỏi nhóm / xoá cảnh cáo** cho mình hoặc cho người khác trong nhóm (tuỳ chọn). Admin đặt giá từng loại (0 = tắt). Bot thực hiện ngay trên Telegram, **thông báo trong nhóm** (sửa được nội dung, có biến `{member}` `{payer}` `{price}`…), nhắn riêng cho người được ân xá; gỡ cấm thì kèm **link mời dùng 1 lần**. Telegram báo lỗi → **tự hoàn tiền**. Mọi lượt ân xá được ghi vào Nhật ký và lịch sử ví.
+- **Ân xá theo ID Telegram**: người bị cấm *trước khi có web* (chưa có trong danh sách) → chọn nhóm, nhập ID, bot hỏi Telegram trạng thái thật (bị cấm / cấm chat) rồi cho ân xá. Trước khi trừ tiền bot luôn kiểm tra lại trên Telegram, hình phạt đã được gỡ thì không trừ tiền.
 
 ## Yêu cầu
 

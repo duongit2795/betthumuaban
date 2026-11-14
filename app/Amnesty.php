@@ -64,6 +64,57 @@ class Amnesty
         return array_filter($out, fn($k) => ($cfg['prices'][$k] ?? 0) > 0, ARRAY_FILTER_USE_KEY);
     }
 
+    /**
+     * Hỏi Telegram trạng thái thật của 1 người trong nhóm (getChatMember) rồi cập nhật database.
+     * Dùng cho người bị cấm trước khi có web (chưa có trong danh sách). Trả về dòng tg_members.
+     */
+    public static function syncTelegram(array $group, $tgUserId): ?array
+    {
+        $api = Repo::apiForGroup($group);
+        $r = $api ? $api->tryCall('getChatMember', ['chat_id' => $group['chat_id'], 'user_id' => $tgUserId]) : null;
+        $m = Repo::member((int)$group['id'], $tgUserId);
+        if (!is_array($r) || empty($r['status'])) return $m; // không hỏi được → dùng dữ liệu đang có
+        $user = $r['user'] ?? ['id' => $tgUserId, 'first_name' => (string)$tgUserId];
+        if (!empty($user['is_bot'])) throw new HttpError('Đây là bot, không cần ân xá');
+        $until = (int)($r['until_date'] ?? 0);
+        switch ($r['status']) {
+            case 'kicked': $st = 'banned'; break;
+            case 'restricted': $st = empty($r['can_send_messages']) ? 'muted' : (!empty($r['is_member']) ? 'member' : 'left'); break;
+            case 'left': $st = 'left'; break;
+            default: $st = 'member'; // member / administrator / creator
+        }
+        if (!$m) {
+            if ($st === 'left' && !$until) return null; // chưa từng có trong nhóm, không bị phạt
+            $m = Repo::upsertMember((int)$group['id'], $user, ['status' => $st]);
+        } else {
+            DB::update('tg_members', ['username' => $user['username'] ?? $m['username'], 'first_name' => $user['first_name'] ?? $m['first_name'], 'last_name' => $user['last_name'] ?? $m['last_name']], 'id = ?', [$m['id']]);
+        }
+        $upd = ['status' => $st, 'muted_until' => $st === 'muted' ? ($until ?: null) : null];
+        if (in_array($r['status'], ['administrator', 'creator'], true)) $upd['is_admin'] = 1;
+        DB::update('tg_members', $upd, 'id = ?', [$m['id']]);
+        return DB::get('SELECT * FROM tg_members WHERE id = ?', [$m['id']]);
+    }
+
+    /** Tìm theo ID Telegram / @username trong 1 nhóm (kể cả người chưa có trong danh sách) */
+    public static function lookup(array $u, array $group, string $who): array
+    {
+        $who = trim($who);
+        if (preg_match('/^-?\d{4,15}$/', $who)) {
+            $tgId = $who;
+        } elseif (preg_match('/^@?([A-Za-z0-9_]{4,32})$/', $who, $mm)) {
+            $tgId = DB::val('SELECT tg_user_id FROM tg_members WHERE group_id = ? AND LOWER(username) = LOWER(?)', [$group['id'], $mm[1]])
+                ?: DB::val('SELECT tg_user_id FROM tg_members WHERE LOWER(username) = LOWER(?) ORDER BY last_active DESC', [$mm[1]]);
+            if (!$tgId) throw new HttpError('Không tìm thấy @' . $mm[1] . '. Người bị cấm từ trước khi có web thì hãy nhập ID Telegram (dãy số).', 404);
+        } else {
+            throw new HttpError('Nhập ID Telegram (dãy số) hoặc @username');
+        }
+        $m = self::syncTelegram($group, $tgId);
+        if (!$m) throw new HttpError("ID $tgId không bị cấm và chưa từng ở trong nhóm này. Kiểm tra lại ID.", 404);
+        $cfg = self::config();
+        if (!self::canTarget($u, $m, $cfg, true)) throw new HttpError('Admin chỉ cho phép tự ân xá cho chính mình', 403);
+        return $m;
+    }
+
     /** SQL điều kiện thành viên đang bị xử lý */
     public static function punishedSql(string $a = ''): string
     {
@@ -82,10 +133,12 @@ class Amnesty
         return array_values(array_unique($ids));
     }
 
-    public static function canTarget(array $u, array $m, array $cfg): bool
+    /** $byId: nhập ID trực tiếp → được ân xá ở mọi nhóm đang hoạt động (người ngoài nhóm cũng giúp được) */
+    public static function canTarget(array $u, array $m, array $cfg, bool $byId = false): bool
     {
         if ($u['tg_user_id'] && (string)$u['tg_user_id'] === (string)$m['tg_user_id']) return true;
         if (!$cfg['allow_others'] && !Access::isWebAdmin($u)) return false;
+        if ($byId) return true;
         $ids = self::groupIds($u);
         return $ids === null || in_array((int)$m['group_id'], $ids, true);
     }
@@ -93,7 +146,7 @@ class Amnesty
     /**
      * Thực hiện ân xá. Trả về [member, balance, price, invite_link?]
      */
-    public static function perform(array $u, int $memberId, string $kind): array
+    public static function perform(array $u, int $memberId, string $kind, bool $byId = false): array
     {
         $cfg = self::config();
         if (!$cfg['enabled']) throw new HttpError('Tính năng ân xá đang tắt');
@@ -101,7 +154,9 @@ class Amnesty
         $m = DB::get('SELECT * FROM tg_members WHERE id = ?', [$memberId]) ?: throw new HttpError('Không tìm thấy thành viên', 404);
         $group = Repo::group((int)$m['group_id']);
         if (!$group || !$group['active']) throw new HttpError('Nhóm không còn hoạt động');
-        if (!self::canTarget($u, $m, $cfg)) throw new HttpError('Bạn không thể ân xá thành viên này', 403);
+        if (!self::canTarget($u, $m, $cfg, $byId)) throw new HttpError('Bạn không thể ân xá thành viên này', 403);
+        // Kiểm tra lại trạng thái thật trên Telegram trước khi trừ tiền (tránh trả tiền cho hình phạt đã hết)
+        if ($kind !== 'unwarn') $m = self::syncTelegram($group, $m['tg_user_id']) ?: $m;
         $list = self::punishments($m, $cfg);
         if (!isset($list[$kind])) throw new HttpError('Thành viên không có hình phạt này (hoặc đã hết hạn)');
         $price = $cfg['prices'][$kind];

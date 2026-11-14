@@ -200,7 +200,8 @@ h3 { font-size: 15px; font-weight: 600; }
   background: linear-gradient(135deg, #2f6fed, #6a4ff0 60%, #9b5cf0);
   box-shadow: 0 10px 30px rgba(79, 70, 229, .25);
 }
-.hero::after { content: ""; position: absolute; right: -40px; top: -40px; width: 160px; height: 160px; border-radius: 50%; background: rgba(255, 255, 255, .1); }
+.hero > * { position: relative; z-index: 1; }
+.hero::after { pointer-events: none; content: ""; position: absolute; right: -40px; top: -40px; width: 160px; height: 160px; border-radius: 50%; background: rgba(255, 255, 255, .1); }
 .hero .big { font-size: 34px; font-weight: 700; letter-spacing: -.02em; }
 .hero .muted { color: rgba(255, 255, 255, .78); }
 
