@@ -52,7 +52,7 @@ class BotHandler
             Repo::log((int)$group['id'], $actor, 'bot_added', null, 'Bot được thêm vào nhóm');
             $count = $this->api->tryCall('getChatMemberCount', ['chat_id' => $chat['id']]);
             if ($count) DB::run('UPDATE tg_groups SET member_count = ? WHERE id = ?', [$count, $group['id']]);
-            $this->api->trySend($chat['id'], "🤖 Xin chào! Tôi là bot quản lý nhóm.\nHãy cấp quyền <b>Quản trị viên</b> (xoá tin, cấm thành viên) để tôi hoạt động đầy đủ.\nGõ /help để xem lệnh.");
+            $this->api->trySend($chat['id'], "🤖 Xin chào! Tôi là bot quản lý nhóm.\nHãy cấp quyền <b>Quản trị viên</b> (xoá tin, cấm thành viên) để tôi hoạt động đầy đủ.\nGõ /" . Commands::name('help') . " để xem lệnh.");
         }
         Repo::tgAdmins(Repo::group((int)$group['id']), $this->api, true);
     }
@@ -315,24 +315,30 @@ class BotHandler
     private function onCommand(array $group, array $s, array $msg, array $member, bool $isAdmin, string $text): void
     {
         if (!preg_match('~^/([a-zA-Z0-9_]+)(?:@([a-zA-Z0-9_]+))?(?:\s+(.*))?$~s', $text, $mm)) return;
-        $cmd = strtolower($mm[1]);
+        $typed = strtolower($mm[1]);
         if (!empty($mm[2]) && strcasecmp($mm[2], $this->botUsername) !== 0) return;
         $args = trim($mm[3] ?? '');
         $chatId = $msg['chat']['id'];
         $gid = (int)$group['id'];
 
-        $memberCmds = ['help', 'start', 'rules', 'me', 'top', 'id', 'info'];
-        $adminCmds = ['ban', 'unban', 'kick', 'mute', 'unmute', 'warn', 'unwarn', 'resetwarn', 'del', 'pin', 'unpin', 'setrules', 'addpoints', 'reload'];
+        // Đổi tên gõ vào (tên gốc hoặc tên thay thế đặt trên web) thành mã lệnh; lệnh tắt → bỏ qua
+        $cmd = $typed === 'start' ? (Commands::names('help') ? 'help' : null) : Commands::resolve($typed, 'group');
+        if ($cmd === null) return;
+        $scope = Commands::CATALOG[$cmd][0];
+        $c = fn(string $k) => '/' . Commands::name($k);
 
-        if (in_array($cmd, $memberCmds, true)) {
+        if ($scope === 'member') {
             if (!$s['member_commands'] && !$isAdmin) return;
             switch ($cmd) {
                 case 'help':
-                case 'start':
-                    $t = "📖 <b>Lệnh thành viên</b>\n/rules – Nội quy\n/me – Điểm của bạn\n/top – Bảng xếp hạng\n/info – Thông tin (reply)\n/id – Xem ID";
+                    $line = fn(string $k) => Commands::names($k) ? $c($k) . ' – ' . tg_esc(Commands::config()[$k]['description']) : null;
+                    $t = "📖 <b>Lệnh thành viên</b>\n" . implode("\n", array_filter(array_map($line, ['rules', 'me', 'top', 'info', 'id'])));
                     $custom = Rules::helpLines($gid, $isAdmin);
                     if ($custom) $t .= "\n\n✨ <b>Lệnh riêng của nhóm</b>\n" . implode("\n", $custom);
-                    if ($isAdmin) $t .= "\n\n🛡 <b>Lệnh quản trị</b> (reply tin nhắn hoặc @username/ID)\n/warn [lý do] · /unwarn · /resetwarn\n/mute [30m|2h|1d] [lý do] · /unmute\n/kick [lý do] · /ban [lý do] · /unban\n/del · /pin · /unpin\n/addpoints &lt;số&gt; [lý do]\n/setrules &lt;nội dung&gt;\n/reload – Làm mới danh sách admin";
+                    if ($isAdmin) {
+                        $adm = array_filter(array_map($line, ['warn', 'unwarn', 'resetwarn', 'mute', 'unmute', 'kick', 'ban', 'unban', 'addpoints', 'del', 'pin', 'unpin', 'setrules', 'reload']));
+                        if ($adm) $t .= "\n\n🛡 <b>Lệnh quản trị</b> (reply tin nhắn hoặc @username/ID)\n" . implode("\n", $adm);
+                    }
                     $this->reply($msg, $t);
                     return;
                 case 'rules':
@@ -363,7 +369,7 @@ class BotHandler
             }
         }
 
-        if (!in_array($cmd, $adminCmds, true)) return;
+        if ($scope !== 'admin') return;
         if (!$isAdmin) {
             $this->reply($msg, '⛔ Bạn không có quyền dùng lệnh này.');
             return;
@@ -387,7 +393,7 @@ class BotHandler
                 return;
             case 'setrules':
                 $rules = $args !== '' ? $args : ($msg['reply_to_message']['text'] ?? '');
-                if ($rules === '') { $this->reply($msg, 'Cú pháp: /setrules nội dung (hoặc reply tin nhắn chứa nội quy)'); return; }
+                if ($rules === '') { $this->reply($msg, 'Cú pháp: ' . $c('setrules') . ' nội dung (hoặc reply tin nhắn chứa nội quy)'); return; }
                 Repo::saveSettings($group, ['rules_text' => tg_esc($rules)]);
                 Repo::log($gid, $actor, 'settings', null, 'Cập nhật nội quy');
                 $this->reply($msg, '✅ Đã cập nhật nội quy.');
@@ -415,7 +421,7 @@ class BotHandler
         }
         if ($cmd === 'addpoints') {
             $parts = preg_split('/\s+/', $rest, 2);
-            if (!is_numeric($parts[0] ?? '')) { $this->reply($msg, 'Cú pháp: /addpoints 10 [lý do] (số âm để trừ)'); return; }
+            if (!is_numeric($parts[0] ?? '')) { $this->reply($msg, 'Cú pháp: ' . $c('addpoints') . ' 10 [lý do] (số âm để trừ)'); return; }
             $o['amount'] = (int)$parts[0];
             $o['reason'] = $parts[1] ?? '';
             $cmd = 'points';
@@ -475,17 +481,34 @@ class BotHandler
         $text = trim((string)($msg['text'] ?? ''));
         $from = $msg['from'];
 
-        // Đăng nhập web bằng mã: /start login_ABC123, /login ABC123, /dangnhap ABC123 hoặc chỉ gửi mã
-        if (preg_match('~^(?:/start(?:@\w+)?\s+login_|/(?:login|dangnhap)(?:@\w+)?\s+)?([A-Za-z0-9]{6})$~', $text, $lm)
-            && TgLogin::onCode($this->api, $msg, $lm[1])) return;
-        if (preg_match('~^/(?:login|dangnhap)\b~', $text)) {
-            $this->reply($msg, '🔐 Để đăng nhập web: mở trang web → <b>Đăng nhập bằng Telegram</b> → gửi mã 6 ký tự cho tôi, ví dụ <code>/login K7QX4P</code>');
+        // Lệnh gõ vào (tên gốc hoặc tên đặt trên web) → mã lệnh
+        $key = null;
+        $arg = '';
+        $payload = null;
+        if (preg_match('~^/([a-zA-Z0-9_]+)(?:@\w+)?(?:\s+(.*))?$~s', $text, $pm)) {
+            $typed = strtolower($pm[1]);
+            $arg = trim($pm[2] ?? '');
+            if ($typed === 'start') { $key = 'start'; $payload = $arg; }
+            else $key = Commands::resolve($typed, 'private');
+        }
+        $c = fn(string $k) => '/' . Commands::name($k);
+
+        // Đăng nhập web: /start login_ABC123 (deep link), lệnh đăng nhập + mã, hoặc chỉ gửi mã
+        $loginCode = null;
+        if ($payload !== null && preg_match('~^login_([A-Za-z0-9]{6})$~', $payload, $lm)) $loginCode = $lm[1];
+        elseif ($key === 'login' && preg_match('~^[A-Za-z0-9]{6}$~', $arg)) $loginCode = $arg;
+        elseif ($key === null && preg_match('~^[A-Za-z0-9]{6}$~', $text) && Commands::names('login')) $loginCode = $text;
+        if ($loginCode !== null && TgLogin::onCode($this->api, $msg, $loginCode)) return;
+        if ($key === 'login') {
+            $this->reply($msg, '🔐 Để đăng nhập web: mở trang web → <b>Đăng nhập bằng Telegram</b> → gửi mã 6 ký tự cho tôi, ví dụ <code>' . $c('login') . ' K7QX4P</code>');
             return;
         }
 
+        // Liên kết tài khoản web
         $code = null;
-        if (preg_match('~^/start(?:@\w+)?\s+link_([A-Za-z0-9]+)~', $text, $mm)) $code = $mm[1];
-        elseif (preg_match('~^/link(?:@\w+)?\s+([A-Za-z0-9]+)~', $text, $mm)) $code = $mm[1];
+        if ($payload !== null && preg_match('~^link_([A-Za-z0-9]+)$~', $payload, $mm)) $code = $mm[1];
+        elseif ($key === 'link' && $arg !== '') $code = preg_split('/\s+/', $arg)[0];
+        elseif ($key === 'link') { $this->reply($msg, 'Cú pháp: ' . $c('link') . ' MÃ (tạo mã ở trang Tài khoản trên web)'); return; }
 
         if ($code !== null) {
             $u = DB::get('SELECT * FROM app_users WHERE link_code = ?', [strtoupper($code)]);
@@ -495,18 +518,21 @@ class BotHandler
             $this->reply($msg, '✅ Đã liên kết Telegram với tài khoản web <b>' . tg_esc($u['username']) . '</b>. Bây giờ bạn có thể xem điểm của mình trên web.');
             return;
         }
-        if (preg_match('~^/me~', $text)) {
+        if ($key === 'pme') {
             $rows = DB::all('SELECT m.*, g.title FROM tg_members m JOIN tg_groups g ON g.id = m.group_id WHERE m.tg_user_id = ? ORDER BY m.points DESC LIMIT 20', [$from['id']]);
             if (!$rows) { $this->reply($msg, 'Bạn chưa có dữ liệu trong nhóm nào.'); return; }
             $lines = array_map(fn($r) => '• ' . tg_esc($r['title']) . ": <b>{$r['points']}</b> điểm, {$r['messages']} tin nhắn", $rows);
             $this->reply($msg, "⭐ <b>Điểm tương tác của bạn</b>\n\n" . implode("\n", $lines));
             return;
         }
+        // Lệnh mặc định đã tắt hoặc lệnh lạ trong chat riêng: hiện lời chào/hướng dẫn
         $site = Settings::get('site_name');
         $this->reply($msg, "👋 Xin chào <b>" . tg_esc($from['first_name']) . "</b>!\nTôi là bot quản lý nhóm của <b>" . tg_esc($site) . "</b>.\n\n"
             . "➕ Thêm tôi vào nhóm và cấp quyền quản trị để bắt đầu.\n"
-            . "🔐 Đăng nhập web: /login MÃ (lấy mã ở trang đăng nhập)\n"
-            . "🔗 Liên kết tài khoản web: /link MÃ\n⭐ Xem điểm: /me\n\nID của bạn: <code>{$from['id']}</code>");
+            . (Commands::names('login') ? '🔐 Đăng nhập web: ' . $c('login') . " MÃ (lấy mã ở trang đăng nhập)\n" : '')
+            . (Commands::names('link') ? '🔗 Liên kết tài khoản web: ' . $c('link') . " MÃ\n" : '')
+            . (Commands::names('pme') ? '⭐ Xem điểm: ' . $c('pme') . "\n" : '')
+            . "\nID của bạn: <code>{$from['id']}</code>");
     }
 
     // ---------- Tiện ích ----------

@@ -311,13 +311,13 @@
     if (!isWebAdmin() && isManager()) {
       return {
         tab: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/rules', 'terminal', 'Lệnh'], ...(can('logs') ? [['/logs', 'list', 'Nhật ký']] : []), ['/more', 'grid', 'Thêm']],
-        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm của tôi'], ['/rules', 'terminal', 'Lệnh tự tạo'], ...(can('logs') ? [['/logs', 'list', 'Nhật ký']] : []), ['/me', 'star', 'Điểm của tôi'], ['/rank', 'trophy', 'Xếp hạng'], ['/account', 'user', 'Tài khoản']],
+        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm của tôi'], ['/rules', 'terminal', 'Lệnh'], ...(can('logs') ? [['/logs', 'list', 'Nhật ký']] : []), ['/me', 'star', 'Điểm của tôi'], ['/rank', 'trophy', 'Xếp hạng'], ['/account', 'user', 'Tài khoản']],
       };
     }
     if (isWebAdmin()) {
       return {
         tab: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/logs', 'list', 'Nhật ký'], ['/more', 'grid', 'Thêm']],
-        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh tự tạo'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ['/account', 'user', 'Tài khoản']],
+        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ['/account', 'user', 'Tài khoản']],
       };
     }
     const m = [['/', 'star', 'Của tôi'], ['/rank', 'trophy', 'Xếp hạng'], ['/account', 'user', 'Tài khoản']];
@@ -343,9 +343,9 @@
     }
     const items = navItems();
     const path = current();
-    const direct = (p) => (p === '/' ? path === '/' : path === p || path.startsWith(p + '/') || (p === '/groups' && path.startsWith('/group/')));
+    const direct = (p) => (p === '/' ? path === '/' : path === p || path.startsWith(p + '/') || (p === '/groups' && path.startsWith('/group/')) || (p === '/rules' && path === '/commands'));
     const inTabs = items.tab.some(([p]) => p !== '/more' && direct(p));
-    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/rank'].some((x) => path.startsWith(x)));
+    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank'].some((x) => path.startsWith(x)));
     $('#tabbar').innerHTML = items.tab.map(([p, ic, t]) => `<a href="#${p}" class="${isActive(p) ? 'active' : ''}">${icon(ic)}<span>${t}</span></a>`).join('');
     $('#sidebar').innerHTML = `<div class="brand"><img src="assets/icon.svg" alt="">${esc(S.site)}</div>`
       + items.side.map(([p, ic, t]) => `<a href="#${p}" class="nav ${isActive(p) && !(p === '/more') ? 'active' : ''}">${icon(ic)}${t}</a>`).join('')
@@ -407,9 +407,9 @@
             <li><b>Mở bot</b> và bấm <b>Bắt đầu / Start</b> (mã được gửi tự động)</li>
             <li>Bot hỏi xác nhận → bấm <b>✅ Xác nhận đăng nhập</b></li>
           </ol>
-          <div class="code-box tg-code"><span>${esc(code)}</span><button type="button" class="btn icon sm ghost" data-copy="/login ${esc(code)}" aria-label="Sao chép">${icon('copy', 'sm')}</button></div>
+          <div class="code-box tg-code"><span>${esc(code)}</span><button type="button" class="btn icon sm ghost" data-copy="/${esc(S.tgLogin?.cmd || 'login')} ${esc(code)}" aria-label="Sao chép">${icon('copy', 'sm')}</button></div>
           ${bots.map((b) => `<a class="btn primary block" style="height:48px" href="https://t.me/${esc(b)}?start=login_${esc(code)}" target="_blank" rel="noopener">${icon('send', 'sm')}Mở @${esc(b)}</a>`).join('')}
-          <div class="xs muted center">Hoặc tự nhắn <code>/login ${esc(code)}</code> cho bot trong chat riêng</div>
+          <div class="xs muted center">Hoặc tự nhắn <code>/${esc(S.tgLogin?.cmd || 'login')} ${esc(code)}</code> cho bot trong chat riêng</div>
           <div class="tg-status ${state === 'waiting' ? 'ok' : ''}">${state === 'waiting'
             ? `${icon('check', 'sm')}<span>Bot đã nhận mã từ <b>${esc(name)}</b>. Bấm <b>Xác nhận</b> trong Telegram…</span>`
             : `<div class="spinner"></div><span>Đang chờ bạn gửi mã cho bot · còn <b data-left>${fmt(left)}</b></span>`}</div>`}
@@ -1899,7 +1899,110 @@
     });
   }
 
-  route('/rules', async () => { const { body, mount } = rulesBlock(null); return { title: 'Lệnh tự tạo', html: body, mount }; }, { manage: true, title: 'Lệnh tự tạo' });
+  const cmdTabs = (active) => `<div class="segmented" style="margin:4px 0 14px"><button type="button" class="${active === 'rules' ? 'active' : ''}" onclick="location.hash='/rules'">✨ Lệnh tự tạo</button><button type="button" class="${active === 'commands' ? 'active' : ''}" onclick="location.hash='/commands'">📚 Lệnh mặc định</button></div>`;
+  route('/rules', async () => { const { body, mount } = rulesBlock(null); return { title: 'Lệnh', html: cmdTabs('rules') + body, mount }; }, { manage: true, title: 'Lệnh' });
+
+  // ================= Lệnh mặc định: đổi tên, bật/tắt, xem chi tiết =================
+  route('/commands', async () => {
+    const d = await api('commands');
+    const groups = [['member', '👥 Lệnh thành viên (trong nhóm)'], ['admin', '🛡 Lệnh quản trị (trong nhóm)'], ['private', '💬 Lệnh chat riêng với bot']];
+    const row = (c) => `<button type="button" class="list-item cmd-row" data-cmd="${c.key}">
+      <div class="grow">
+        <div class="row wrap" style="gap:6px">${c.names.length ? c.names.map((n, i) => `<span class="badge ${i === 0 ? 'blue' : ''} mono">/${esc(n)}</span>`).join('') : `<span class="badge mono" style="text-decoration:line-through">/${esc(c.original)}</span>`}
+          ${!c.enabled ? '<span class="badge red">Đã tắt</span>' : ''}${c.customized && c.enabled ? '<span class="badge green">Đã sửa</span>' : ''}${c.overridden.length ? '<span class="badge amber">Bị lệnh tự tạo thay</span>' : ''}</div>
+        <div class="small" style="margin-top:4px">${esc(c.description)}</div>
+        ${c.names[0] && c.names[0] !== c.original ? `<div class="xs muted">Tên gốc: /${esc(c.original)}${c.keep_original ? ' (vẫn dùng được)' : ' (đã tắt)'}</div>` : ''}
+      </div><span class="chev">${icon('chevron')}</span></button>`;
+    return {
+      title: 'Lệnh',
+      html: cmdTabs('commands') + `
+        <div class="alert info" style="margin-bottom:12px">${icon('info')}<div class="small">Bấm vào lệnh để xem <b>chi tiết, cú pháp, ví dụ</b>${d.can_edit ? ' và <b>đổi tên</b> (VD <code>/me</code> → <code>/canhan</code>), bật/tắt, sửa mô tả trong menu Telegram' : ''}.</div></div>
+        ${groups.map(([k, t]) => `<div class="section-title"><h2>${t}</h2></div><div class="list">${d.commands.filter((c) => c.scope === k).map(row).join('')}</div>`).join('')}
+        ${d.can_edit ? `<button class="btn soft-danger block" data-resetall style="margin-top:16px">${icon('refresh', 'sm')}Đặt lại tất cả lệnh về mặc định</button>` : ''}`,
+      mount: (root) => {
+        root.addEventListener('click', async (e) => {
+          const b = e.target.closest('[data-cmd]');
+          if (b) commandSheet(d.commands.find((c) => c.key === b.dataset.cmd), d.can_edit, () => render());
+          if (e.target.closest('[data-resetall]')) {
+            if (!(await confirmBox('Đặt lại tất cả?', 'Mọi tên thay thế, mô tả và trạng thái bật/tắt của lệnh mặc định sẽ về như ban đầu.', { danger: true, ok: 'Đặt lại' }))) return;
+            try { await api('commands/reset', {}); toast('Đã đặt lại lệnh mặc định'); render(); } catch (err) { toast(err.message, 'err'); }
+          }
+        });
+      },
+    };
+  }, { manage: true, title: 'Lệnh' });
+
+  function commandSheet(c, canEdit, onSaved) {
+    const st = { aliases: [...c.aliases], keep: c.keep_original, enabled: c.enabled, desc: c.description };
+    const draw = () => `
+      <div class="sheet-head"><h2 class="mono">/${esc(c.names[0] || c.original)}</h2><span class="badge ${c.scope === 'admin' ? 'amber' : c.scope === 'private' ? '' : 'blue'}">${c.scope_label}</span><button class="btn icon ghost" data-close>${icon('x')}</button></div>
+      ${c.overridden.length ? `<div class="alert warn" style="margin-bottom:12px">${icon('alert')}<div class="small">Có <b>lệnh tự tạo</b> cùng tên ${c.overridden.map((o) => `<code>/${esc(o.name)}</code> (${esc(o.where.join(', '))})`).join(', ')}, lệnh tự tạo sẽ được dùng thay lệnh này.</div></div>` : ''}
+      <div class="card card-pad stack" style="margin-bottom:14px">
+        <div>${esc(c.detail)}</div>
+        <div><div class="xs muted" style="margin-bottom:4px">Cú pháp</div><code class="cmd-code">${esc(c.usage)}</code></div>
+        <div><div class="xs muted" style="margin-bottom:4px">Ví dụ</div>${c.examples.map((x) => `<div class="cmd-ex">${esc(x)}</div>`).join('')}</div>
+        ${c.note ? `<div class="alert info" style="margin:0">${icon('info')}<div class="xs">${esc(c.note)}</div></div>` : ''}
+        <div class="xs muted">Ai dùng được: ${c.scope === 'admin' ? 'admin nhóm trên Telegram và admin web đã liên kết Telegram' : c.scope === 'private' ? 'mọi người, trong chat riêng với bot' : 'mọi thành viên (có thể giới hạn ở Cài đặt nhóm → Lệnh bot)'}</div>
+      </div>
+      ${!canEdit ? `<div class="alert info">${icon('lock')}<div class="xs">Chỉ admin web được đổi tên hoặc tắt lệnh mặc định.</div></div>` : c.fixed ? `<div class="alert info">${icon('lock')}<div class="xs">Lệnh này không đổi tên được.</div></div>` : `
+      <form id="fc" class="stack">
+        <div class="card" style="box-shadow:none">${sw('enabled', st.enabled, 'Bật lệnh', 'Tắt thì bot bỏ qua lệnh này và ẩn khỏi menu')}</div>
+        <div class="field"><span class="lbl">Tên thay thế (tối đa 5)</span>
+          <div class="row wrap" style="gap:6px;margin-bottom:8px">${st.aliases.length ? st.aliases.map((a, i) => `<span class="badge blue mono" style="font-size:13px;padding:4px 6px 4px 10px">/${esc(a)}<button type="button" class="btn icon sm ghost" data-rmalias="${i}" style="width:22px;height:22px" aria-label="Xoá">${icon('x', 'sm')}</button></span>`).join('') : '<span class="xs muted">Chưa có, đang dùng tên gốc /' + esc(c.original) + '</span>'}</div>
+          <div class="row"><div class="input-icon grow"><span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);font-weight:700;color:var(--muted)">/</span><input class="input mono" id="newalias" placeholder="VD: canhan" style="padding-left:28px" autocapitalize="off" maxlength="32"></div><button type="button" class="btn soft" data-addalias>${icon('plus', 'sm')}Thêm</button></div>
+          <div class="hint">Chữ thường không dấu, số, dấu _. Tên thay thế đầu tiên sẽ là <b>tên chính</b> (hiện trong menu, /help).</div></div>
+        ${st.aliases.length ? `<div class="card" style="box-shadow:none">${sw('keep_original', st.keep, 'Vẫn dùng được tên gốc /' + esc(c.original), 'Tắt nếu chỉ muốn dùng tên mới')}</div>` : ''}
+        <label class="field"><span class="lbl">Mô tả trong menu Telegram</span><input class="input" name="description" value="${esc(st.desc)}" maxlength="250"><div class="hint">Mặc định: ${esc(c.default_description)}</div></label>
+        <div class="grid grid-2"><button type="button" class="btn" data-resetone>${icon('refresh', 'sm')}Mặc định</button><button class="btn primary">${icon('check', 'sm')}Lưu</button></div>
+      </form>`}`;
+    sheet('<div id="cmdbox"></div>', (el, close) => {
+      const box = $('#cmdbox', el);
+      const collect = () => {
+        const f = $('#fc', el);
+        if (!f) return;
+        st.enabled = f.enabled.checked;
+        if (f.keep_original) st.keep = f.keep_original.checked;
+        st.desc = f.description.value;
+      };
+      const redraw = () => { collect(); box.innerHTML = draw(); };
+      box.innerHTML = draw();
+      const addAlias = () => {
+        const inp = $('#newalias', el);
+        const v = inp.value.trim().replace(/^\/+/, '').toLowerCase();
+        if (!v) return;
+        if (!/^[a-z0-9_]{1,32}$/.test(v)) return toast('Tên chỉ gồm chữ thường không dấu, số, dấu _', 'err');
+        if (st.aliases.includes(v) || v === c.original) return toast('Tên này đã có', 'err');
+        if (st.aliases.length >= 5) return toast('Tối đa 5 tên thay thế', 'err');
+        st.aliases.push(v);
+        if (st.aliases.length === 1) st.keep = true;
+        redraw();
+        $('#newalias', el)?.focus();
+      };
+      el.addEventListener('keydown', (e) => { if (e.target.id === 'newalias' && e.key === 'Enter') { e.preventDefault(); addAlias(); } });
+      el.addEventListener('click', async (e) => {
+        if (e.target.closest('[data-addalias]')) addAlias();
+        const rm = e.target.closest('[data-rmalias]');
+        if (rm) { st.aliases.splice(Number(rm.dataset.rmalias), 1); redraw(); }
+        if (e.target.closest('[data-resetone]')) {
+          try { await api('commands/reset', { key: c.key }); close(); toast('Đã đặt lại /' + c.original); onSaved(); } catch (err) { toast(err.message, 'err'); }
+        }
+      });
+      el.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        collect();
+        const extra = $('#newalias', el)?.value.trim();
+        if (extra) addAlias();
+        await withBtn(e.target.querySelector('button.primary'), async () => {
+          try {
+            const r = await api('commands/save', { key: c.key, aliases: st.aliases, keep_original: st.keep, enabled: st.enabled, description: st.desc });
+            close();
+            toast(r.command.enabled ? `Đã lưu: ${r.command.names.map((n) => '/' + n).join(', ')}` : `Đã tắt /${c.original}`);
+            onSaved();
+          } catch (err) { toast(err.message, 'err'); }
+        });
+      });
+    });
+  }
 
   // ================= Admin: More / Users / System =================
   route('/more', async () => ({
@@ -1907,7 +2010,7 @@
     html: `
       <div class="card card-pad row" style="margin-bottom:14px">${avatar(S.user.display_name, S.user.id, 'lg')}<div class="grow"><h2>${esc(S.user.display_name)}</h2><div class="small muted">@${esc(S.user.username)} · ${roleLabel()}</div></div></div>
       <div class="list">
-        <a class="list-item" href="#/rules">${icon('terminal')}<div class="grow">Lệnh tự tạo</div><span class="chev">${icon('chevron')}</span></a>
+        <a class="list-item" href="#/rules">${icon('terminal')}<div class="grow">Lệnh tự tạo & lệnh mặc định</div><span class="chev">${icon('chevron')}</span></a>
         ${isWebAdmin() ? `<a class="list-item" href="#/users">${icon('key')}<div class="grow">Tài khoản web & phân quyền</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/system">${icon('download')}<div class="grow">Hệ thống & cập nhật</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         <a class="list-item" href="#/me">${icon('star')}<div class="grow">Điểm của tôi</div><span class="chev">${icon('chevron')}</span></a>
@@ -2141,9 +2244,9 @@
     return `<div class="card card-pad stack" id="linkcard">
       <div class="row"><span style="color:var(--primary)">${icon('link')}</span><h3 class="grow">Liên kết Telegram</h3></div>
       ${d.link_code ? `
-        <div class="code-box"><span>${esc(d.link_code)}</span><button class="btn icon sm ghost" data-copy="/link ${esc(d.link_code)}">${icon('copy', 'sm')}</button></div>
+        <div class="code-box"><span>${esc(d.link_code)}</span><button class="btn icon sm ghost" data-copy="/${esc(d.link_cmd || 'link')} ${esc(d.link_code)}">${icon('copy', 'sm')}</button></div>
         ${bot ? `<a class="btn primary block" href="https://t.me/${esc(bot)}?start=link_${esc(d.link_code)}" target="_blank" rel="noopener">${icon('send', 'sm')}Mở @${esc(bot)} để liên kết</a>` : ''}
-        <div class="small muted">Hoặc gửi <code>/link ${esc(d.link_code)}</code> cho bot trong chat riêng. Sau đó nhấn <b>Tôi đã liên kết</b>.</div>
+        <div class="small muted">Hoặc gửi <code>/${esc(d.link_cmd || 'link')} ${esc(d.link_code)}</code> cho bot trong chat riêng. Sau đó nhấn <b>Tôi đã liên kết</b>.</div>
         <button class="btn block" data-relink>${icon('refresh', 'sm')}Tôi đã liên kết</button>`
         : `<div class="small text-2">Tạo mã rồi gửi cho bot qua chat riêng để xác minh tài khoản Telegram của bạn.</div><button class="btn primary block" data-gencode>Tạo mã liên kết</button>`}
     </div>`;

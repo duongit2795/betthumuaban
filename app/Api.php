@@ -77,6 +77,9 @@ class Api
             'rules/toggle' => 'ruleToggle',
             'rules/bulk' => 'ruleBulk',
             'rules/menu-mode' => 'ruleMenuMode',
+            'commands' => 'commands',
+            'commands/save' => 'commandSave',
+            'commands/reset' => 'commandReset',
             'system' => 'system',
             'system/settings' => 'systemSettings',
             'system/check-update' => 'checkUpdate',
@@ -103,7 +106,7 @@ class Api
             'access' => $inst && Auth::user() ? Access::summary(Auth::user()) : null,
             'site_name' => $inst ? Settings::get('site_name') : 'Tele Manager',
             'allow_register' => $inst ? Settings::get('allow_register') === '1' : false,
-            'tg_login' => $inst && TgLogin::enabled() ? ['bots' => TgLogin::bots()] : null,
+            'tg_login' => $inst && TgLogin::enabled() ? ['bots' => TgLogin::bots(), 'cmd' => Commands::name('login')] : null,
             'version' => APP_VERSION,
             'php' => PHP_VERSION,
             'checks' => $inst ? null : [
@@ -258,6 +261,7 @@ class Api
             'access' => Access::summary($u),
             'link_code' => $u['link_code'],
             'bots' => array_map(fn($b) => $b['username'], DB::all("SELECT username FROM tg_bots WHERE enabled = 1 AND username IS NOT NULL ORDER BY id")),
+            'link_cmd' => Commands::name('link'),
             'memberships' => $memberships,
         ];
     }
@@ -1119,6 +1123,42 @@ class Api
         Repo::log(null, $u['username'], 'rule', null, "$label ($n lệnh)");
         $errors = Rules::syncMenus();
         return ['updated' => $n, 'skipped' => count($ids) - count($allowed), 'menu_errors' => $errors];
+    }
+
+    // ---- Lệnh mặc định ----
+    private function commands(): array
+    {
+        $u = Auth::requireUser();
+        Access::require($u, 'view');
+        // Lệnh tự tạo trùng tên lệnh mặc định (lệnh tự tạo được ưu tiên)
+        $ruleNames = [];
+        foreach (DB::all("SELECT r.trigger_value, r.name, g.title FROM tg_rules r LEFT JOIN tg_groups g ON g.id = r.group_id WHERE r.trigger_type = 'command' AND r.enabled = 1") as $r) {
+            $ruleNames[$r['trigger_value']][] = $r['title'] ?: 'Tất cả nhóm';
+        }
+        $rows = array_map(function ($c) use ($ruleNames) {
+            $c['overridden'] = [];
+            if ($c['scope'] !== 'private') foreach ($c['names'] as $n) if (isset($ruleNames[$n])) $c['overridden'][] = ['name' => $n, 'where' => $ruleNames[$n]];
+            return $c;
+        }, Commands::all());
+        return ['commands' => $rows, 'can_edit' => Access::isWebAdmin($u), 'bot' => TgLogin::bots()[0] ?? null];
+    }
+
+    private function commandSave(): array
+    {
+        $u = Auth::requireAdmin();
+        $key = (string)$this->in('key');
+        $row = Commands::save($key, $this->in);
+        Repo::log(null, $u['username'], 'system', null, 'Sửa lệnh mặc định /' . $row['original'] . ($row['aliases'] ? ' → /' . implode(', /', $row['aliases']) : '') . ($row['enabled'] ? '' : ' (tắt)'));
+        return ['command' => $row, 'menu_errors' => Rules::syncMenus()];
+    }
+
+    private function commandReset(): array
+    {
+        $u = Auth::requireAdmin();
+        $key = (string)$this->in('key', '');
+        Commands::reset($key !== '' ? $key : null);
+        Repo::log(null, $u['username'], 'system', null, $key !== '' ? "Đặt lại lệnh mặc định /$key" : 'Đặt lại toàn bộ lệnh mặc định');
+        return ['menu_errors' => Rules::syncMenus()];
     }
 
     /** Ai thấy menu lệnh khi gõ "/" trong nhóm: mọi người hoặc chỉ admin (chỉ admin web) */

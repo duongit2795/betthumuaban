@@ -67,7 +67,9 @@ Web PHP (chạy tốt trên **aaPanel**) để quản lý nhóm Telegram bằng 
 | `/addpoints 10 [lý do]` | Admin | Cộng (hoặc trừ, số âm) điểm |
 | `/del` `/pin` `/unpin` `/setrules` `/reload` | Admin | Xoá / ghim tin, đặt nội quy, làm mới danh sách admin |
 
-Chat riêng với bot: `/start`, `/link MÃ`, `/me`.
+Chat riêng với bot: `/start`, `/login MÃ` (hoặc `/dangnhap`), `/link MÃ`, `/me`.
+
+**Tuỳ chỉnh lệnh mặc định** (*Lệnh → 📚 Lệnh mặc định*): xem chi tiết, cú pháp, ví dụ của từng lệnh; admin web **đổi tên / thêm tên khác** (VD `/me` → `/canhan`, tối đa 5 tên), giữ hoặc tắt tên gốc, bật/tắt lệnh, sửa mô tả trong menu Telegram. Menu "/", `/help` và hướng dẫn của bot tự dùng tên mới. Lệnh tự tạo trùng tên được ưu tiên (trang lệnh sẽ cảnh báo).
 
 ## Yêu cầu
 
