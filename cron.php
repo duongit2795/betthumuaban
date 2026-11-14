@@ -1,6 +1,6 @@
 <?php
 /**
- * Tác vụ định kỳ (tuỳ chọn). Thêm vào aaPanel > Cron > "Truy cập URL" mỗi 5 phút:
+ * Tác vụ định kỳ (tuỳ chọn). Thêm vào aaPanel > Cron > "Truy cập URL" mỗi 1 phút (để tự động xoá tin đúng giờ):
  *   https://domain/cron.php?key=CRON_KEY
  * hoặc "Shell script":  php /www/wwwroot/domain/cron.php
  */
@@ -12,6 +12,8 @@ if (PHP_SAPI !== 'cli' && !hash_equals((string)Settings::get('cron_key'), (strin
     exit('forbidden');
 }
 Repo::sweepMutes();
+// Xoá tin nhắn hẹn giờ
+DelQueue::process(500);
 // Xoá nhật ký cũ hơn 180 ngày
 DB::run('DELETE FROM app_logs WHERE created_at < ?', [now() - 180 * 86400]);
 // Dọn file throttle cũ

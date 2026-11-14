@@ -163,7 +163,7 @@ class BotHandler
         // Lệnh tự tạo chạy trước (ưu tiên hơn lệnh có sẵn trùng tên)
         $isCommand = str_starts_with($text, '/');
         $flags = Rules::run($this->api, $this->botUsername, $this->botTgId, $group, $msg, $member, $isAdmin, $text,
-            fn(int $uid) => $this->isAdmin($group, $uid));
+            fn(int $uid) => $this->isAdmin($group, $uid), (int)$this->bot['id']);
 
         // Đếm tin nhắn & điểm tương tác (tin bị lệnh tự tạo xoá thì không tính)
         $member = DB::get('SELECT * FROM tg_members WHERE id = ?', [$member['id']]);
