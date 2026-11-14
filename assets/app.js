@@ -2923,20 +2923,19 @@
   const punishCard = (m, showGroup, byId = false) => `<div class="card card-pad amnesty-card">
     <div class="row">${avatar(m.name, m.tg_user_id)}<div class="grow" style="min-width:0"><div class="ellipsis" style="font-weight:600">${esc(m.name)}${m.username ? ` <span class="xs muted">@${esc(m.username)}</span>` : ''}</div>
       <div class="xs muted ellipsis">${showGroup ? esc(m.group_title || '') + ' · ' : ''}<span class="mono">${esc(m.tg_user_id)}</span></div></div>${statusBadge(m)}</div>
-    <div class="stack" style="gap:8px;margin-top:12px">${m.punishments.map((p) => `<div class="punish-row ${p.combo ? 'combo' : ''}"><span class="p-ico">${p.icon}</span><div class="grow" style="min-width:0"><div class="small" style="font-weight:600">${esc(p.label)}${p.combo && p.full > p.price ? ` <span class="badge green">−${money(p.full - p.price)}</span>` : ''}</div><div class="xs muted">${esc(p.desc)}${p.combo && p.full > p.price ? ` · <s>${money(p.full)}</s>` : ''}</div></div>
-      <button class="btn sm primary nowrap" data-amnesty='${esc(JSON.stringify({ id: m.id, kind: p.kind, price: p.price, label: p.label, icon: p.icon, desc: p.desc, name: m.name, group: m.group_title, by_id: byId }))}'>${icon('heart', 'sm')}${money(p.price)}</button></div>`).join('')}</div></div>`;
+    <div class="stack" style="gap:6px;margin-top:12px">${m.punishments.map((p) => `<div class="punish-row"><span class="p-ico">${p.icon}</span><div class="grow" style="min-width:0"><div class="small" style="font-weight:600">${esc(p.label)}</div><div class="xs muted">${esc(p.desc)}</div></div></div>`).join('')}</div>
+    <button class="btn primary block" style="margin-top:12px" data-amnesty='${esc(JSON.stringify({ id: m.id, price: m.price, items: m.punishments.map((p) => [p.icon, p.label, p.desc]), name: m.name, group: m.group_title, by_id: byId }))}'>🕊 Ân xá toàn bộ · ${money(m.price)}</button></div>`;
 
   route('/amnesty', async () => {
     const d = await api('amnesty');
     let balance = d.balance;
-    const priceList = Object.entries(d.kinds).filter(([k]) => d.prices[k] > 0);
     return {
       title: 'Ân xá',
       html: `
       <div class="hero amnesty-hero">
         <div class="row between" style="align-items:flex-start"><div><div class="muted small">🕊 Ân xá thành viên</div><div class="big" style="font-size:28px" data-bal>${money(balance)}</div><div class="muted xs">Số dư ví</div></div>
         <a class="btn sm" href="#/wallet" style="background:rgba(255,255,255,.18);color:#fff;border-color:transparent">${icon('plus', 'sm')}Nạp tiền</a></div>
-        <div class="row wrap" style="gap:8px;margin-top:12px">${priceList.map(([k, v]) => `<span class="price-pill">${v.icon} ${esc(v.label)} · <b>${money(d.prices[k])}</b></span>`).join('')}${d.combo ? `<span class="price-pill">🕊 Ân xá toàn bộ${d.combo.discount ? ` · <b>giảm ${d.combo.discount}%</b>` : ''}</span>` : ''}</div>
+        <div class="row wrap" style="gap:8px;margin-top:12px"><span class="price-pill">🕊 Ân xá toàn bộ · <b>${money(d.price)}</b></span><span class="price-pill">Gỡ cấm chat / cấm khỏi nhóm + xoá cảnh cáo</span></div>
       </div>
       ${!d.enabled ? `<div class="alert info" style="margin-top:12px">${icon('info')}<div class="small">Tính năng ân xá đang tắt. ${isWebAdmin() ? 'Bật ở <a href="#/payments">Nạp tiền & ân xá</a>.' : ''}</div></div>` : ''}
       ${d.note ? `<div class="alert info" style="margin-top:12px">${icon('info')}<div class="small">${esc(d.note)}</div></div>` : ''}
@@ -2993,7 +2992,8 @@
           sheet(`<div class="sheet-head"><h2>🕊 Xác nhận ân xá</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
             <div class="card card-pad" style="box-shadow:none;background:var(--surface-2)">
               <div class="row">${avatar(a.name, a.id)}<div class="grow"><b>${esc(a.name)}</b><div class="xs muted">${esc(a.group || '')}</div></div></div>
-              <div class="punish-row" style="margin-top:10px"><span class="p-ico">${a.icon}</span><div class="grow"><b class="small">${esc(a.label)}</b><div class="xs muted">${esc(a.desc)}</div></div></div>
+              <div class="xs muted" style="margin:10px 0 6px">Sẽ gỡ toàn bộ:</div>
+              <div class="stack" style="gap:6px">${a.items.map(([ic, l, ds]) => `<div class="punish-row"><span class="p-ico">${ic}</span><div class="grow"><b class="small">${esc(l)}</b><div class="xs muted">${esc(ds)}</div></div></div>`).join('')}</div>
             </div>
             <dl class="kv" style="margin:16px 0">
               <dt>Phí ân xá</dt><dd><b>${money(a.price)}</b></dd>
@@ -3007,7 +3007,7 @@
           (el, close) => {
             $('[data-go]', el)?.addEventListener('click', (ev) => withBtn(ev.currentTarget, async () => {
               try {
-                const r = await api('amnesty/do', { member_id: a.id, kind: a.kind, by_id: !!a.by_id });
+                const r = await api('amnesty/do', { member_id: a.id, kind: 'all', by_id: !!a.by_id });
                 balance = r.balance;
                 close();
                 sheet(`<div class="center" style="padding:10px 0 4px"><div style="font-size:54px">🕊</div><h2>Ân xá thành công</h2>
@@ -3077,12 +3077,11 @@
         <div class="card">${sw('enabled', am.enabled, 'Bật ân xá thành viên', 'Thành viên dùng số dư ví để gỡ hình phạt')}
           ${sw('allow_others', am.allow_others, 'Cho ân xá người khác', 'Thành viên trong nhóm trả tiền ân xá giúp bạn bè')}
           ${sw('notify', am.notify, 'Thông báo trong nhóm', 'Bot gửi thông báo ân xá vào nhóm')}
-          ${sw('invite', am.invite, 'Gửi link mời khi gỡ cấm', 'Tạo link vào lại nhóm dùng 1 lần (hạn 3 ngày) cho người được gỡ cấm')}
-          ${sw('combo', am.combo, '🕊 Gói "Ân xá toàn bộ"', 'Gỡ cấm chat / gỡ cấm khỏi nhóm + xoá toàn bộ cảnh cáo trong 1 lần, trừ tiền 1 lần (hiện khi có từ 2 hình phạt)')}</div>
+          ${sw('invite', am.invite, 'Gửi link mời khi gỡ cấm', 'Tạo link vào lại nhóm dùng 1 lần (hạn 3 ngày) cho người được gỡ cấm')}</div>
         <div class="card card-pad stack">
-          <h3>Bảng giá (đ) <span class="xs muted" style="font-weight:400">— đặt 0 để tắt loại đó</span></h3>
-          ${Object.entries({ unmute: '🔊 Gỡ cấm chat', unban: '✅ Gỡ cấm khỏi nhóm', unwarn: '🧹 Xoá toàn bộ cảnh cáo' }).map(([k, l]) => `<label class="field"><span class="lbl">${l}</span><input class="input" name="price_${k}" inputmode="numeric" value="${am.prices[k]}"></label>`).join('')}
-          <label class="field"><span class="lbl">🕊 Ân xá toàn bộ: giảm (%)</span><input class="input" name="combo_discount" inputmode="numeric" value="${am.combo_discount}"><div class="hint">Giá gói = tổng giá các hình phạt đang có − % giảm (làm tròn nghìn). VD bị cấm chat + 2 cảnh cáo: (${money(am.prices.unmute)} + ${money(am.prices.unwarn)}) − ${am.combo_discount}%.</div></label>
+          <h3>🕊 Giá ân xá</h3>
+          <label class="field"><span class="lbl">Giá ân xá toàn bộ (đ)</span><input class="input" name="price" inputmode="numeric" value="${am.price}">
+            <div class="hint">Một giá duy nhất: gỡ <b>toàn bộ</b> hình phạt đang có (cấm chat hoặc cấm khỏi nhóm + xoá hết cảnh cáo) trong 1 lần.</div></label>
         </div>
         <div class="card card-pad stack">
           <h3>Nội dung thông báo trong nhóm</h3>
@@ -3112,7 +3111,7 @@
           e.preventDefault();
           const f = formData(e.target);
           try {
-            await api('payments/save', { amnesty: { enabled: f.enabled, allow_others: f.allow_others, notify: f.notify, invite: f.invite, combo: f.combo, combo_discount: +f.combo_discount || 0, message: f.message, note: f.note, prices: { unmute: +f.price_unmute || 0, unban: +f.price_unban || 0, unwarn: +f.price_unwarn || 0 } } });
+            await api('payments/save', { amnesty: { enabled: f.enabled, allow_others: f.allow_others, notify: f.notify, invite: f.invite, price: +String(f.price).replace(/\D/g, '') || 0, message: f.message, note: f.note } });
             toast('Đã lưu'); await boot(); render();
           } catch (err) { toast(err.message, 'err'); }
         };
