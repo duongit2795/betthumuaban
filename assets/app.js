@@ -1972,6 +1972,24 @@
         ${!env.zip ? `<div class="alert warn" style="margin-top:12px">${icon('alert')}<div class="small">PHP thiếu extension <b>zip</b>. aaPanel → App Store → PHP → Settings → Install extensions → zip.</div></div>` : ''}
       </div>
 
+      ${(() => {
+        const un = d.update_notice;
+        const linked = un.admins.filter((a) => a.linked);
+        return `<div class="section-title"><h2>🔔 Báo cập nhật qua Telegram</h2></div>
+        <div class="card" id="updnotice">
+          ${sw('update_notify', un.enabled, 'Nhắn admin khi có bản mới', 'Bot nhắn riêng cho admin web kèm danh sách thay đổi và nút ✅ Cập nhật ngay / ⏭ Bỏ qua')}
+          <div class="form-group"><label class="field"><span class="lbl">Kiểm tra GitHub mỗi</span>
+            <select class="input" name="update_check_hours">${[[1, '1 giờ'], [3, '3 giờ'], [6, '6 giờ'], [12, '12 giờ'], [24, '1 ngày'], [72, '3 ngày'], [168, '1 tuần']].map(([v, t]) => `<option value="${v}" ${v === un.hours ? 'selected' : ''}>${t}</option>`).join('')}</select>
+            <div class="hint">Lần kiểm tra gần nhất: ${un.last_check ? ago(un.last_check) : 'chưa có'}${un.last_error ? ` · <span style="color:var(--danger)">${esc(un.last_error)}</span>` : ''}. Chạy khi cron hoặc bot nhận tin nhắn.</div></label></div>
+          <div class="form-group">
+            <div class="small" style="font-weight:600;margin-bottom:6px">Người nhận (admin web)</div>
+            ${un.admins.map((a) => `<div class="row small" style="padding:3px 0">${a.linked ? `<span style="color:var(--success)">${icon('check', 'sm')}</span>` : `<span style="color:var(--warning)">${icon('alert', 'sm')}</span>`}<div class="grow">${esc(a.name)}</div><span class="xs ${a.linked ? 'muted' : ''}" style="${a.linked ? '' : 'color:var(--warning)'}">${a.linked ? 'đã liên kết Telegram' : 'chưa liên kết – không nhận được'}</span></div>`).join('')}
+            <div class="xs muted" style="margin-top:6px">Admin cần <b>liên kết Telegram</b> (Tài khoản) và đã nhắn <code>/start</code> cho bot thì bot mới nhắn được.</div>
+          </div>
+          <div class="form-group"><button type="button" class="btn soft block" data-testnotice ${linked.length ? '' : 'disabled'}>${icon('send', 'sm')}Gửi thử thông báo</button><div id="testres"></div></div>
+        </div>`;
+      })()}
+
       <form id="fperm">
         <div class="section-title"><h2>🛡 Phân quyền quản trị viên nhóm</h2></div>
         <div class="card">
@@ -2038,6 +2056,20 @@
             } catch (err) { box.innerHTML = `<div class="alert err">${icon('alert')}<div class="small">${esc(err.message)}</div></div>`; }
           });
         };
+        // Báo cập nhật qua Telegram: lưu ngay khi đổi
+        const un = $('#updnotice', root);
+        un.addEventListener('change', async (e) => {
+          const t = e.target;
+          if (!['update_notify', 'update_check_hours'].includes(t.name)) return;
+          try { await api('system/settings', { settings: { [t.name]: t.type === 'checkbox' ? t.checked : Number(t.value) } }); toast('Đã lưu'); }
+          catch (err) { toast(err.message, 'err'); }
+        });
+        $('[data-testnotice]', un)?.addEventListener('click', (e) => withBtn(e.currentTarget, async () => {
+          try {
+            const r = await api('system/test-update-notice', {});
+            $('#testres', un).innerHTML = `<div class="stack" style="margin-top:10px">${r.results.map((x) => `<div class="alert ${x.ok ? 'ok' : 'err'}">${icon(x.ok ? 'check' : 'alert')}<div class="small"><b>${esc(x.name)}</b>: ${x.ok ? 'đã gửi, mở Telegram để xem' : esc(x.error)}</div></div>`).join('')}</div>`;
+          } catch (err) { toast(err.message, 'err'); }
+        }));
         $('#fperm', root).onsubmit = async (e) => {
           e.preventDefault();
           const f = formData(e.target);

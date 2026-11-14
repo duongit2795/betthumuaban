@@ -99,6 +99,8 @@ Chat riêng với bot: `/start`, `/link MÃ`, `/me`.
 1. Đẩy code mới lên GitHub (repo và nhánh khai báo ở **Hệ thống → Nguồn cập nhật**; mặc định `duongit2795/betthumuaban` nhánh `main`).
 2. Vào **Hệ thống** → **Kiểm tra** (hiện danh sách thay đổi) → **Cập nhật**.
 
+**Báo cập nhật qua Telegram:** web tự kiểm tra GitHub định kỳ (mặc định 6 giờ, đổi ở *Hệ thống → Báo cập nhật qua Telegram*). Khi có bản mới, bot nhắn riêng cho mọi admin web đã liên kết Telegram, kèm danh sách thay đổi và nút **✅ Cập nhật ngay / ⏭ Bỏ qua bản này / 🔗 Xem trên GitHub**. Bấm ✅ là web tự cập nhật, rồi báo kết quả ngay trong Telegram. Chỉ admin web bấm được. Admin cần đã nhắn `/start` cho bot.
+
 Web tải file zip của nhánh qua GitHub API, chép đè mã nguồn và tự nâng cấp database.
 Thư mục `data/` (cấu hình, database, phiên đăng nhập) **không bao giờ bị ghi đè**.
 Repo riêng tư: nhập GitHub token (quyền *Contents: Read*) ở cùng trang.

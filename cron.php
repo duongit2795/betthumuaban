@@ -7,6 +7,7 @@
 require __DIR__ . '/app/bootstrap.php';
 if (!installed()) exit("not installed\n");
 DB::connect();
+if ((int)(Settings::get('schema_version') ?? 0) < DB::SCHEMA_VERSION) DB::migrate();
 if (PHP_SAPI !== 'cli' && !hash_equals((string)Settings::get('cron_key'), (string)($_GET['key'] ?? ''))) {
     http_response_code(403);
     exit('forbidden');
@@ -14,6 +15,8 @@ if (PHP_SAPI !== 'cli' && !hash_equals((string)Settings::get('cron_key'), (strin
 Repo::sweepMutes();
 // Xoá tin nhắn hẹn giờ
 DelQueue::process(500);
+// Kiểm tra bản cập nhật mới, báo admin qua Telegram
+UpdateNotifier::maybeCheck();
 // Giữ lịch sử chat 30 ngày
 ChatLog::cleanup();
 // Xoá nhật ký cũ hơn 180 ngày

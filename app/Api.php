@@ -82,6 +82,7 @@ class Api
             'system/check-update' => 'checkUpdate',
             'system/update' => 'doUpdate',
             'system/migrate' => 'migrate',
+            'system/test-update-notice' => 'testUpdateNotice',
         ];
         $writeRoutes = ['install', 'auth/login', 'auth/register', 'auth/logout', 'me/update', 'me/link-code', 'me/unlink'];
         if (!isset($map[$route])) fail('Không tìm thấy API', 404);
@@ -1153,6 +1154,14 @@ class Api
                     array_values(array_filter(DB::all("SELECT * FROM app_users WHERE role <> 'admin' AND disabled = 0 AND tg_user_id IS NOT NULL"), fn($x) => (bool)Access::groupIds($x)))),
             ],
             'version' => Updater::current(),
+            'update_notice' => [
+                'enabled' => UpdateNotifier::enabled(),
+                'hours' => UpdateNotifier::hours(),
+                'last_check' => (int)Settings::get('update_last_check') ?: null,
+                'last_error' => Settings::get('update_last_error') ?: null,
+                'admins' => array_map(fn($x) => ['name' => $x['display_name'] ?: $x['username'], 'linked' => (bool)$x['tg_user_id']],
+                    DB::all("SELECT * FROM app_users WHERE role = 'admin' AND disabled = 0 ORDER BY id")),
+            ],
             'detected_url' => (function () {
                 $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
                 $dir = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/');
@@ -1182,6 +1191,8 @@ class Api
             Settings::set('group_admin_perms', json_encode($perms));
         }
         if (array_key_exists('tg_login', $in)) Settings::set('tg_login', $in['tg_login'] ? '1' : '0');
+        if (array_key_exists('update_notify', $in)) Settings::set('update_notify', $in['update_notify'] ? '1' : '0');
+        if (array_key_exists('update_check_hours', $in)) Settings::set('update_check_hours', (string)max(1, min(168, (int)$in['update_check_hours'])));
         foreach (['site_name', 'site_url', 'allow_register', 'update_repo', 'update_branch', 'update_token'] as $k) {
             if (!array_key_exists($k, $in)) continue;
             $v = trim((string)$in[$k]);
@@ -1216,6 +1227,19 @@ class Api
         $r = Updater::update();
         Repo::log(null, $u['username'], 'update', null, 'Cập nhật lên ' . substr($r['sha'], 0, 7));
         return $r;
+    }
+
+    /** Gửi thử thông báo cập nhật cho admin qua Telegram */
+    private function testUpdateNotice(): array
+    {
+        Auth::requireAdmin();
+        if (!UpdateNotifier::recipients()) fail('Chưa có admin web nào liên kết Telegram. Vào Tài khoản → Liên kết Telegram trước.');
+        try {
+            $c = Updater::check();
+        } catch (HttpError $e) {
+            fail('Không kiểm tra được GitHub: ' . $e->getMessage());
+        }
+        return ['results' => UpdateNotifier::notify($c, true), 'has_update' => $c['has_update']];
     }
 
     private function migrate(): array
