@@ -6,7 +6,7 @@ class DB
 {
     private static ?PDO $pdo = null;
     private static string $driver = 'sqlite';
-    const SCHEMA_VERSION = 6;
+    const SCHEMA_VERSION = 7;
 
     public static function connect(?array $c = null): PDO
     {
@@ -241,6 +241,51 @@ class DB
                 ua VARCHAR(191),
                 created_at INT NOT NULL,
                 expires_at INT NOT NULL
+            )",
+            "CREATE TABLE IF NOT EXISTS tg_ad_campaigns (
+                id $pk,
+                name $str NOT NULL,
+                enabled INT NOT NULL DEFAULT 1,
+                group_ids TEXT,
+                bot_mode VARCHAR(16) NOT NULL DEFAULT 'default',
+                bot_token VARCHAR(191),
+                bot_username $str,
+                interval_sec INT NOT NULL DEFAULT 10,
+                rotate_order VARCHAR(16) NOT NULL DEFAULT 'sequence',
+                daily_new INT NOT NULL DEFAULT 1,
+                daily_time VARCHAR(5) NOT NULL DEFAULT '00:00',
+                pin INT NOT NULL DEFAULT 1,
+                pin_silent INT NOT NULL DEFAULT 1,
+                delete_old INT NOT NULL DEFAULT 0,
+                last_error TEXT,
+                created_at INT NOT NULL,
+                updated_at INT NOT NULL
+            )",
+            "CREATE TABLE IF NOT EXISTS tg_ads (
+                id $pk,
+                campaign_id INT NOT NULL,
+                title $str,
+                image VARCHAR(191),
+                caption TEXT,
+                buttons TEXT,
+                enabled INT NOT NULL DEFAULT 1,
+                sort INT NOT NULL DEFAULT 0,
+                file_ids TEXT,
+                shows INT NOT NULL DEFAULT 0,
+                created_at INT NOT NULL,
+                updated_at INT NOT NULL
+            )",
+            "CREATE TABLE IF NOT EXISTS tg_ad_posts (
+                id $pk,
+                campaign_id INT NOT NULL,
+                group_id INT NOT NULL,
+                chat_id $big NOT NULL,
+                message_id $big NOT NULL,
+                bot_key VARCHAR(32) NOT NULL,
+                ad_id INT,
+                active INT NOT NULL DEFAULT 1,
+                last_rotate_at INT NOT NULL DEFAULT 0,
+                created_at INT NOT NULL
             )",
             "CREATE TABLE IF NOT EXISTS daily_stats (
                 group_id INT NOT NULL,

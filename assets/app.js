@@ -51,6 +51,10 @@
     key: '<circle cx="7.5" cy="15.5" r="4.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/>',
     database: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
     reply: '<path d="M9 17 4 12l5-5"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/>',
+    megaphone: '<path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M15 9a3 3 0 0 1 0 6M18 6a7 7 0 0 1 0 12"/>',
+    image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>',
+    up: '<path d="m18 15-6-6-6 6"/>',
+    down: '<path d="m6 9 6 6 6-6"/>',
     terminal: '<path d="m4 17 6-6-6-6M12 19h8"/>',
     globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
   };
@@ -111,7 +115,7 @@
     join: ['Vào nhóm', 'plus', 'green'], leave: ['Rời nhóm', 'minus', ''], send: ['Gửi tin', 'send', 'blue'],
     settings: ['Cài đặt', 'settings', ''], bot_added: ['Thêm bot vào nhóm', 'bot', 'green'], bot_removed: ['Bot rời nhóm', 'bot', 'red'],
     bot_add: ['Thêm bot', 'bot', 'blue'], bot_delete: ['Xoá bot', 'bot', 'red'], bot_on: ['Bật bot', 'power', 'green'], bot_off: ['Tắt bot', 'power', ''],
-    rule: ['Lệnh tự tạo', 'terminal', 'blue'], username: ['Nhắc đặt username', 'user', 'amber'], login: ['Đăng nhập', 'key', 'green'], update: ['Cập nhật hệ thống', 'download', 'blue'], system: ['Hệ thống', 'settings', ''], pin: ['Ghim tin', 'pin', 'blue'], unpin: ['Bỏ ghim', 'pin', ''],
+    rule: ['Lệnh tự tạo', 'terminal', 'blue'], ad_post: ['Quảng cáo', 'megaphone', 'blue'], username: ['Nhắc đặt username', 'user', 'amber'], login: ['Đăng nhập', 'key', 'green'], update: ['Cập nhật hệ thống', 'download', 'blue'], system: ['Hệ thống', 'settings', ''], pin: ['Ghim tin', 'pin', 'blue'], unpin: ['Bỏ ghim', 'pin', ''],
   };
 
   // ================= State & API =================
@@ -317,7 +321,7 @@
     if (isWebAdmin()) {
       return {
         tab: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/logs', 'list', 'Nhật ký'], ['/more', 'grid', 'Thêm']],
-        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ['/account', 'user', 'Tài khoản']],
+        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh'], ['/ads', 'megaphone', 'Quảng cáo'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ['/account', 'user', 'Tài khoản']],
       };
     }
     const m = [['/', 'star', 'Của tôi'], ['/rank', 'trophy', 'Xếp hạng'], ['/account', 'user', 'Tài khoản']];
@@ -345,7 +349,7 @@
     const path = current();
     const direct = (p) => (p === '/' ? path === '/' : path === p || path.startsWith(p + '/') || (p === '/groups' && path.startsWith('/group/')) || (p === '/rules' && path === '/commands'));
     const inTabs = items.tab.some(([p]) => p !== '/more' && direct(p));
-    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank'].some((x) => path.startsWith(x)));
+    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads'].some((x) => path.startsWith(x)));
     $('#tabbar').innerHTML = items.tab.map(([p, ic, t]) => `<a href="#${p}" class="${isActive(p) ? 'active' : ''}">${icon(ic)}<span>${t}</span></a>`).join('');
     $('#sidebar').innerHTML = `<div class="brand"><img src="assets/icon.svg" alt="">${esc(S.site)}</div>`
       + items.side.map(([p, ic, t]) => `<a href="#${p}" class="nav ${isActive(p) && !(p === '/more') ? 'active' : ''}">${icon(ic)}${t}</a>`).join('')
@@ -2081,6 +2085,243 @@
     });
   }
 
+  // ================= Quảng cáo xoay vòng =================
+  const stripTags = (h) => String(h || '').replace(/<[^>]+>/g, '');
+  const ivLabel = (sec) => (sec < 60 ? sec + ' giây' : humanSec(sec));
+  const adImg = (a) => `api.php?r=ads/image&id=${a.id}&v=${a.updated_at}`;
+
+  // Bản xem trước giống bài đăng Telegram (ảnh + chú thích + nút)
+  function tgPost(img, caption, buttons) {
+    const rows = [];
+    (buttons || []).forEach((b) => { (rows[b.row] = rows[b.row] || []).push(b); });
+    return `<div class="tgpost">${img ? `<img src="${esc(img)}" alt="">` : `<div class="tgpost-noimg">${icon('image')}<span>Chưa có ảnh</span></div>`}
+      <div class="tgpost-cap">${caption ? previewText(caption) : '<span class="muted">Nội dung bài quảng cáo…</span>'}</div></div>
+      ${rows.filter(Boolean).map((r) => `<div class="tgpost-btns">${r.map((b) => `<span class="tgpost-btn">${esc(b.text || 'Nút')}<i>↗</i></span>`).join('')}</div>`).join('')}`;
+  }
+
+  route('/ads', async () => {
+    const d = await api('ads');
+    const now = Math.floor(Date.now() / 1000);
+    const cronOk = d.last_tick && now - d.last_tick < 150;
+    const gname = (id) => d.groups.find((g) => g.id === id)?.title || '#' + id;
+    const card = (c) => `
+      <div class="card ad-camp" style="margin-bottom:14px">
+        <div class="card-pad">
+          <div class="row" style="align-items:flex-start"><div class="feat-ico">📢</div>
+            <div class="grow"><div class="row wrap" style="gap:6px"><b style="font-size:16px">${esc(c.name)}</b>${c.enabled ? '<span class="badge green">Đang chạy</span>' : '<span class="badge">Tạm dừng</span>'}</div>
+            <div class="xs text-2" style="margin-top:4px">🔄 Đổi bài mỗi <b>${ivLabel(c.interval_sec)}</b> · ${c.rotate_order === 'random' ? 'ngẫu nhiên' : 'lần lượt'}${c.daily_new ? ` · 🆕 bài mới hằng ngày lúc <b>${esc(c.daily_time)}</b>` : ''}</div>
+            <div class="xs text-2">🤖 ${c.bot_mode === 'custom' ? `Bot quảng cáo riêng <b>@${esc(c.bot_username || '')}</b>` : 'Bot mặc định của nhóm'} · 👥 ${c.group_ids.length ? c.group_ids.map((id) => esc(gname(id))).join(', ') : '<span style="color:var(--danger)">chưa chọn nhóm</span>'}</div></div>
+            <button class="btn icon sm ghost" data-editcamp="${c.id}" aria-label="Sửa">${icon('settings', 'sm')}</button></div>
+          ${c.last_error ? `<div class="alert err" style="margin-top:10px">${icon('alert')}<div class="xs" style="overflow-wrap:anywhere">${esc(c.last_error)}</div></div>` : ''}
+          ${c.posts.map((p) => `<div class="alert ok" style="margin-top:10px">${icon('pin')}<div class="xs">Đang ghim ở <b>${esc(p.group)}</b> · hiện bài <b>${esc(c.ads.find((a) => a.id === p.ad_id)?.title || '#' + p.ad_id)}</b> · đăng ${ago(p.created_at)}${p.link ? ` · <a href="${esc(p.link)}" target="_blank" rel="noopener">mở tin</a>` : ''}</div></div>`).join('')}
+          <div class="grid grid-2" style="margin-top:12px">
+            <button class="btn primary sm" data-runcamp="${c.id}">${icon('send', 'sm')}Đăng & ghim ngay</button>
+            ${c.enabled ? `<button class="btn sm soft-danger" data-stopcamp="${c.id}">${icon('power', 'sm')}Dừng</button>` : `<button class="btn sm soft" data-oncamp="${c.id}">${icon('power', 'sm')}Bật lại</button>`}
+          </div>
+        </div>
+        <div class="list" style="border-radius:0 0 var(--radius) var(--radius);border-left:0;border-right:0;border-bottom:0;box-shadow:none">
+          ${c.ads.map((a, i) => `<div class="list-item ad-row ${a.enabled ? '' : 'off'}">
+            <button type="button" class="ad-thumb" data-editad="${a.id}" data-camp="${c.id}">${a.has_image ? `<img src="${adImg(a)}" alt="" loading="lazy">` : icon('image')}</button>
+            <button type="button" class="grow ad-info" data-editad="${a.id}" data-camp="${c.id}">
+              <div class="row wrap" style="gap:6px"><b class="ellipsis">${esc(a.title || 'Bài ' + (i + 1))}</b>${a.enabled ? '' : '<span class="badge">Tắt</span>'}${c.posts.some((p) => p.ad_id === a.id) ? '<span class="badge blue">Đang hiện</span>' : ''}</div>
+              <div class="xs text-2 ad-cap">${esc(stripTags(a.caption).slice(0, 90))}</div>
+              <div class="xs muted">${a.buttons.length} nút · hiện ${num(a.shows)} lần</div>
+            </button>
+            <div class="ad-move"><button class="btn icon sm ghost" data-move="${a.id}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="Lên">${icon('up', 'sm')}</button><button class="btn icon sm ghost" data-move="${a.id}" data-dir="1" ${i === c.ads.length - 1 ? 'disabled' : ''} aria-label="Xuống">${icon('down', 'sm')}</button></div>
+          </div>`).join('')}
+          <button type="button" class="list-item" data-newad="${c.id}" style="color:var(--primary);justify-content:center">${icon('plus', 'sm')}<b>Thêm bài quảng cáo</b> <span class="xs muted">(${c.ads.length} bài)</span></button>
+        </div>
+      </div>`;
+    return {
+      title: 'Quảng cáo',
+      actions: `<button class="btn primary sm" data-newcamp>${icon('plus', 'sm')}Chiến dịch</button>`,
+      html: `
+        ${cronOk ? `<div class="alert ok" style="margin-bottom:12px">${icon('check')}<div class="small">Bộ xoay vòng đang chạy · lần cuối ${ago(d.last_tick)}</div></div>`
+          : `<div class="alert warn" style="margin-bottom:12px">${icon('alert')}<div class="small"><b>Cần đặt Cron mỗi 1 phút</b> để bot đổi bài & đăng bài mới tự động${d.last_tick ? ` (lần chạy cuối ${ago(d.last_tick)})` : ''}.<br>
+            aaPanel → <b>Cron</b> → Add → Type <b>Shell Script</b> → Period: <b>N Minutes = 1</b> → Script:<div class="row" style="margin:6px 0"><code class="cmd-code grow">php ${esc(d.cron_path)}</code><button class="btn icon sm" data-copy="php ${esc(d.cron_path)}">${icon('copy', 'sm')}</button></div>
+            <span class="xs">Hoặc Type <b>Access URL</b>: <code style="overflow-wrap:anywhere">${esc(d.cron_url)}</code></span></div></div>`}
+        ${d.campaigns.length ? d.campaigns.map(card).join('') : `<div class="card">${empty('megaphone', 'Chưa có chiến dịch quảng cáo.<br>Bấm <b>+ Chiến dịch</b> để bắt đầu.')}</div>`}
+        <div class="card card-pad xs text-2" style="margin-top:4px">💡 Bot đăng 1 bài (ảnh + nội dung + nút) và <b>ghim</b> lên nhóm, sau đó <b>tự sửa tin đã ghim</b> sang bài kế tiếp theo chu kỳ. Mỗi ngày đúng giờ cài đặt sẽ đăng & ghim bài mới. Bot đăng cần quyền <b>gửi ảnh</b> và <b>ghim tin</b> trong nhóm.</div>`,
+      mount: (root) => {
+        const reload = () => render();
+        $('[data-newcamp]')?.addEventListener('click', () => campaignSheet(null, d, reload));
+        root.addEventListener('click', async (e) => {
+          const t = (sel) => e.target.closest(sel);
+          let b;
+          if ((b = t('[data-editcamp]'))) return campaignSheet(d.campaigns.find((c) => c.id === Number(b.dataset.editcamp)), d, reload);
+          if ((b = t('[data-newad]'))) return adSheet(null, Number(b.dataset.newad), reload);
+          if ((b = t('[data-editad]'))) { const c = d.campaigns.find((x) => x.id === Number(b.dataset.camp)); return adSheet(c.ads.find((a) => a.id === Number(b.dataset.editad)), c.id, reload); }
+          if ((b = t('[data-move]'))) { await api('ads/ad/move', { id: Number(b.dataset.move), dir: Number(b.dataset.dir) }); return reload(); }
+          if ((b = t('[data-runcamp]'))) {
+            return withBtn(b, async () => {
+              try {
+                const r = await api('ads/campaign/run', { id: Number(b.dataset.runcamp) });
+                if (r.done.length) toast('Đã đăng & ghim ở: ' + r.done.join(', '));
+                r.errors.forEach((x) => toast(x, 'err'));
+                reload();
+              } catch (err) { toast(err.message, 'err'); }
+            });
+          }
+          if ((b = t('[data-stopcamp]'))) {
+            if (!(await confirmBox('Dừng quảng cáo?', 'Bot sẽ bỏ ghim bài quảng cáo và ngừng đổi bài.', { danger: true, ok: 'Dừng' }))) return;
+            await api('ads/campaign/stop', { id: Number(b.dataset.stopcamp) }); toast('Đã dừng'); return reload();
+          }
+          if ((b = t('[data-oncamp]'))) {
+            const c = d.campaigns.find((x) => x.id === Number(b.dataset.oncamp));
+            await api('ads/campaign/save', { ...c, enabled: true }); toast('Đã bật lại · bài sẽ được đăng ở lượt cron kế tiếp'); return reload();
+          }
+        });
+      },
+    };
+  }, { webAdmin: true, title: 'Quảng cáo' });
+
+  function campaignSheet(c, d, onSaved) {
+    const v = c || { name: '', enabled: 1, group_ids: [], bot_mode: 'default', interval_sec: 10, rotate_order: 'sequence', daily_new: 1, daily_time: '00:00', pin: 1, pin_silent: 1, delete_old: 0 };
+    let sel = [...v.group_ids];
+    let mode = v.bot_mode;
+    const draw = () => `
+      <div class="sheet-head"><h2>${c ? 'Sửa chiến dịch' : 'Chiến dịch quảng cáo mới'}</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
+      <form id="fcamp" class="stack">
+        <label class="field"><span class="lbl">Tên chiến dịch</span><input class="input" name="name" value="${esc(v.name)}" placeholder="VD: Quảng cáo tháng 11" required maxlength="120"></label>
+        <div class="field"><span class="lbl">Đăng vào nhóm</span><div class="chips" style="flex-wrap:wrap">${d.groups.map((g) => `<button type="button" class="chip ${sel.includes(g.id) ? 'active' : ''}" data-g="${g.id}">${esc(g.title)}</button>`).join('') || '<span class="xs muted">Chưa có nhóm nào</span>'}</div></div>
+        <div class="field"><span class="lbl">Bot đăng quảng cáo</span>
+          <div class="segmented"><button type="button" data-mode="default" class="${mode === 'default' ? 'active' : ''}">🤖 Bot mặc định</button><button type="button" data-mode="custom" class="${mode === 'custom' ? 'active' : ''}">➕ Bot Telegram khác</button></div>
+          ${mode === 'custom' ? `<div class="stack" style="margin-top:10px">
+            <input class="input mono" name="bot_token" placeholder="${c && c.has_token ? 'Đang dùng @' + esc(c.bot_username || '') + ' · nhập token mới để đổi' : 'Token bot quảng cáo (từ @BotFather)'}" autocomplete="off">
+            <div class="hint">Thêm bot này vào nhóm và cấp quyền <b>quản trị</b> (gửi tin, ghim tin). Bot quảng cáo chỉ dùng để đăng, không cần cài webhook.</div></div>`
+            : '<div class="hint">Dùng bot đang quản lý từng nhóm.</div>'}
+        </div>
+        <div class="grid grid-2">
+          <label class="field"><span class="lbl">Đổi bài mỗi</span><select class="input" name="interval_sec">${d.intervals.map((x) => `<option value="${x}" ${x === v.interval_sec ? 'selected' : ''}>${ivLabel(x)}</option>`).join('')}</select></label>
+          <label class="field"><span class="lbl">Thứ tự</span><select class="input" name="rotate_order"><option value="sequence">Lần lượt</option><option value="random" ${v.rotate_order === 'random' ? 'selected' : ''}>Ngẫu nhiên</option></select></label>
+        </div>
+        <div class="card" style="box-shadow:none">
+          ${sw('daily_new', v.daily_new, 'Đăng bài mới mỗi ngày', 'Đúng giờ bên dưới, bot đăng & ghim 1 bài mới')}
+          <div class="form-group"><label class="field"><span class="lbl">Giờ đăng bài mới</span><input class="input" type="time" name="daily_time" value="${esc(v.daily_time)}"></label></div>
+          ${sw('pin', v.pin, 'Ghim bài quảng cáo')}
+          ${sw('pin_silent', v.pin_silent, 'Ghim im lặng', 'Không gửi thông báo ghim cho thành viên')}
+          ${sw('delete_old', v.delete_old, 'Xoá bài của hôm trước', 'Tắt = chỉ bỏ ghim bài cũ')}
+          ${sw('enabled', v.enabled, 'Bật chiến dịch')}
+        </div>
+        <div class="grid ${c ? 'grid-2' : ''}">${c ? `<button type="button" class="btn soft-danger" data-delcamp>${icon('trash', 'sm')}Xoá</button>` : ''}<button class="btn primary">${icon('check', 'sm')}Lưu</button></div>
+      </form>`;
+    sheet('<div id="campbox"></div>', (el, close) => {
+      const box = $('#campbox', el);
+      const keep = () => { const f = $('#fcamp', el); if (f) Object.assign(v, formData(f)); };
+      box.innerHTML = draw();
+      el.addEventListener('click', async (e) => {
+        const g = e.target.closest('[data-g]');
+        if (g) { const id = Number(g.dataset.g); sel = sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id]; g.classList.toggle('active'); }
+        const m = e.target.closest('[data-mode]');
+        if (m) { keep(); mode = m.dataset.mode; box.innerHTML = draw(); }
+        if (e.target.closest('[data-delcamp]')) {
+          if (!(await confirmBox('Xoá chiến dịch?', 'Bài quảng cáo sẽ bị bỏ ghim và xoá toàn bộ bài trong chiến dịch.', { danger: true, ok: 'Xoá' }))) return;
+          await api('ads/campaign/delete', { id: c.id }); close(); toast('Đã xoá chiến dịch'); onSaved();
+        }
+      });
+      el.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const f = formData(e.target);
+        await withBtn(e.target.querySelector('button.primary'), async () => {
+          try {
+            await api('ads/campaign/save', { id: c?.id, ...f, interval_sec: Number(f.interval_sec), group_ids: sel, bot_mode: mode });
+            close(); toast('Đã lưu chiến dịch'); onSaved();
+          } catch (err) { toast(err.message, 'err'); }
+        });
+      });
+    });
+  }
+
+  // Nén ảnh trước khi tải lên (tối đa 1600px, JPEG)
+  function resizeImage(file) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const k = Math.min(1, 1600 / Math.max(img.width, img.height));
+        const cv = document.createElement('canvas');
+        cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
+        cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+        resolve(cv.toDataURL('image/jpeg', 0.88));
+        URL.revokeObjectURL(img.src);
+      };
+      img.onerror = () => reject(new Error('Không đọc được ảnh'));
+      img.src = URL.createObjectURL(file);
+    });
+  }
+
+  function adSheet(a, campaignId, onSaved) {
+    const st = {
+      title: a?.title || '', caption: a?.caption || '', enabled: a ? a.enabled : 1, image: null,
+      imgUrl: a?.has_image ? adImg(a) : null,
+      buttons: (a?.buttons || []).map((b, i, arr) => ({ ...b, same: i > 0 && b.row === arr[i - 1].row })),
+    };
+    const rowsOf = () => { let r = -1; return st.buttons.map((b, i) => ({ text: b.text, url: b.url, row: (r = i > 0 && b.same ? r : r + 1) })); };
+    const btnsHtml = () => st.buttons.map((b, i) => `<div class="ad-btn-edit">
+        <div class="row" style="gap:6px"><input class="input" data-bt="${i}" data-k="text" value="${esc(b.text)}" placeholder="Chữ trên nút, VD: Mua Ngay" maxlength="64">
+        <button type="button" class="btn icon sm ghost" data-rmbtn="${i}" aria-label="Xoá nút">${icon('trash', 'sm')}</button></div>
+        <input class="input mono" data-bt="${i}" data-k="url" value="${esc(b.url)}" placeholder="https://… hoặc @username" style="margin-top:6px">
+        ${i > 0 ? `<label class="row xs" style="margin-top:6px;gap:6px;cursor:pointer"><input type="checkbox" data-bt="${i}" data-k="same" ${b.same ? 'checked' : ''}> Cùng hàng với nút phía trên</label>` : ''}
+      </div>`).join('');
+    const html = `
+      <div class="sheet-head"><h2>${a ? 'Sửa bài quảng cáo' : 'Bài quảng cáo mới'}</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
+      <div class="ad-editor">
+        <form id="fad" class="stack">
+          <div class="field"><span class="lbl">Ảnh</span>
+            <label class="ad-pick"><input type="file" accept="image/*" id="adfile" hidden><span id="adpickimg">${st.imgUrl ? `<img src="${st.imgUrl}" alt="">` : `${icon('image')}<b>Chọn ảnh</b><small>JPG / PNG, nên ngang 16:9</small>`}</span></label></div>
+          <label class="field"><span class="lbl">Tên bài (chỉ hiện trên web)</span><input class="input" name="title" value="${esc(st.title)}" placeholder="VD: Hidemium 230k" maxlength="120"></label>
+          <label class="field"><span class="lbl">Nội dung <span class="xs muted" id="capn"></span></span><textarea class="input" name="caption" style="min-height:120px" placeholder="Hidemium 30 ngày giá 230k, rẻ nhất thị trường - Mua liên hệ @domino_real">${esc(st.caption)}</textarea>
+            <div class="hint">&lt;b&gt;đậm&lt;/b&gt; · &lt;i&gt;nghiêng&lt;/i&gt; · &lt;u&gt;gạch chân&lt;/u&gt; · &lt;a href="https://…"&gt;link&lt;/a&gt; · @username tự thành link</div></label>
+          <div class="field"><span class="lbl">Nút bấm</span><div id="adbtns" class="stack" style="gap:8px">${btnsHtml()}</div>
+            <button type="button" class="btn soft block sm" data-addbtn style="margin-top:8px">${icon('plus', 'sm')}Thêm nút</button></div>
+          <div class="card" style="box-shadow:none">${sw('enabled', st.enabled, 'Bật bài này', 'Tắt thì bỏ qua khi xoay vòng')}</div>
+          <div class="grid ${a ? 'grid-2' : ''}">${a ? `<button type="button" class="btn soft-danger" data-delad>${icon('trash', 'sm')}Xoá</button>` : ''}<button class="btn primary">${icon('check', 'sm')}Lưu bài</button></div>
+        </form>
+        <div class="ad-preview"><div class="pv-label">👁 Xem trước trên Telegram</div><div id="adpv"></div></div>
+      </div>`;
+    sheet(html, (el, close) => {
+      el.classList.add('sheet-wide');
+      const f = $('#fad', el);
+      const pv = () => {
+        st.caption = f.caption.value;
+        $('#capn', el).textContent = `${st.caption.length}/1024`;
+        $('#capn', el).style.color = st.caption.length > 1024 ? 'var(--danger)' : '';
+        $('#adpv', el).innerHTML = tgPost(st.image || st.imgUrl, st.caption, rowsOf());
+      };
+      pv();
+      $('#adfile', el).addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        try { st.image = await resizeImage(file); $('#adpickimg', el).innerHTML = `<img src="${st.image}" alt="">`; pv(); }
+        catch (err) { toast(err.message, 'err'); }
+      });
+      el.addEventListener('input', (e) => {
+        const b = e.target.closest('[data-bt]');
+        if (b) { const x = st.buttons[b.dataset.bt]; x[b.dataset.k] = b.type === 'checkbox' ? b.checked : b.value; }
+        pv();
+      });
+      el.addEventListener('change', (e) => { const b = e.target.closest('[data-bt][type=checkbox]'); if (b) { st.buttons[b.dataset.bt].same = b.checked; pv(); } });
+      el.addEventListener('click', async (e) => {
+        if (e.target.closest('[data-addbtn]')) { st.buttons.push({ text: '', url: '', same: false }); $('#adbtns', el).innerHTML = btnsHtml(); pv(); $$('[data-k=text]', el).pop()?.focus(); }
+        const rm = e.target.closest('[data-rmbtn]');
+        if (rm) { st.buttons.splice(Number(rm.dataset.rmbtn), 1); if (st.buttons[0]) st.buttons[0].same = false; $('#adbtns', el).innerHTML = btnsHtml(); pv(); }
+        if (e.target.closest('[data-delad]')) {
+          if (!(await confirmBox('Xoá bài quảng cáo?', 'Bài này sẽ bị xoá khỏi vòng quảng cáo.', { danger: true, ok: 'Xoá' }))) return;
+          await api('ads/ad/delete', { id: a.id }); close(); toast('Đã xoá bài'); onSaved();
+        }
+      });
+      f.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!st.image && !st.imgUrl) return toast('Chọn ảnh cho bài quảng cáo', 'err');
+        await withBtn(f.querySelector('button.primary'), async () => {
+          try {
+            await api('ads/ad/save', { id: a?.id, campaign_id: campaignId, title: f.title.value, caption: f.caption.value, enabled: f.enabled.checked, buttons: rowsOf(), image: st.image || '' });
+            close(); toast('Đã lưu bài quảng cáo'); onSaved();
+          } catch (err) { toast(err.message, 'err'); }
+        });
+      });
+    });
+  }
+
   // ================= Admin: More / Users / System =================
   route('/more', async () => ({
     title: 'Thêm',
@@ -2088,6 +2329,7 @@
       <div class="card card-pad row" style="margin-bottom:14px">${avatar(S.user.display_name, S.user.id, 'lg')}<div class="grow"><h2>${esc(S.user.display_name)}</h2><div class="small muted">@${esc(S.user.username)} · ${roleLabel()}</div></div></div>
       <div class="list">
         <a class="list-item" href="#/rules">${icon('terminal')}<div class="grow">Lệnh tự tạo & lệnh mặc định</div><span class="chev">${icon('chevron')}</span></a>
+        ${isWebAdmin() ? `<a class="list-item" href="#/ads">${icon('megaphone')}<div class="grow">Quảng cáo xoay vòng</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         ${isWebAdmin() ? `<a class="list-item" href="#/users">${icon('key')}<div class="grow">Tài khoản web & phân quyền</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/system">${icon('download')}<div class="grow">Hệ thống & cập nhật</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         <a class="list-item" href="#/me">${icon('star')}<div class="grow">Điểm của tôi</div><span class="chev">${icon('chevron')}</span></a>
