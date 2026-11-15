@@ -1236,6 +1236,14 @@ class Api
                 'created_at' => (int)$p['created_at'], 'last_rotate_at' => (int)$p['last_rotate_at'],
                 'link' => Moderation::link($p, (int)$p['message_id']),
             ], DB::all('SELECT p.*, g.title, g.username, g.chat_id FROM tg_ad_posts p JOIN tg_groups g ON g.id = p.group_id WHERE p.campaign_id = ? AND p.active = 1', [$c['id']]));
+            if (Ads::isSchedule($c)) {
+                // Lịch theo từng nhóm: lần gửi trước, lần gửi tới
+                $row['schedule'] = [];
+                foreach ($row['group_ids'] as $gid) {
+                    $last = (int)DB::val('SELECT MAX(created_at) FROM tg_ad_posts WHERE campaign_id = ? AND group_id = ?', [$c['id'], $gid]);
+                    $row['schedule'][] = ['group_id' => $gid, 'last' => $last ?: null, 'next' => $c['enabled'] ? Ads::nextAt($c, $last) : null];
+                }
+            }
             $camps[] = $row;
         }
         return [
@@ -1247,6 +1255,7 @@ class Api
             'cron_path' => ROOT . '/cron.php',
             'cron_cmd' => cron_command(),
             'intervals' => Ads::INTERVALS,
+            'every' => Ads::EVERY,
         ];
     }
 
@@ -1280,6 +1289,37 @@ class Api
         if (!in_array($interval, Ads::INTERVALS, true)) $interval = 10;
         $time = (string)$this->in('daily_time', '00:00');
         if (!preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $time)) fail('Giờ đăng bài mới không hợp lệ (HH:MM)');
+        $type = $old ? ($old['type'] ?? 'rotate') : ($this->in('type') === 'schedule' ? 'schedule' : 'rotate');
+        $sched = [];
+        if ($type === 'schedule') {
+            $isHm = fn($x) => (bool)preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $x);
+            $mode = $this->in('sched_mode') === 'times' ? 'times' : 'interval';
+            $every = (int)$this->in('every_min', 60);
+            if ($every < 1 || $every > 10080) fail('Chu kỳ gửi: 1 phút – 7 ngày');
+            $times = [];
+            $rawTimes = $this->in('sched_times', '');
+            if (is_array($rawTimes)) $rawTimes = implode(',', $rawTimes);
+            foreach (preg_split('/[\s,;]+/', (string)$rawTimes) as $t) {
+                if ($t === '') continue;
+                if (preg_match('/^(\d{1,2})(?:[:hg.](\d{2}))?$/u', $t, $tm)) $t = sprintf('%02d:%02d', (int)$tm[1], (int)($tm[2] ?? 0));
+                if (!$isHm($t)) fail("Giờ gửi \"$t\" không hợp lệ (VD 08:00, 12:30, 20:00)");
+                $times[] = $t;
+            }
+            $times = array_values(array_unique($times));
+            sort($times);
+            if ($mode === 'times' && !$times) fail('Nhập ít nhất 1 giờ gửi, VD 08:00, 12:00, 20:00');
+            if (count($times) > 48) fail('Tối đa 48 mốc giờ mỗi ngày');
+            $days = implode('', array_unique(array_filter(str_split(preg_replace('/[^1-7]/', '', (string)$this->in('sched_days', '1234567'))))));
+            if ($days === '') fail('Chọn ít nhất 1 ngày trong tuần');
+            $wf = trim((string)$this->in('win_from', ''));
+            $wt = trim((string)$this->in('win_to', ''));
+            if (($wf !== '' && !$isHm($wf)) || ($wt !== '' && !$isHm($wt))) fail('Khung giờ gửi không hợp lệ (HH:MM)');
+            $sched = [
+                'sched_mode' => $mode, 'every_min' => $every, 'sched_times' => json_encode($times), 'sched_days' => $days,
+                'win_from' => $wf, 'win_to' => $wt, 'silent' => $this->in('silent', true) ? 1 : 0,
+                'auto_delete_min' => max(0, min(10080, (int)$this->in('auto_delete_min', 0))),
+            ];
+        }
         $data = [
             'name' => $name,
             'enabled' => $this->in('enabled', true) ? 1 : 0,
@@ -1292,8 +1332,9 @@ class Api
             'pin' => $this->in('pin', true) ? 1 : 0,
             'pin_silent' => $this->in('pin_silent', true) ? 1 : 0,
             'delete_old' => $this->in('delete_old') ? 1 : 0,
+            'type' => $type,
             'updated_at' => now(),
-        ];
+        ] + $sched;
         // Bot quảng cáo riêng: kiểm tra token
         $token = trim((string)$this->in('bot_token', ''));
         if ($data['bot_mode'] === 'custom') {
@@ -1340,7 +1381,7 @@ class Api
     {
         $u = Auth::requireAdmin();
         $c = $this->loadCampaign();
-        $ads = DB::all('SELECT * FROM tg_ads WHERE campaign_id = ? AND enabled = 1 AND image IS NOT NULL ORDER BY sort, id', [$c['id']]);
+        $ads = Ads::adsFor($c);
         if (!$ads) fail('Chiến dịch chưa có bài quảng cáo nào đang bật');
         $gids = json_decode((string)$c['group_ids'], true) ?: [];
         if (!$gids) fail('Chưa chọn nhóm để đăng');
@@ -1353,7 +1394,8 @@ class Api
             if (!$g) continue;
             $old = DB::get('SELECT * FROM tg_ad_posts WHERE campaign_id = ? AND group_id = ? AND active = 1', [$c['id'], $gid]);
             try {
-                Ads::post($c, $g, $old, $ads, $old ? (int)$old['ad_id'] : null);
+                $lastAd = (int)DB::val('SELECT ad_id FROM tg_ad_posts WHERE campaign_id = ? AND group_id = ? ORDER BY id DESC LIMIT 1', [$c['id'], $gid]) ?: null;
+                Ads::post($c, $g, $old, $ads, $lastAd);
                 $done[] = $g['title'];
             } catch (Throwable $e) {
                 $msg = $e->getMessage();
@@ -1384,7 +1426,14 @@ class Api
         $old = $id ? (DB::get('SELECT * FROM tg_ads WHERE id = ?', [$id]) ?: fail('Không tìm thấy bài', 404)) : null;
         $c = DB::get('SELECT * FROM tg_ad_campaigns WHERE id = ?', [$old ? $old['campaign_id'] : $this->int('campaign_id')]) ?: fail('Không tìm thấy chiến dịch', 404);
         $caption = trim((string)$this->in('caption', ''));
-        if (mb_strlen(html_entity_decode(strip_tags($caption), ENT_QUOTES | ENT_HTML5, 'UTF-8')) > Ads::CAPTION_MAX) fail('Nội dung tối đa ' . Ads::CAPTION_MAX . ' ký tự (giới hạn chú thích ảnh của Telegram)');
+        $sched = Ads::isSchedule($c);
+        $img = (string)$this->in('image', '');
+        $removeImg = $sched && $this->in('remove_image') && $img === '';
+        $hasImg = $img !== '' || ($old && $old['image'] && !$removeImg);
+        $len = mb_strlen(html_entity_decode(strip_tags($caption), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        if ($hasImg && $len > Ads::CAPTION_MAX) fail('Nội dung tối đa ' . Ads::CAPTION_MAX . ' ký tự khi có ảnh (giới hạn chú thích ảnh của Telegram)');
+        if (!$hasImg && $len > Ads::TEXT_MAX) fail('Nội dung tối đa ' . Ads::TEXT_MAX . ' ký tự');
+        if (!$hasImg && $sched && $caption === '') fail('Bài không có ảnh thì cần nội dung');
         $data = [
             'title' => trim(mb_substr((string)$this->in('title', ''), 0, 120)),
             'caption' => $caption,
@@ -1392,12 +1441,15 @@ class Api
             'enabled' => $this->in('enabled', true) ? 1 : 0,
             'updated_at' => now(),
         ];
-        $img = (string)$this->in('image', '');
         if ($img !== '') {
             $data['image'] = Ads::saveImage($img, $old['image'] ?? null);
             $data['file_ids'] = null; // ảnh mới → tải lại lên Telegram
-        } elseif (!$old || !$old['image']) {
-            fail('Chọn ảnh cho bài quảng cáo');
+        } elseif ($removeImg && $old && $old['image']) {
+            @unlink(Ads::IMG_DIR . '/' . basename($old['image']));
+            $data['image'] = null;
+            $data['file_ids'] = null;
+        } elseif (!$sched && (!$old || !$old['image'])) {
+            fail('Chọn ảnh cho bài quảng cáo (chiến dịch xoay vòng cần ảnh)');
         }
         if ($old) DB::update('tg_ads', $data, 'id = ?', [$id]);
         else {

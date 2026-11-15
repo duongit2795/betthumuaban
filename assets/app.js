@@ -2316,13 +2316,22 @@
   const adImg = (a) => `api.php?r=ads/image&id=${a.id}&v=${a.updated_at}`;
 
   // Bản xem trước giống bài đăng Telegram (ảnh + chú thích + nút)
-  function tgPost(img, caption, buttons) {
+  function tgPost(img, caption, buttons, textOnly = false) {
     const rows = [];
     (buttons || []).forEach((b) => { (rows[b.row] = rows[b.row] || []).push(b); });
-    return `<div class="tgpost">${img ? `<img src="${esc(img)}" alt="">` : `<div class="tgpost-noimg">${icon('image')}<span>Chưa có ảnh</span></div>`}
+    return `<div class="tgpost">${img ? `<img src="${esc(img)}" alt="">` : textOnly ? '' : `<div class="tgpost-noimg">${icon('image')}<span>Chưa có ảnh</span></div>`}
       <div class="tgpost-cap">${caption ? previewText(caption) : '<span class="muted">Nội dung bài quảng cáo…</span>'}</div></div>
       ${rows.filter(Boolean).map((r) => `<div class="tgpost-btns">${r.map((b) => `<span class="tgpost-btn ${b.style ? 'st-' + b.style : ''}">${b.emoji ? '✨ ' : ''}${esc(b.text || 'Nút')}<i>↗</i></span>`).join('')}</div>`).join('')}`;
   }
+
+  const DAYS = [['1', 'T2'], ['2', 'T3'], ['3', 'T4'], ['4', 'T5'], ['5', 'T6'], ['6', 'T7'], ['7', 'CN']];
+  const minLabel = (m) => humanSec(m * 60);
+  const schedText = (c) => {
+    const days = c.sched_days === '1234567' ? 'mỗi ngày' : DAYS.filter(([k]) => c.sched_days.includes(k)).map(([, l]) => l).join(', ');
+    const main = c.sched_mode === 'times' ? `lúc <b>${c.sched_times.map(esc).join(', ')}</b>` : `mỗi <b>${minLabel(c.every_min)}</b>${c.win_from || c.win_to ? ` (${esc(c.win_from || '00:00')}–${esc(c.win_to || '24:00')})` : ''}`;
+    return `⏰ Gửi ${main} · ${days}`;
+  };
+  const fmtWhen = (t) => { if (!t) return '—'; const d = new Date(t * 1000), n = new Date(); const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`; return d.toDateString() === n.toDateString() ? hm + ' hôm nay' : hm + ' ' + pad(d.getDate()) + '/' + pad(d.getMonth() + 1); };
 
   route('/ads', async () => {
     const d = await api('ads');
@@ -2332,21 +2341,25 @@
     const card = (c) => `
       <div class="card ad-camp" style="margin-bottom:14px">
         <div class="card-pad">
-          <div class="row" style="align-items:flex-start"><div class="feat-ico">📢</div>
-            <div class="grow"><div class="row wrap" style="gap:6px"><b style="font-size:16px">${esc(c.name)}</b>${c.enabled ? '<span class="badge green">Đang chạy</span>' : '<span class="badge">Tạm dừng</span>'}</div>
-            <div class="xs text-2" style="margin-top:4px">🔄 Đổi bài mỗi <b>${ivLabel(c.interval_sec)}</b> · ${c.rotate_order === 'random' ? 'ngẫu nhiên' : 'lần lượt'}${c.daily_new ? ` · 🆕 bài mới hằng ngày lúc <b>${esc(c.daily_time)}</b>` : ''}</div>
+          <div class="row" style="align-items:flex-start"><div class="feat-ico">${c.type === 'schedule' ? '⏰' : '📢'}</div>
+            <div class="grow"><div class="row wrap" style="gap:6px"><b style="font-size:16px">${esc(c.name)}</b>${c.type === 'schedule' ? '<span class="badge blue">Gửi theo lịch</span>' : '<span class="badge">Xoay vòng ghim</span>'}${c.enabled ? '<span class="badge green">Đang chạy</span>' : '<span class="badge">Tạm dừng</span>'}</div>
+            ${c.type === 'schedule'
+              ? `<div class="xs text-2" style="margin-top:4px">${schedText(c)} · ${c.rotate_order === 'random' ? 'bài ngẫu nhiên' : 'bài lần lượt'}</div>
+                 <div class="xs text-2">${c.silent ? '🔕 Không tiếng' : '🔔 Có thông báo'}${c.delete_old ? ' · 🗑 xoá bài cũ khi gửi bài mới' : ''}${c.pin ? ' · 📌 ghim' : ''}${c.auto_delete_min ? ` · ⏳ tự xoá sau ${minLabel(c.auto_delete_min)}` : ''}</div>`
+              : `<div class="xs text-2" style="margin-top:4px">🔄 Đổi bài mỗi <b>${ivLabel(c.interval_sec)}</b> · ${c.rotate_order === 'random' ? 'ngẫu nhiên' : 'lần lượt'}${c.daily_new ? ` · 🆕 bài mới hằng ngày lúc <b>${esc(c.daily_time)}</b>` : ''}</div>`}
             <div class="xs text-2">🤖 ${c.bot_mode === 'custom' ? `Bot quảng cáo riêng <b>@${esc(c.bot_username || '')}</b>` : 'Bot mặc định của nhóm'} · 👥 ${c.group_ids.length ? c.group_ids.map((id) => esc(gname(id))).join(', ') : '<span style="color:var(--danger)">chưa chọn nhóm</span>'}</div></div>
             <button class="btn icon sm ghost" data-editcamp="${c.id}" aria-label="Sửa">${icon('settings', 'sm')}</button></div>
           ${c.last_error ? `<div class="alert err" style="margin-top:10px">${icon('alert')}<div class="xs" style="overflow-wrap:anywhere">${esc(c.last_error)}</div></div>` : ''}
-          ${c.posts.map((p) => `<div class="alert ok" style="margin-top:10px">${icon('pin')}<div class="xs">Đang ghim ở <b>${esc(p.group)}</b> · hiện bài <b>${esc(c.ads.find((a) => a.id === p.ad_id)?.title || '#' + p.ad_id)}</b> · đăng ${ago(p.created_at)}${p.link ? ` · <a href="${esc(p.link)}" target="_blank" rel="noopener">mở tin</a>` : ''}</div></div>`).join('')}
+          ${c.type === 'schedule' ? (c.schedule || []).map((x) => `<div class="alert ${x.next ? 'ok' : 'info'}" style="margin-top:10px">${icon('calendar')}<div class="xs"><b>${esc(gname(x.group_id))}</b> · gửi lần trước: ${x.last ? fmtWhen(x.last) : 'chưa'} · lần tới: <b>${x.next ? (x.next <= now + 5 ? 'ngay bây giờ' : fmtWhen(x.next)) : c.enabled ? 'không có lịch' : 'đang dừng'}</b></div></div>`).join('') : ''}
+          ${c.type === 'schedule' ? '' : c.posts.map((p) => `<div class="alert ok" style="margin-top:10px">${icon('pin')}<div class="xs">Đang ghim ở <b>${esc(p.group)}</b> · hiện bài <b>${esc(c.ads.find((a) => a.id === p.ad_id)?.title || '#' + p.ad_id)}</b> · đăng ${ago(p.created_at)}${p.link ? ` · <a href="${esc(p.link)}" target="_blank" rel="noopener">mở tin</a>` : ''}</div></div>`).join('')}
           <div class="grid grid-2" style="margin-top:12px">
-            <button class="btn primary sm" data-runcamp="${c.id}">${icon('send', 'sm')}Đăng & ghim ngay</button>
+            <button class="btn primary sm" data-runcamp="${c.id}">${icon('send', 'sm')}${c.type === 'schedule' ? 'Gửi ngay' : 'Đăng & ghim ngay'}</button>
             ${c.enabled ? `<button class="btn sm soft-danger" data-stopcamp="${c.id}">${icon('power', 'sm')}Dừng</button>` : `<button class="btn sm soft" data-oncamp="${c.id}">${icon('power', 'sm')}Bật lại</button>`}
           </div>
         </div>
         <div class="list" style="border-radius:0 0 var(--radius) var(--radius);border-left:0;border-right:0;border-bottom:0;box-shadow:none">
           ${c.ads.map((a, i) => `<div class="list-item ad-row ${a.enabled ? '' : 'off'}">
-            <button type="button" class="ad-thumb" data-editad="${a.id}" data-camp="${c.id}">${a.has_image ? `<img src="${adImg(a)}" alt="" loading="lazy">` : icon('image')}</button>
+            <button type="button" class="ad-thumb" data-editad="${a.id}" data-camp="${c.id}">${a.has_image ? `<img src="${adImg(a)}" alt="" loading="lazy">` : c.type === 'schedule' ? icon('msg') : icon('image')}</button>
             <button type="button" class="grow ad-info" data-editad="${a.id}" data-camp="${c.id}">
               <div class="row wrap" style="gap:6px"><b class="ellipsis">${esc(a.title || 'Bài ' + (i + 1))}</b>${a.enabled ? '' : '<span class="badge">Tắt</span>'}${c.posts.some((p) => p.ad_id === a.id) ? '<span class="badge blue">Đang hiện</span>' : ''}</div>
               <div class="xs text-2 ad-cap">${esc(stripTags(a.caption).slice(0, 90))}</div>
@@ -2367,7 +2380,8 @@
             <span class="xs">⚠️ Dùng đúng đường dẫn PHP ở trên (cùng phiên bản với web). Lệnh <code>php</code> trơn có thể gọi bản PHP khác thiếu extension.</span><br>
             <span class="xs">Hoặc Type <b>Access URL</b>: <code style="overflow-wrap:anywhere">${esc(d.cron_url)}</code></span></div></div>`}
         ${d.campaigns.length ? d.campaigns.map(card).join('') : `<div class="card">${empty('megaphone', 'Chưa có chiến dịch quảng cáo.<br>Bấm <b>+ Chiến dịch</b> để bắt đầu.')}</div>`}
-        <div class="card card-pad xs text-2" style="margin-top:4px">💡 Bot đăng 1 bài (ảnh + nội dung + nút) và <b>ghim</b> lên nhóm, sau đó <b>tự sửa tin đã ghim</b> sang bài kế tiếp theo chu kỳ. Mỗi ngày đúng giờ cài đặt sẽ đăng & ghim bài mới. Bot đăng cần quyền <b>gửi ảnh</b> và <b>ghim tin</b> trong nhóm.</div>`,
+        <div class="card card-pad xs text-2" style="margin-top:4px">💡 <b>📢 Xoay vòng ghim</b>: bot đăng 1 bài (ảnh + nội dung + nút), <b>ghim</b> lên nhóm rồi <b>tự sửa tin đã ghim</b> sang bài kế tiếp theo chu kỳ; mỗi ngày đúng giờ đăng & ghim bài mới.<br>
+          <b>⏰ Gửi theo lịch</b>: bot <b>gửi tin mới</b> mỗi N phút hoặc vào các giờ cố định (chọn ngày trong tuần, khung giờ), tuỳ chọn <b>không tiếng</b>, <b>xoá bài cũ</b> khi gửi bài mới, ghim, tự xoá sau N phút. Bài có thể chỉ có chữ.<br>Bot đăng cần quyền <b>gửi tin / ảnh</b> (và <b>ghim tin</b> nếu bật ghim) trong nhóm.</div>`,
       mount: (root) => {
         const reload = () => render();
         $('[data-newcamp]')?.addEventListener('click', () => campaignSheet(null, d, reload));
@@ -2375,14 +2389,14 @@
           const t = (sel) => e.target.closest(sel);
           let b;
           if ((b = t('[data-editcamp]'))) return campaignSheet(d.campaigns.find((c) => c.id === Number(b.dataset.editcamp)), d, reload);
-          if ((b = t('[data-newad]'))) return adSheet(null, Number(b.dataset.newad), reload);
-          if ((b = t('[data-editad]'))) { const c = d.campaigns.find((x) => x.id === Number(b.dataset.camp)); return adSheet(c.ads.find((a) => a.id === Number(b.dataset.editad)), c.id, reload); }
+          if ((b = t('[data-newad]'))) { const c = d.campaigns.find((x) => x.id === Number(b.dataset.newad)); return adSheet(null, c.id, reload, c.type); }
+          if ((b = t('[data-editad]'))) { const c = d.campaigns.find((x) => x.id === Number(b.dataset.camp)); return adSheet(c.ads.find((a) => a.id === Number(b.dataset.editad)), c.id, reload, c.type); }
           if ((b = t('[data-move]'))) { await api('ads/ad/move', { id: Number(b.dataset.move), dir: Number(b.dataset.dir) }); return reload(); }
           if ((b = t('[data-runcamp]'))) {
             return withBtn(b, async () => {
               try {
                 const r = await api('ads/campaign/run', { id: Number(b.dataset.runcamp) });
-                if (r.done.length) toast('Đã đăng & ghim ở: ' + r.done.join(', '));
+                if (r.done.length) toast('Đã gửi ở: ' + r.done.join(', '));
                 r.errors.forEach((x) => toast(x, 'err'));
                 reload();
               } catch (err) { toast(err.message, 'err'); }
@@ -2402,23 +2416,41 @@
   }, { webAdmin: true, title: 'Quảng cáo' });
 
   function campaignSheet(c, d, onSaved) {
-    const v = c || { name: '', enabled: 1, group_ids: [], bot_mode: 'default', interval_sec: 10, rotate_order: 'sequence', daily_new: 1, daily_time: '00:00', pin: 1, pin_silent: 1, delete_old: 0 };
+    const v = c || { name: '', enabled: 1, group_ids: [], bot_mode: 'default', interval_sec: 10, rotate_order: 'sequence', daily_new: 1, daily_time: '00:00', pin: 1, pin_silent: 1, delete_old: 0,
+      type: 'rotate', sched_mode: 'interval', every_min: 60, sched_times: ['08:00', '12:00', '20:00'], sched_days: '1234567', win_from: '', win_to: '', silent: 1, auto_delete_min: 0 };
     let sel = [...v.group_ids];
     let mode = v.bot_mode;
-    const draw = () => `
-      <div class="sheet-head"><h2>${c ? 'Sửa chiến dịch' : 'Chiến dịch quảng cáo mới'}</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
-      <form id="fcamp" class="stack">
-        <label class="field"><span class="lbl">Tên chiến dịch</span><input class="input" name="name" value="${esc(v.name)}" placeholder="VD: Quảng cáo tháng 11" required maxlength="120"></label>
-        <div class="field"><span class="lbl">Đăng vào nhóm</span><div class="chips" style="flex-wrap:wrap">${d.groups.map((g) => `<button type="button" class="chip ${sel.includes(g.id) ? 'active' : ''}" data-g="${g.id}">${esc(g.title)}</button>`).join('') || '<span class="xs muted">Chưa có nhóm nào</span>'}</div></div>
-        <div class="field"><span class="lbl">Bot đăng quảng cáo</span>
-          <div class="segmented"><button type="button" data-mode="default" class="${mode === 'default' ? 'active' : ''}">🤖 Bot mặc định</button><button type="button" data-mode="custom" class="${mode === 'custom' ? 'active' : ''}">➕ Bot Telegram khác</button></div>
-          ${mode === 'custom' ? `<div class="stack" style="margin-top:10px">
-            <input class="input mono" name="bot_token" placeholder="${c && c.has_token ? 'Đang dùng @' + esc(c.bot_username || '') + ' · nhập token mới để đổi' : 'Token bot quảng cáo (từ @BotFather)'}" autocomplete="off">
-            <div class="hint">Thêm bot này vào nhóm và cấp quyền <b>quản trị</b> (gửi tin, ghim tin). Bot quảng cáo chỉ dùng để đăng, không cần cài webhook.</div></div>`
-            : '<div class="hint">Dùng bot đang quản lý từng nhóm.</div>'}
-        </div>
+    let type = v.type || 'rotate';
+    let smode = v.sched_mode || 'interval';
+    let days = v.sched_days || '1234567';
+    const typeDefaults = (t) => { // đổi kiểu khi tạo mới → mặc định hợp lý
+      if (c) return;
+      if (t === 'schedule') Object.assign(v, { pin: 0, delete_old: 1 }); else Object.assign(v, { pin: 1, delete_old: 0 });
+    };
+    const schedHtml = () => `
+        <div class="field"><span class="lbl">Lịch gửi</span>
+          <div class="segmented"><button type="button" data-smode="interval" class="${smode === 'interval' ? 'active' : ''}">🔁 Lặp lại mỗi…</button><button type="button" data-smode="times" class="${smode === 'times' ? 'active' : ''}">🕗 Giờ cố định</button></div></div>
+        ${smode === 'interval' ? `
+        <label class="field"><span class="lbl">Gửi mỗi</span><select class="input" name="every_min">${[...new Set([...d.every, Number(v.every_min)])].sort((x, y) => x - y).map((m) => `<option value="${m}" ${m === Number(v.every_min) ? 'selected' : ''}>${minLabel(m)}</option>`).join('')}</select></label>
         <div class="grid grid-2">
-          <label class="field"><span class="lbl">Đổi bài mỗi</span><select class="input" name="interval_sec">${d.intervals.map((x) => `<option value="${x}" ${x === v.interval_sec ? 'selected' : ''}>${ivLabel(x)}</option>`).join('')}</select></label>
+          <label class="field"><span class="lbl">Chỉ gửi từ</span><input class="input" type="time" name="win_from" value="${esc(v.win_from)}"></label>
+          <label class="field"><span class="lbl">đến</span><input class="input" type="time" name="win_to" value="${esc(v.win_to)}"></label>
+        </div><div class="xs muted" style="margin-top:-6px">Để trống = gửi cả ngày. VD 08:00 – 23:00 để không gửi ban đêm.</div>`
+        : `<label class="field"><span class="lbl">Các giờ gửi trong ngày</span><input class="input" name="sched_times" value="${esc((v.sched_times || []).join(', '))}" placeholder="08:00, 12:00, 20:00">
+            <div class="hint">Cách nhau bằng dấu phẩy. Gõ <b>8</b> = 08:00, <b>20h30</b> = 20:30.</div></label>`}
+        <div class="field"><span class="lbl">Ngày trong tuần</span><div class="chips" style="flex-wrap:wrap">${DAYS.map(([k, l]) => `<button type="button" class="chip ${days.includes(k) ? 'active' : ''}" data-day="${k}">${l}</button>`).join('')}</div></div>
+        <label class="field"><span class="lbl">Thứ tự bài</span><select class="input" name="rotate_order"><option value="sequence">Lần lượt</option><option value="random" ${v.rotate_order === 'random' ? 'selected' : ''}>Ngẫu nhiên</option></select></label>
+        <div class="card" style="box-shadow:none">
+          ${sw('silent', v.silent, '🔕 Gửi không tiếng', 'Thành viên nhận tin nhưng không có âm thanh / rung')}
+          ${sw('delete_old', v.delete_old, '🗑 Xoá bài cũ khi gửi bài mới', 'Nhóm chỉ còn 1 bài quảng cáo mới nhất')}
+          ${sw('pin', v.pin, '📌 Ghim bài vừa gửi')}
+          ${sw('pin_silent', v.pin_silent, 'Ghim im lặng', 'Không gửi thông báo ghim')}
+          <div class="form-group"><label class="field"><span class="lbl">⏳ Tự xoá bài sau (phút)</span><input class="input" name="auto_delete_min" inputmode="numeric" value="${Number(v.auto_delete_min) || 0}"><div class="hint">0 = không tự xoá</div></label></div>
+          ${sw('enabled', v.enabled, 'Bật chiến dịch')}
+        </div>`;
+    const rotateHtml = () => `
+        <div class="grid grid-2">
+          <label class="field"><span class="lbl">Đổi bài mỗi</span><select class="input" name="interval_sec">${d.intervals.map((x) => `<option value="${x}" ${x === Number(v.interval_sec) ? 'selected' : ''}>${ivLabel(x)}</option>`).join('')}</select></label>
           <label class="field"><span class="lbl">Thứ tự</span><select class="input" name="rotate_order"><option value="sequence">Lần lượt</option><option value="random" ${v.rotate_order === 'random' ? 'selected' : ''}>Ngẫu nhiên</option></select></label>
         </div>
         <div class="card" style="box-shadow:none">
@@ -2428,18 +2460,42 @@
           ${sw('pin_silent', v.pin_silent, 'Ghim im lặng', 'Không gửi thông báo ghim cho thành viên')}
           ${sw('delete_old', v.delete_old, 'Xoá bài của hôm trước', 'Tắt = chỉ bỏ ghim bài cũ')}
           ${sw('enabled', v.enabled, 'Bật chiến dịch')}
+        </div>`;
+    const draw = () => `
+      <div class="sheet-head"><h2>${c ? 'Sửa chiến dịch' : 'Chiến dịch quảng cáo mới'}</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
+      <form id="fcamp" class="stack">
+        ${c ? `<div class="badge ${type === 'schedule' ? 'blue' : ''}" style="align-self:flex-start">${type === 'schedule' ? '⏰ Gửi theo lịch' : '📢 Xoay vòng ghim'}</div>` : `
+        <div class="field"><span class="lbl">Kiểu quảng cáo</span>
+          <div class="segmented"><button type="button" data-type="rotate" class="${type === 'rotate' ? 'active' : ''}">📢 Xoay vòng ghim</button><button type="button" data-type="schedule" class="${type === 'schedule' ? 'active' : ''}">⏰ Gửi theo lịch</button></div>
+          <div class="hint">${type === 'schedule' ? 'Gửi tin mới theo chu kỳ hoặc giờ cố định, có thể xoá bài cũ, gửi không tiếng.' : '1 tin ghim, bot tự sửa sang bài kế tiếp theo chu kỳ.'}</div></div>`}
+        <label class="field"><span class="lbl">Tên chiến dịch</span><input class="input" name="name" value="${esc(v.name)}" placeholder="${type === 'schedule' ? 'VD: Nhắc khuyến mãi mỗi 2 giờ' : 'VD: Quảng cáo tháng 11'}" required maxlength="120"></label>
+        <div class="field"><span class="lbl">Đăng vào nhóm</span><div class="chips" style="flex-wrap:wrap">${d.groups.map((g) => `<button type="button" class="chip ${sel.includes(g.id) ? 'active' : ''}" data-g="${g.id}">${esc(g.title)}</button>`).join('') || '<span class="xs muted">Chưa có nhóm nào</span>'}</div></div>
+        <div class="field"><span class="lbl">Bot đăng quảng cáo</span>
+          <div class="segmented"><button type="button" data-mode="default" class="${mode === 'default' ? 'active' : ''}">🤖 Bot mặc định</button><button type="button" data-mode="custom" class="${mode === 'custom' ? 'active' : ''}">➕ Bot Telegram khác</button></div>
+          ${mode === 'custom' ? `<div class="stack" style="margin-top:10px">
+            <input class="input mono" name="bot_token" placeholder="${c && c.has_token ? 'Đang dùng @' + esc(c.bot_username || '') + ' · nhập token mới để đổi' : 'Token bot quảng cáo (từ @BotFather)'}" autocomplete="off">
+            <div class="hint">Thêm bot này vào nhóm và cấp quyền <b>quản trị</b> (gửi tin, xoá tin, ghim tin). Bot quảng cáo chỉ dùng để đăng, không cần cài webhook.</div></div>`
+            : '<div class="hint">Dùng bot đang quản lý từng nhóm.</div>'}
         </div>
+        ${type === 'schedule' ? schedHtml() : rotateHtml()}
         <div class="grid ${c ? 'grid-2' : ''}">${c ? `<button type="button" class="btn soft-danger" data-delcamp>${icon('trash', 'sm')}Xoá</button>` : ''}<button class="btn primary">${icon('check', 'sm')}Lưu</button></div>
       </form>`;
     sheet('<div id="campbox"></div>', (el, close) => {
       const box = $('#campbox', el);
-      const keep = () => { const f = $('#fcamp', el); if (f) Object.assign(v, formData(f)); };
+      const keep = () => { const f = $('#fcamp', el); if (f) { const x = formData(f); if (typeof x.sched_times === 'string') x.sched_times = x.sched_times.split(/[\s,;]+/).filter(Boolean); Object.assign(v, x); } };
+      const redraw = () => { keep(); box.innerHTML = draw(); };
       box.innerHTML = draw();
       el.addEventListener('click', async (e) => {
         const g = e.target.closest('[data-g]');
         if (g) { const id = Number(g.dataset.g); sel = sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id]; g.classList.toggle('active'); }
+        const dy = e.target.closest('[data-day]');
+        if (dy) { const k = dy.dataset.day; days = days.includes(k) ? days.replace(k, '') : [...days + k].sort().join(''); dy.classList.toggle('active'); }
         const m = e.target.closest('[data-mode]');
-        if (m) { keep(); mode = m.dataset.mode; box.innerHTML = draw(); }
+        if (m) { mode = m.dataset.mode; redraw(); }
+        const ty = e.target.closest('[data-type]');
+        if (ty && ty.dataset.type !== type) { keep(); type = ty.dataset.type; typeDefaults(type); box.innerHTML = draw(); }
+        const sm = e.target.closest('[data-smode]');
+        if (sm) { smode = sm.dataset.smode; redraw(); }
         if (e.target.closest('[data-delcamp]')) {
           if (!(await confirmBox('Xoá chiến dịch?', 'Bài quảng cáo sẽ bị bỏ ghim và xoá toàn bộ bài trong chiến dịch.', { danger: true, ok: 'Xoá' }))) return;
           await api('ads/campaign/delete', { id: c.id }); close(); toast('Đã xoá chiến dịch'); onSaved();
@@ -2450,7 +2506,7 @@
         const f = formData(e.target);
         await withBtn(e.target.querySelector('button.primary'), async () => {
           try {
-            await api('ads/campaign/save', { id: c?.id, ...f, interval_sec: Number(f.interval_sec), group_ids: sel, bot_mode: mode });
+            await api('ads/campaign/save', { id: c?.id, ...f, type, sched_mode: smode, sched_days: days, interval_sec: Number(f.interval_sec || v.interval_sec), every_min: Number(f.every_min || v.every_min), auto_delete_min: Number(f.auto_delete_min || 0), group_ids: sel, bot_mode: mode });
             close(); toast('Đã lưu chiến dịch'); onSaved();
           } catch (err) { toast(err.message, 'err'); }
         });
@@ -2475,10 +2531,11 @@
     });
   }
 
-  function adSheet(a, campaignId, onSaved) {
+  function adSheet(a, campaignId, onSaved, ctype = 'rotate') {
+    const sched = ctype === 'schedule';
     const st = {
       title: a?.title || '', caption: a?.caption || '', enabled: a ? a.enabled : 1, image: null,
-      imgUrl: a?.has_image ? adImg(a) : null,
+      imgUrl: a?.has_image ? adImg(a) : null, removeImg: false,
       buttons: (a?.buttons || []).map((b, i, arr) => ({ ...b, same: i > 0 && b.row === arr[i - 1].row })),
     };
     const rowsOf = () => { let r = -1; return st.buttons.map((b, i) => ({ text: b.text, url: b.url, style: b.style || '', emoji: b.emoji || '', row: (r = i > 0 && b.same ? r : r + 1) })); };
@@ -2496,14 +2553,15 @@
       <div class="sheet-head"><h2>${a ? 'Sửa bài quảng cáo' : 'Bài quảng cáo mới'}</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
       <div class="ad-editor">
         <form id="fad" class="stack">
-          <div class="field"><span class="lbl">Ảnh</span>
-            <label class="ad-pick"><input type="file" accept="image/*" id="adfile" hidden><span id="adpickimg">${st.imgUrl ? `<img src="${st.imgUrl}" alt="">` : `${icon('image')}<b>Chọn ảnh</b><small>JPG / PNG, nên ngang 16:9</small>`}</span></label></div>
+          <div class="field"><span class="lbl">Ảnh${sched ? ' <span class="xs muted">(không bắt buộc — bỏ trống để gửi tin chỉ có chữ)</span>' : ''}</span>
+            <label class="ad-pick"><input type="file" accept="image/*" id="adfile" hidden><span id="adpickimg">${st.imgUrl ? `<img src="${st.imgUrl}" alt="">` : `${icon('image')}<b>Chọn ảnh</b><small>JPG / PNG, nên ngang 16:9</small>`}</span></label>
+            ${sched ? `<button type="button" class="btn sm ghost" data-noimg style="margin-top:6px;${st.imgUrl ? '' : 'display:none'}">${icon('x', 'sm')}Bỏ ảnh, chỉ gửi chữ</button>` : ''}</div>
           <label class="field"><span class="lbl">Tên bài (chỉ hiện trên web)</span><input class="input" name="title" value="${esc(st.title)}" placeholder="VD: Hidemium 230k" maxlength="120"></label>
           <label class="field"><span class="lbl">Nội dung <span class="xs muted" id="capn"></span></span><textarea class="input" data-rich name="caption" style="min-height:120px" placeholder="Hidemium 30 ngày giá 230k, rẻ nhất thị trường - Mua liên hệ @domino_real">${esc(st.caption)}</textarea>
             <div class="hint">Bôi đen chữ rồi bấm nút hoặc <b>Ctrl+B</b> đậm · <b>Ctrl+I</b> nghiêng · <b>Ctrl+U</b> gạch chân · <b>Ctrl+K</b> link. @username tự thành link trên Telegram.</div></label>
           <div class="field"><span class="lbl">Nút bấm</span><div id="adbtns" class="stack" style="gap:8px">${btnsHtml()}</div>
             <button type="button" class="btn soft block sm" data-addbtn style="margin-top:8px">${icon('plus', 'sm')}Thêm nút</button></div>
-          <div class="card" style="box-shadow:none">${sw('enabled', st.enabled, 'Bật bài này', 'Tắt thì bỏ qua khi xoay vòng')}</div>
+          <div class="card" style="box-shadow:none">${sw('enabled', st.enabled, 'Bật bài này', sched ? 'Tắt thì bỏ qua khi gửi theo lịch' : 'Tắt thì bỏ qua khi xoay vòng')}</div>
           <div class="grid ${a ? 'grid-2' : ''}">${a ? `<button type="button" class="btn soft-danger" data-delad>${icon('trash', 'sm')}Xoá</button>` : ''}<button class="btn primary">${icon('check', 'sm')}Lưu bài</button></div>
         </form>
         <div class="ad-preview"><div class="pv-label">👁 Xem trước trên Telegram</div><div id="adpv"></div></div>
@@ -2515,15 +2573,16 @@
       const pv = () => {
         st.caption = f.caption.value;
         const len = f.caption._rich ? f.caption._rich.textLength() : st.caption.length;
-        $('#capn', el).textContent = `${len}/1024`;
-        $('#capn', el).style.color = len > 1024 ? 'var(--danger)' : '';
-        $('#adpv', el).innerHTML = tgPost(st.image || st.imgUrl, st.caption, rowsOf());
+        const max = st.image || st.imgUrl ? 1024 : sched ? 4096 : 1024;
+        $('#capn', el).textContent = `${len}/${max}`;
+        $('#capn', el).style.color = len > max ? 'var(--danger)' : '';
+        $('#adpv', el).innerHTML = tgPost(st.image || st.imgUrl, st.caption, rowsOf(), sched);
       };
       pv();
       $('#adfile', el).addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        try { st.image = await resizeImage(file); $('#adpickimg', el).innerHTML = `<img src="${st.image}" alt="">`; pv(); }
+        try { st.image = await resizeImage(file); st.removeImg = false; $('#adpickimg', el).innerHTML = `<img src="${st.image}" alt="">`; const nb = $('[data-noimg]', el); if (nb) nb.style.display = ''; pv(); }
         catch (err) { toast(err.message, 'err'); }
       });
       el.addEventListener('input', (e) => {
@@ -2535,6 +2594,12 @@
       el.addEventListener('click', async (e) => {
         const bs = e.target.closest('[data-bstyle]');
         if (bs) { st.buttons[bs.dataset.bstyle].style = bs.dataset.v; $('#adbtns', el).innerHTML = btnsHtml(); pv(); return; }
+        if (e.target.closest('[data-noimg]')) {
+          e.preventDefault();
+          st.image = null; st.imgUrl = null; st.removeImg = true; $('#adfile', el).value = '';
+          $('#adpickimg', el).innerHTML = `${icon('image')}<b>Chọn ảnh</b><small>JPG / PNG, nên ngang 16:9</small>`;
+          e.target.closest('[data-noimg]').style.display = 'none'; pv(); return;
+        }
         if (e.target.closest('[data-addbtn]')) { st.buttons.push({ text: '', url: '', style: '', emoji: '', same: false }); $('#adbtns', el).innerHTML = btnsHtml(); pv(); $$('[data-k=text]', el).pop()?.focus(); }
         const rm = e.target.closest('[data-rmbtn]');
         if (rm) { st.buttons.splice(Number(rm.dataset.rmbtn), 1); if (st.buttons[0]) st.buttons[0].same = false; $('#adbtns', el).innerHTML = btnsHtml(); pv(); }
@@ -2545,10 +2610,11 @@
       });
       f.addEventListener('submit', async (e) => {
         e.preventDefault();
-        if (!st.image && !st.imgUrl) return toast('Chọn ảnh cho bài quảng cáo', 'err');
+        if (!sched && !st.image && !st.imgUrl) return toast('Chọn ảnh cho bài quảng cáo', 'err');
+        if (sched && !st.image && !st.imgUrl && !stripTags(f.caption.value).trim()) return toast('Bài không có ảnh thì cần nội dung', 'err');
         await withBtn(f.querySelector('button.primary'), async () => {
           try {
-            await api('ads/ad/save', { id: a?.id, campaign_id: campaignId, title: f.title.value, caption: f.caption.value, enabled: f.enabled.checked, buttons: rowsOf(), image: st.image || '' });
+            await api('ads/ad/save', { id: a?.id, campaign_id: campaignId, title: f.title.value, caption: f.caption.value, enabled: f.enabled.checked, buttons: rowsOf(), image: st.image || '', remove_image: st.removeImg });
             close(); toast('Đã lưu bài quảng cáo'); onSaved();
           } catch (err) { toast(err.message, 'err'); }
         });
