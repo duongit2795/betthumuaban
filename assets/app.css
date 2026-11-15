@@ -598,3 +598,9 @@ tg-spoiler, .tg-spoiler { background: color-mix(in srgb, var(--text) 18%, transp
 .kb-keys { background: rgba(255, 255, 255, .55); border-radius: 14px; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
 .kb-row { display: flex; gap: 6px; }
 .kb-row span { flex: 1; min-width: 0; text-align: center; background: rgba(255, 255, 255, .9); color: #111; border-radius: 10px; padding: 10px 6px; font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Bảng chọn cảm xúc (lệnh tự tạo) */
+.emo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 4px; margin-top: 8px; max-height: 190px; overflow-y: auto; padding: 4px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); }
+.emo { height: 40px; border: 0; border-radius: 10px; background: transparent; font-size: 22px; cursor: pointer; line-height: 1; }
+.emo:hover { background: var(--surface-3); }
+.emo.active { background: var(--primary-soft); box-shadow: inset 0 0 0 2px var(--primary); }
