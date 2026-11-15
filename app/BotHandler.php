@@ -165,6 +165,9 @@ class BotHandler
         // Yêu cầu đặt Username Telegram (Lệnh mặc định → Tính năng mặc định)
         if (empty($msg['sender_chat']) && UsernameGuard::check($this->api, (int)$this->bot['id'], $group, $from, $msg, $isAdmin)) return;
 
+        // Học tập bắt buộc: chưa hoàn thành bài học → xoá tin + nhắc vào bot học
+        if (empty($msg['sender_chat']) && Learn::check($this->api, $this->bot, $group, $from, $msg, $isAdmin)) return;
+
         // Chống flood
         $t = now();
         if ($s['anti_flood'] && !$isAdmin && empty($from['is_bot']) && $s['flood_limit'] > 0) {
@@ -241,6 +244,7 @@ class BotHandler
         // Thành viên mới chưa có username → xử lý theo cài đặt "Yêu cầu đặt Username"
         foreach ($msg['new_chat_members'] as $u) {
             if ($u['id'] != $this->botTgId) UsernameGuard::check($this->api, (int)$this->bot['id'], $group, $u, null, false, true);
+            if ($u['id'] != $this->botTgId) Learn::onJoin($group, $u);
         }
     }
 
@@ -510,6 +514,9 @@ class BotHandler
         elseif ($key === 'login' && preg_match('~^[A-Za-z0-9]{6}$~', $arg)) $loginCode = $arg;
         elseif ($key === null && preg_match('~^[A-Za-z0-9]{6}$~', $text) && Commands::names('login')) $loginCode = $text;
         if ($loginCode !== null && TgLogin::onCode($this->api, $msg, $loginCode)) return;
+
+        // Học tập: nút "Học tập", /start learn, lệnh học tập, hoặc câu trả lời khi đang học
+        if (Learn::onPrivate($this->api, $msg, $key, $payload)) return;
         if ($key === 'login') {
             $this->reply($msg, '🔐 Để đăng nhập web: mở trang web → <b>Đăng nhập bằng Telegram</b> → gửi mã 6 ký tự cho tôi, ví dụ <code>' . $c('login') . ' K7QX4P</code>');
             return;
@@ -561,7 +568,8 @@ class BotHandler
             . (Commands::names('link') ? '🔗 Liên kết tài khoản web: ' . $c('link') . " MÃ\n" : '')
             . (Commands::names('pme') ? '⭐ Xem điểm: ' . $c('pme') . "\n" : '')
             . (Commands::names('balance') ? '💳 Số dư ví: ' . $c('balance') . "\n" : '')
-            . "\nID của bạn: <code>{$from['id']}</code>");
+            . (Learn::config()['enabled'] ? '📚 Học tập: bấm nút <b>' . tg_esc(Learn::config()['button']) . "</b> bên dưới\n" : '')
+            . "\nID của bạn: <code>{$from['id']}</code>", ($kb = Learn::replyKeyboard()) ? ['reply_markup' => $kb] : []);
     }
 
     // ---------- Tiện ích ----------
