@@ -371,7 +371,7 @@ class Ads
             'bot_key' => $botKey, 'ad_id' => $ad['id'], 'active' => 1, 'last_rotate_at' => now(), 'created_at' => now(),
         ]);
         DB::run('UPDATE tg_ads SET shows = shows + 1 WHERE id = ?', [$ad['id']]);
-        Repo::log((int)$group['id'], 'Quảng cáo', 'ad_post', null, $c['name'] . ($sched ? ' · gửi theo lịch bài "' : ($c['pin'] ? ' · đăng & ghim bài "' : ' · đăng bài "')) . ($ad['title'] ?: '#' . $ad['id']) . '"', ['source' => 'bot']);
+        if (Settings::get('ads_log') === '1') Repo::log((int)$group['id'], 'Quảng cáo', 'ad_post', null, $c['name'] . ($sched ? ' · gửi theo lịch bài "' : ($c['pin'] ? ' · đăng & ghim bài "' : ' · đăng bài "')) . ($ad['title'] ?: '#' . $ad['id']) . '"', ['source' => 'bot']);
         return DB::get('SELECT * FROM tg_ad_posts WHERE campaign_id = ? AND group_id = ? AND active = 1', [$c['id'], $group['id']]);
     }
 

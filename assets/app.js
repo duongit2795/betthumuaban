@@ -2478,11 +2478,19 @@
             <span class="xs">⚠️ Dùng đúng đường dẫn PHP ở trên (cùng phiên bản với web). Lệnh <code>php</code> trơn có thể gọi bản PHP khác thiếu extension.</span><br>
             <span class="xs">Hoặc Type <b>Access URL</b>: <code style="overflow-wrap:anywhere">${esc(d.cron_url)}</code></span></div></div>`}
         ${d.campaigns.length ? d.campaigns.map(card).join('') : `<div class="card">${empty('megaphone', 'Chưa có chiến dịch quảng cáo.<br>Bấm <b>+ Chiến dịch</b> để bắt đầu.')}</div>`}
+        <div class="card" style="margin-bottom:12px">${sw('ads_log', d.ads_log, '📝 Ghi nhật ký mỗi lần đăng quảng cáo', d.ads_log ? 'Đang bật: mỗi lần gửi / đăng bài đều hiện ở Nhật ký & Tổng quan' : 'Đang tắt: Nhật ký không bị quảng cáo làm đầy')}</div>
         <div class="card card-pad xs text-2" style="margin-top:4px">💡 <b>📢 Xoay vòng ghim</b>: bot đăng 1 bài (ảnh + nội dung + nút), <b>ghim</b> lên nhóm rồi <b>tự sửa tin đã ghim</b> sang bài kế tiếp theo chu kỳ; mỗi ngày đúng giờ đăng & ghim bài mới.<br>
           <b>⏰ Gửi theo lịch</b>: bot <b>gửi tin mới</b> mỗi N phút hoặc vào các giờ cố định (chọn ngày trong tuần, khung giờ), tuỳ chọn <b>không tiếng</b>, <b>xoá bài cũ</b> khi gửi bài mới, ghim, tự xoá sau N phút. Bài có thể chỉ có chữ.<br>Bot đăng cần quyền <b>gửi tin / ảnh</b> (và <b>ghim tin</b> nếu bật ghim) trong nhóm.</div>`,
       mount: (root) => {
         const reload = () => render();
         $('[data-newcamp]')?.addEventListener('click', () => campaignSheet(null, d, reload));
+        $('[name=ads_log]', root)?.addEventListener('change', async (e) => {
+          try {
+            const r = await api('ads/log', { on: e.target.checked });
+            toast(r.on ? 'Đã bật ghi nhật ký quảng cáo' : `Đã tắt nhật ký quảng cáo${r.removed ? ' · xoá ' + r.removed + ' dòng cũ' : ''}`);
+            reload();
+          } catch (err) { toast(err.message, 'err'); e.target.checked = !e.target.checked; }
+        });
         root.addEventListener('click', async (e) => {
           const t = (sel) => e.target.closest(sel);
           let b;
