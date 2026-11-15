@@ -185,11 +185,10 @@ class Learn
     }
 
     // ================= Trong bot (chat riêng) =================
+    /** Bàn phím nút của bot (cấu hình ở trang Bàn phím bot) */
     public static function replyKeyboard(): ?array
     {
-        $c = self::config();
-        if (!$c['enabled']) return null;
-        return ['keyboard' => [[['text' => $c['button']]]], 'resize_keyboard' => true, 'is_persistent' => true];
+        return BotKeyboard::markup();
     }
 
     /**

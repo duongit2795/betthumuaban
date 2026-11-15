@@ -110,6 +110,8 @@ class Api
             'payments/ignore' => 'paymentsIgnore',
             'users/balance' => 'userBalance',
             'users/tx' => 'userTx',
+            'keyboard' => 'keyboard',
+            'keyboard/save' => 'keyboardSave',
             'learn' => 'learn',
             'learn/save' => 'learnSave',
             'learn/question/save' => 'learnQuestionSave',
@@ -1989,5 +1991,26 @@ class Api
         $from = ['id' => $tg, 'first_name' => $p['first_name'] ?? $m['first_name'] ?? $tg, 'last_name' => $p['last_name'] ?? $m['last_name'] ?? null, 'username' => $p['username'] ?? $m['username'] ?? null];
         Learn::finish(null, null, $from, '', $u['username']);
         return [];
+    }
+
+    // ================= Bàn phím bot (chat riêng) =================
+    private function keyboard(): array
+    {
+        Auth::requireAdmin();
+        return [
+            'config' => BotKeyboard::config(),
+            'actions' => array_map(fn($a) => ['name' => $a[0], 'desc' => $a[1]], BotKeyboard::ACTIONS),
+            'learn_enabled' => Learn::config()['enabled'],
+            'bots' => array_map(fn($b) => $b['username'], DB::all('SELECT username FROM tg_bots WHERE enabled = 1 AND username IS NOT NULL ORDER BY id')),
+            'max' => BotKeyboard::MAX,
+        ];
+    }
+
+    private function keyboardSave(): array
+    {
+        $u = Auth::requireAdmin();
+        $c = BotKeyboard::save((array)$this->in('config', []));
+        Repo::log(null, $u['username'], 'system', null, 'Bàn phím bot: ' . count($c['buttons']) . ' nút' . ($c['enabled'] ? '' : ' (tắt)'));
+        return ['config' => $c];
     }
 }
