@@ -6,7 +6,7 @@ class DB
 {
     private static ?PDO $pdo = null;
     private static string $driver = 'sqlite';
-    const SCHEMA_VERSION = 11;
+    const SCHEMA_VERSION = 12;
 
     public static function connect(?array $c = null): PDO
     {
@@ -373,6 +373,12 @@ class DB
         // v6: nhật ký lưu chi tiết + bằng chứng vi phạm
         self::addColumn('app_logs', 'meta', 'TEXT');
         self::addColumn('app_logs', 'evidence', 'TEXT');
+        // v12: xem ảnh / video / tệp trong tab Chat
+        self::addColumn('tg_messages', 'file_id', 'TEXT');
+        self::addColumn('tg_messages', 'thumb_id', 'TEXT');
+        self::addColumn('tg_messages', 'file_name', $my ? 'VARCHAR(191)' : 'TEXT');
+        self::addColumn('tg_messages', 'file_size', 'INT');
+        self::addColumn('tg_messages', 'mime', 'VARCHAR(64)');
         // v9: quảng cáo gửi theo lịch
         self::addColumn('tg_ad_campaigns', 'type', "VARCHAR(16) NOT NULL DEFAULT 'rotate'");
         self::addColumn('tg_ad_campaigns', 'sched_mode', "VARCHAR(16) NOT NULL DEFAULT 'interval'");

@@ -16,6 +16,7 @@ Web PHP (chạy tốt trên **aaPanel**) để quản lý nhóm Telegram bằng 
 - Tổng quan: thống kê tin nhắn 14 ngày, thành viên, số lượt xử lý, top tương tác, hoạt động gần đây
 - **Bot**: thêm nhiều bot bằng token, bật/tắt, kiểm tra webhook, nút "Thêm vào nhóm" (tự xin quyền admin)
 - **💬 Chat nhóm**: xem tin nhắn của nhóm ngay trên web (30 tin gần nhất, nút *Xem thêm* tải tin cũ hơn, tự cập nhật tin mới mỗi 4 giây, lưu 30 ngày)
+- **🖼 Xem ảnh / video / tệp trong tab Chat**: ảnh hiện thu nhỏ ngay trong khung chat, **bấm để xem to**, tải về; video / GIF / video tròn phát được, ghi âm & nhạc có trình phát, tệp có nút tải. Xem được cả ảnh của **tin đã bị xoá** (làm bằng chứng). File tải qua bot (không lộ token), lưu tạm 7 ngày trong `data/media`; tệp trên 20 MB Telegram không cho bot tải. Chỉ áp dụng cho tin gửi sau khi cập nhật 1.21.
   - Cạnh mỗi tin có nút xử lý nhanh: **Xoá tin · Cảnh cáo · Cấm chat · Cấm**, nút ⋯ để **Trả lời, Ghim, Đuổi, Cộng/trừ điểm, Xem hồ sơ**
   - Hiện tin bị bot xoá (kèm lý do vi phạm), tin ghim, tin sửa, người ra/vào nhóm; gửi tin/trả lời vào nhóm từ ô soạn tin
 - **Nhóm**: nhóm tự xuất hiện khi thêm bot; đồng bộ, gửi tin (HTML, ghim, im lặng), cho bot rời nhóm, reset điểm

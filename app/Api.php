@@ -81,6 +81,7 @@ class Api
             'chat/send' => 'chatSend',
             'chat/delete' => 'chatDelete',
             'chat/pin' => 'chatPin',
+            'chat/media' => 'chatMedia',
             'members' => 'members',
             'member' => 'member',
             'member/action' => 'memberAction',
@@ -142,7 +143,7 @@ class Api
         $writeRoutes = ['install', 'auth/login', 'auth/register', 'auth/logout', 'me/update', 'me/link-code', 'me/unlink'];
         if (!isset($map[$route])) fail('Không tìm thấy API', 404);
         $fn = $map[$route];
-        $isWrite = in_array($route, $writeRoutes, true) || str_contains($route, '/') && !in_array($route, ['system/check-update', 'chat/poll', 'ads/image', 'amnesty/search', 'users/tx'], true);
+        $isWrite = in_array($route, $writeRoutes, true) || str_contains($route, '/') && !in_array($route, ['system/check-update', 'chat/poll', 'ads/image', 'amnesty/search', 'users/tx', 'chat/media'], true);
         if ($isWrite && $this->method !== 'POST') fail('Phương thức không hợp lệ', 405);
         json_out(['ok' => true, 'data' => $this->$fn()]);
     }
@@ -717,6 +718,11 @@ class Api
             'reply_name' => $r['reply_name'],
             'reply_text' => $r['reply_text'],
             'deleted' => (int)$r['deleted'],
+            'has_file' => !empty($r['file_id']),
+            'has_thumb' => !empty($r['thumb_id']) || in_array($r['kind'], ['photo'], true),
+            'file_name' => $r['file_name'] ?? null,
+            'file_size' => isset($r['file_size']) ? (int)$r['file_size'] : null,
+            'mime' => $r['mime'] ?? null,
             'note' => $r['note'],
             'edited' => (int)$r['edited'],
             'pinned' => (int)$r['pinned'],
@@ -729,6 +735,41 @@ class Api
                 'points' => (int)$r['points'],
             ] : null,
         ];
+    }
+
+    /** Ảnh / video / tệp của 1 tin trong tab Chat (tải qua bot, không lộ token). Hỗ trợ Range để phát video. */
+    private function chatMedia(): void
+    {
+        $g = $this->loadGroup();
+        $this->gate('chat', $g);
+        $row = DB::get('SELECT * FROM tg_messages WHERE group_id = ? AND message_id = ?', [$g['id'], (string)$this->in('message_id', '')]) ?: fail('Không tìm thấy tin nhắn', 404);
+        [$path, $mime] = ChatLog::download($g, $row, (bool)$this->in('thumb'));
+        session_write_close();
+        $size = filesize($path);
+        $start = 0;
+        $end = $size - 1;
+        header('Content-Type: ' . $mime);
+        header('Cache-Control: private, max-age=604800');
+        header('Accept-Ranges: bytes');
+        header('X-Content-Type-Options: nosniff');
+        if ($this->in('dl')) {
+            $name = $row['file_name'] ?: ('tep_' . $row['message_id']);
+            header('Content-Disposition: attachment; filename="' . str_replace(['"', "\r", "\n"], '', $name) . '"; filename*=UTF-8\'\'' . rawurlencode($name));
+        }
+        if (isset($_SERVER['HTTP_RANGE']) && preg_match('/bytes=(\d*)-(\d*)/', $_SERVER['HTTP_RANGE'], $rm)) {
+            if ($rm[1] !== '') { $start = (int)$rm[1]; if ($rm[2] !== '') $end = min($end, (int)$rm[2]); }
+            elseif ($rm[2] !== '') $start = max(0, $size - (int)$rm[2]);
+            if ($start > $end || $start >= $size) { http_response_code(416); header("Content-Range: bytes */$size"); exit; }
+            http_response_code(206);
+            header("Content-Range: bytes $start-$end/$size");
+        }
+        header('Content-Length: ' . ($end - $start + 1));
+        $fh = fopen($path, 'rb');
+        fseek($fh, $start);
+        $left = $end - $start + 1;
+        while ($left > 0 && !feof($fh)) { $buf = fread($fh, min(65536, $left)); echo $buf; $left -= strlen($buf); flush(); }
+        fclose($fh);
+        exit;
     }
 
     /** 30 tin gần nhất, hoặc 30 tin cũ hơn before_id */
