@@ -272,6 +272,23 @@
   const go = (path) => { if (location.hash !== '#' + path) location.hash = path; else render(); };
   const current = () => location.hash.slice(1) || '/';
   let renderSeq = 0;
+  // Tự quản lý vị trí cuộn: Safari iPhone hay giữ / khôi phục vị trí cuộn của trang trước
+  // khiến trang mới (ngắn hơn) bị đẩy lên, nội dung nằm khuất sau thanh tiêu đề
+  try { history.scrollRestoration = 'manual'; } catch {}
+  const toTop = () => {
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  };
+  let ownScroll = -1; // trang tự cuộn (VD Chat cuộn xuống tin mới nhất) → không kéo về đầu nữa
+  const resetScroll = () => {
+    const seq = renderSeq;
+    const again = () => { if (seq === renderSeq && ownScroll !== seq) toTop(); };
+    again();
+    requestAnimationFrame(() => { again(); requestAnimationFrame(again); });
+    setTimeout(again, 80);
+    setTimeout(again, 300); // sau quán tính cuộn (momentum) của iOS
+  };
 
   async function render() {
     $$('.overlay').forEach((o) => o.remove());
@@ -300,6 +317,7 @@
     const main = old.cloneNode(false);
     old.replaceWith(main);
     stopTimers();
+    toTop();
     main.innerHTML = loading();
     try {
       const out = await r.view(params);
@@ -310,7 +328,7 @@
       enhanceRich(main);
       bindCharts(main);
       out.mount?.(main);
-      window.scrollTo(0, 0);
+      resetScroll();
     } catch (e) {
       if (seq !== renderSeq) return;
       main.innerHTML = `<div class="alert err" style="margin-top:12px">${icon('alert')}<div>${esc(e.message)}</div></div>`;
@@ -1027,7 +1045,7 @@
       const S2 = { msgs: [], byId: new Map(), hasMore: false, lastId: 0, since: 0, warnLimit: 3, replyTo: null, loadingMore: false, unseen: 0 };
       const chatEl = $('#chat', root);
       const nearBottom = () => window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 160;
-      const toBottom = (smooth) => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+      const toBottom = (smooth) => (ownScroll = renderSeq, window.scrollTo({ top: document.documentElement.scrollHeight, behavior: smooth ? 'smooth' : 'auto' }));
 
       const tools = (m) => {
         if (m.kind === 'service') return '';
