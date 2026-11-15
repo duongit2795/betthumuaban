@@ -130,6 +130,10 @@ class Api
             'payments/ignore' => 'paymentsIgnore',
             'users/balance' => 'userBalance',
             'users/tx' => 'userTx',
+            'gates' => 'gates',
+            'gates/save' => 'gateSave',
+            'gates/delete' => 'gateDelete',
+            'gates/check' => 'gateCheck',
             'keyboard' => 'keyboard',
             'keyboard/save' => 'keyboardSave',
             'learn' => 'learn',
@@ -2072,5 +2076,56 @@ class Api
         $c = BotKeyboard::save((array)$this->in('config', []));
         Repo::log(null, $u['username'], 'system', null, 'Bàn phím bot: ' . count($c['buttons']) . ' nút' . ($c['enabled'] ? '' : ' (tắt)'));
         return ['config' => $c];
+    }
+
+    // ================= Điều kiện nhắn tin giữa các nhóm =================
+    private function gates(): array
+    {
+        Auth::requireAdmin();
+        $groups = DB::all('SELECT id, title, username FROM tg_groups WHERE active = 1 ORDER BY title');
+        $rules = array_map(function ($r) {
+            $r['blocked'] = (int)DB::val('SELECT COUNT(*) FROM tg_rule_hits WHERE rule_id = ? AND last_at > ?', [ChatGate::HIT_RULE_ID - (int)$r['id'], now() - 86400]);
+            return $r;
+        }, ChatGate::all());
+        return [
+            'rules' => $rules,
+            'groups' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title'], 'public' => (bool)$g['username']], $groups),
+            'metrics' => array_map(fn($m) => ['name' => $m[0], 'unit' => $m[1]], ChatGate::METRICS),
+            'default_text' => ChatGate::DEFAULT_TEXT,
+            'default_text_member' => ChatGate::DEFAULT_TEXT_MEMBER,
+        ];
+    }
+
+    private function gateSave(): array
+    {
+        $u = Auth::requireAdmin();
+        $r = ChatGate::save((array)$this->in('rule', []));
+        Repo::log(null, $u['username'], 'system', null, 'Lưu điều kiện nhắn tin #' . $r['id']);
+        return ['rule' => $r];
+    }
+
+    private function gateDelete(): array
+    {
+        Auth::requireAdmin();
+        ChatGate::delete($this->int('id'));
+        return [];
+    }
+
+    /** Kiểm tra thử 1 người (ID / @username) có qua các điều kiện không */
+    private function gateCheck(): array
+    {
+        Auth::requireAdmin();
+        $who = ltrim(trim((string)$this->in('who', '')), '@');
+        $tg = preg_match('/^\d{3,15}$/', $who) ? $who : DB::val('SELECT tg_user_id FROM tg_members WHERE LOWER(username) = LOWER(?) ORDER BY last_active DESC', [$who]);
+        if (!$tg) fail('Không tìm thấy thành viên này', 404);
+        $out = [];
+        foreach (ChatGate::all() as $r) {
+            $g = Repo::group((int)$r['group_id']);
+            $s = Repo::group((int)$r['source_id']);
+            $out[] = ['id' => (int)$r['id'], 'group' => $g['title'] ?? '?', 'source' => $s['title'] ?? '?', 'metric' => $r['metric'], 'min' => (int)$r['min'],
+                'have' => ChatGate::value($r, $tg), 'pass' => ChatGate::passes($r, $tg), 'enabled' => !empty($r['enabled'])];
+        }
+        $m = DB::get('SELECT * FROM tg_members WHERE tg_user_id = ? ORDER BY last_active DESC', [$tg]);
+        return ['tg_user_id' => (string)$tg, 'name' => $m ? Repo::name($m) : (string)$tg, 'results' => $out];
     }
 }

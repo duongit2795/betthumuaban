@@ -178,6 +178,9 @@ class BotHandler
         // Học tập bắt buộc: chưa hoàn thành bài học → xoá tin + nhắc vào bot học
         if (empty($msg['sender_chat']) && Learn::check($this->api, $this->bot, $group, $from, $msg, $isAdmin)) return;
 
+        // Điều kiện nhắn tin (VD cần ≥ 50 điểm ở nhóm A mới chat được ở nhóm B)
+        if (empty($msg['sender_chat']) && ChatGate::check($this->api, (int)$this->bot['id'], $group, $from, $msg, $isAdmin)) return;
+
         // Chống flood
         $t = now();
         if ($s['anti_flood'] && !$isAdmin && empty($from['is_bot']) && $s['flood_limit'] > 0) {
