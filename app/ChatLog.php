@@ -34,6 +34,26 @@ class ChatLog
         return ['text', $text, ''];
     }
 
+    /** Mã file Telegram của tin có ảnh / video / tệp → [file_id, thumb_id, file_name, file_size, mime] */
+    public static function fileInfo(array $m): array
+    {
+        if (!empty($m['photo'])) {
+            $sizes = $m['photo'];
+            $full = end($sizes);
+            $thumb = $sizes[0];
+            foreach ($sizes as $s) if (($s['width'] ?? 0) >= 320) { $thumb = $s; break; } // ảnh nhỏ vừa đủ nét
+            return [$full['file_id'], $thumb['file_id'], null, $full['file_size'] ?? null, 'image/jpeg'];
+        }
+        foreach (['video', 'animation', 'video_note', 'sticker', 'voice', 'audio', 'document'] as $k) {
+            if (empty($m[$k]['file_id'])) continue;
+            $f = $m[$k];
+            $thumb = $f['thumbnail']['file_id'] ?? ($f['thumb']['file_id'] ?? null);
+            $mime = $f['mime_type'] ?? ['video_note' => 'video/mp4', 'voice' => 'audio/ogg', 'sticker' => !empty($f['is_video']) ? 'video/webm' : (!empty($f['is_animated']) ? 'application/x-tgsticker' : 'image/webp')][$k] ?? null;
+            return [$f['file_id'], $thumb, isset($f['file_name']) ? mb_substr($f['file_name'], 0, 190) : null, $f['file_size'] ?? null, $mime ? mb_substr($mime, 0, 64) : null];
+        }
+        return [null, null, null, null, null];
+    }
+
     private static function name(?array $u, ?array $senderChat = null): string
     {
         if ($senderChat) return (string)($senderChat['title'] ?? 'Kênh');
@@ -57,7 +77,9 @@ class ChatLog
             $replyText = null;
             if ($reply && empty($reply['forum_topic_created'])) $replyText = mb_substr(self::describe($reply)[1], 0, 140);
             else $reply = null;
+            [$fileId, $thumbId, $fileName, $fileSize, $mime] = self::fileInfo($m);
             DB::insert('tg_messages', [
+                'file_id' => $fileId, 'thumb_id' => $thumbId, 'file_name' => $fileName, 'file_size' => $fileSize, 'mime' => $mime,
                 'group_id' => $gid,
                 'message_id' => $m['message_id'],
                 'tg_user_id' => $from['id'] ?? ($m['sender_chat']['id'] ?? 0),
@@ -109,5 +131,51 @@ class ChatLog
     public static function cleanup(): void
     {
         DB::run('DELETE FROM tg_messages WHERE created_at < ?', [now() - self::KEEP_DAYS * 86400]);
+        // Ảnh / video đã tải về để xem: giữ 7 ngày
+        foreach (glob(self::MEDIA_DIR . '/m_*') ?: [] as $f) if (filemtime($f) < now() - 7 * 86400) @unlink($f);
+    }
+
+    const MEDIA_DIR = DATA_DIR . '/media';
+    const MAX_DOWNLOAD = 20 * 1024 * 1024; // giới hạn tải file của Bot API
+
+    /**
+     * Tải file của 1 tin về (lưu tạm trong data/media) qua bot của nhóm.
+     * @return array{0:string,1:string} [đường dẫn, mime]
+     */
+    public static function download(array $group, array $row, bool $thumb): array
+    {
+        $fid = $thumb ? ($row['thumb_id'] ?: $row['file_id']) : $row['file_id'];
+        if (!$fid) throw new HttpError('Tin này không có ảnh / tệp đính kèm', 404);
+        $useThumb = $thumb && $row['thumb_id'];
+        $mime = $useThumb ? 'image/jpeg' : ($row['mime'] ?: 'application/octet-stream');
+        if (!$useThumb && $row['kind'] === 'sticker' && $mime === 'application/x-tgsticker') throw new HttpError('Sticker động (.tgs) không xem được trên web', 415);
+        if (!is_dir(self::MEDIA_DIR) && !@mkdir(self::MEDIA_DIR, 0755, true)) throw new HttpError('Không tạo được thư mục data/media');
+        @file_put_contents(self::MEDIA_DIR . '/index.html', '');
+        $path = self::MEDIA_DIR . '/m_' . $group['id'] . '_' . $row['message_id'] . ($useThumb ? '_t' : '_f');
+        if (is_file($path) && filesize($path) > 0) return [$path, $mime];
+        if (!$useThumb && (int)$row['file_size'] > self::MAX_DOWNLOAD) throw new HttpError('Tệp lớn hơn 20 MB, Telegram không cho bot tải về. Hãy mở trong Telegram.', 413);
+        $api = Repo::apiForGroup($group);
+        if (!$api) throw new HttpError('Nhóm chưa có bot hoạt động');
+        try {
+            $f = $api->call('getFile', ['file_id' => $fid]);
+        } catch (TelegramException $e) {
+            throw new HttpError('Không lấy được tệp từ Telegram: ' . $e->getMessage(), 502);
+        }
+        if (empty($f['file_path'])) throw new HttpError('Telegram không trả về đường dẫn tệp', 502);
+        $tmp = $path . '.part';
+        $fh = fopen($tmp, 'w');
+        $ch = curl_init('https://api.telegram.org/file/bot' . $api->token . '/' . $f['file_path']);
+        curl_setopt_array($ch, [CURLOPT_FILE => $fh, CURLOPT_TIMEOUT => 60, CURLOPT_CONNECTTIMEOUT => 10, CURLOPT_FOLLOWLOCATION => true]);
+        $ok = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        fclose($fh);
+        if (!$ok || $code !== 200 || filesize($tmp) === 0) { @unlink($tmp); throw new HttpError('Tải tệp từ Telegram thất bại (HTTP ' . $code . ')', 502); }
+        rename($tmp, $path);
+        if ($useThumb || $mime === 'application/octet-stream') {
+            $det = file_mime($path);
+            if ($det && $det !== 'application/octet-stream') $mime = $det;
+        }
+        return [$path, $mime];
     }
 }

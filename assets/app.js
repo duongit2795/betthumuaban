@@ -1043,6 +1043,47 @@
       </form>
     </div>`;
 
+    // Ảnh / video / ghi âm / tệp của tin nhắn (tải qua bot)
+    const murl = (m, opt = '') => `api.php?r=chat/media&group_id=${g.id}&message_id=${encodeURIComponent(m.message_id)}${opt}`;
+    const fsize = (b) => (b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : b >= 1024 ? Math.round(b / 1024) + ' KB' : b ? b + ' B' : '');
+    const VISUAL = ['photo', 'animation', 'video', 'video_note', 'sticker'];
+    const mediaHtml = (m) => {
+      if (!m.has_file) return '';
+      const isImgDoc = m.kind === 'document' && /^image\/(jpeg|png|gif|webp)$/.test(m.mime || '');
+      if ((VISUAL.includes(m.kind) && m.has_thumb) || isImgDoc) {
+        const play = ['video', 'animation', 'video_note'].includes(m.kind) || (m.kind === 'sticker' && m.mime === 'video/webm');
+        return `<button type="button" class="cmedia ${m.kind === 'sticker' ? 'sticker' : ''} ${m.kind === 'video_note' ? 'round' : ''}" data-view="${m.id}" aria-label="Xem ${esc(m.media || 'ảnh')}">
+          <img src="${murl(m, isImgDoc ? '' : '&thumb=1')}" alt="" loading="lazy" onerror="this.parentNode.classList.add('err')">
+          ${play ? `<span class="cplay">▶</span>` : ''}${m.kind === 'animation' ? '<span class="ctag">GIF</span>' : ''}<span class="cerr">${esc(m.media || 'Ảnh')} · không tải được</span></button>`;
+      }
+      if (m.kind === 'voice' || m.kind === 'audio') {
+        return `<div class="caudio"><div class="xs muted">${esc(m.media || '')}${m.file_name ? ' · ' + esc(m.file_name) : ''}${m.file_size ? ' · ' + fsize(m.file_size) : ''}</div><audio controls preload="none" src="${murl(m)}"></audio></div>`;
+      }
+      if (m.kind === 'document' || ['video', 'animation'].includes(m.kind)) {
+        return `<a class="cfile" href="${murl(m, '&dl=1')}" target="_blank" rel="noopener">${icon('download', 'sm')}<div class="grow" style="min-width:0"><div class="ellipsis" style="font-weight:600">${esc(m.file_name || m.media || 'Tệp')}</div><div class="xs muted">${fsize(m.file_size) || 'Tải về'}${m.file_size > 20971520 ? ' · quá 20 MB, mở trong Telegram' : ''}</div></div></a>`;
+      }
+      return '';
+    };
+    const viewer = (m) => {
+      const isVideo = ['video', 'animation', 'video_note'].includes(m.kind) || (m.kind === 'sticker' && m.mime === 'video/webm');
+      const tooBig = m.file_size > 20971520;
+      const ov = document.createElement('div');
+      ov.className = 'lightbox';
+      ov.innerHTML = `<div class="lb-top"><div class="grow small ellipsis">${esc(m.name || '')} · ${hhmm(m.created_at)}${m.deleted ? ' · <span style="color:#ff8a8a">đã xoá</span>' : ''}</div>
+          ${tooBig ? '' : `<a class="btn sm" href="${murl(m, '&dl=1')}" target="_blank" rel="noopener">${icon('download', 'sm')}Tải về</a>`}<button type="button" class="btn icon sm" data-lbclose aria-label="Đóng">${icon('x')}</button></div>
+        <div class="lb-body">${tooBig ? `<img src="${murl(m, '&thumb=1')}" alt=""><div class="small" style="color:#fff;margin-top:10px">Tệp lớn hơn 20 MB, Telegram không cho bot tải về.</div>`
+          : isVideo ? `<video src="${murl(m)}" controls autoplay playsinline ${m.kind === 'animation' || m.kind === 'sticker' ? 'loop muted' : ''} poster="${m.has_thumb ? murl(m, '&thumb=1') : ''}"></video>`
+          : `<img src="${murl(m)}" alt="">`}</div>
+        ${m.text && m.text !== m.media ? `<div class="lb-cap">${esc(m.text)}</div>` : ''}`;
+      const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); if (!$('.overlay')) document.body.style.overflow = ''; };
+      const onKey = (e) => { if (e.key === 'Escape') close(); };
+      ov.addEventListener('click', (e) => { if (e.target === ov || e.target.classList.contains('lb-body') || e.target.closest('[data-lbclose]')) close(); });
+      document.addEventListener('keydown', onKey);
+      document.body.appendChild(ov);
+      document.body.style.overflow = 'hidden';
+      onLeave(close);
+    };
+
     const mount = (root) => {
       const S2 = { msgs: [], byId: new Map(), hasMore: false, lastId: 0, since: 0, warnLimit: 3, replyTo: null, loadingMore: false, unseen: 0 };
       const chatEl = $('#chat', root);
@@ -1077,7 +1118,7 @@
           mb?.warns ? `<span class="badge amber" style="font-size:10px;padding:0 6px">⚠ ${mb.warns}/${S2.warnLimit}</span>` : '',
         ].join('');
         const quote = m.reply_to ? `<div class="quote" data-jump="${m.reply_to}"><b>${esc(m.reply_name || '')}</b><span>${esc(m.reply_text || '…')}</span></div>` : '';
-        const media = m.media && m.kind !== 'text' ? `<div class="media">${esc(m.media)}</div>` : '';
+        const media = mediaHtml(m) || (m.media && m.kind !== 'text' ? `<div class="media">${esc(m.media)}</div>` : '');
         const showText = m.text && !(m.kind !== 'text' && m.text === m.media);
         return `<div class="msg ${first ? 'first' : ''} ${m.is_bot ? 'bot' : ''} ${m.deleted ? 'deleted' : ''}" data-mid="${m.id}" data-tgmid="${m.message_id}">
           <div class="av">${first ? (m.is_bot ? `<div class="avatar" style="background:linear-gradient(135deg,var(--primary),var(--primary-2))">${icon('bot', 'sm')}</div>` : avatar(m.name, m.tg_user_id)) : ''}</div>
@@ -1224,6 +1265,8 @@
         const more = e.target.closest('[data-more]');
         if (more) { loadMore(more); return; }
         if (e.target.closest('[data-unreply]')) { setReply(null); return; }
+        const v = e.target.closest('[data-view]');
+        if (v) { const m = S2.msgs.find((x) => x.id === Number(v.dataset.view)); if (m) viewer(m); return; }
         const j = e.target.closest('[data-jump]');
         if (j) {
           const el = $(`[data-tgmid="${j.dataset.jump}"]`, root);
