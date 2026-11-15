@@ -6,7 +6,7 @@ class DB
 {
     private static ?PDO $pdo = null;
     private static string $driver = 'sqlite';
-    const SCHEMA_VERSION = 8;
+    const SCHEMA_VERSION = 9;
 
     public static function connect(?array $c = null): PDO
     {
@@ -339,6 +339,16 @@ class DB
         // v6: nhật ký lưu chi tiết + bằng chứng vi phạm
         self::addColumn('app_logs', 'meta', 'TEXT');
         self::addColumn('app_logs', 'evidence', 'TEXT');
+        // v9: quảng cáo gửi theo lịch
+        self::addColumn('tg_ad_campaigns', 'type', "VARCHAR(16) NOT NULL DEFAULT 'rotate'");
+        self::addColumn('tg_ad_campaigns', 'sched_mode', "VARCHAR(16) NOT NULL DEFAULT 'interval'");
+        self::addColumn('tg_ad_campaigns', 'every_min', 'INT NOT NULL DEFAULT 60');
+        self::addColumn('tg_ad_campaigns', 'sched_times', 'TEXT');
+        self::addColumn('tg_ad_campaigns', 'sched_days', "VARCHAR(16) NOT NULL DEFAULT '1234567'");
+        self::addColumn('tg_ad_campaigns', 'win_from', "VARCHAR(5) NOT NULL DEFAULT ''");
+        self::addColumn('tg_ad_campaigns', 'win_to', "VARCHAR(5) NOT NULL DEFAULT ''");
+        self::addColumn('tg_ad_campaigns', 'silent', 'INT NOT NULL DEFAULT 1');
+        self::addColumn('tg_ad_campaigns', 'auto_delete_min', 'INT NOT NULL DEFAULT 0');
         // v8: ví VND
         self::addColumn('app_users', 'balance', ($my ? 'BIGINT' : 'INTEGER') . ' NOT NULL DEFAULT 0');
         // Các migration theo phiên bản schema đặt ở đây trong tương lai

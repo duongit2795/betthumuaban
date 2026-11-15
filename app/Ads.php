@@ -10,7 +10,10 @@ class Ads
 {
     const IMG_DIR = DATA_DIR . '/ads';
     const INTERVALS = [10, 15, 20, 30, 60, 120, 300, 600, 900, 1800, 3600];
-    const CAPTION_MAX = 1024;
+    const CAPTION_MAX = 1024;   // chú thích ảnh
+    const TEXT_MAX = 4096;      // tin chỉ có chữ (chiến dịch gửi theo lịch)
+    const EVERY = [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 360, 480, 720, 1440];
+    const DAY_LABELS = ['1' => 'T2', '2' => 'T3', '3' => 'T4', '4' => 'T5', '5' => 'T6', '6' => 'T7', '7' => 'CN'];
     /** Màu nút Telegram (trường style): rỗng = màu mặc định của ứng dụng */
     const STYLES = ['' => 'Mặc định', 'primary' => 'Xanh dương', 'success' => 'Xanh lá', 'danger' => 'Đỏ'];
 
@@ -33,6 +36,15 @@ class Ads
             'pin_silent' => (int)$c['pin_silent'],
             'delete_old' => (int)$c['delete_old'],
             'last_error' => $c['last_error'],
+            'type' => $c['type'] ?? 'rotate',
+            'sched_mode' => $c['sched_mode'] ?? 'interval',
+            'every_min' => (int)($c['every_min'] ?? 60),
+            'sched_times' => json_decode((string)($c['sched_times'] ?? ''), true) ?: [],
+            'sched_days' => (string)($c['sched_days'] ?? '1234567'),
+            'win_from' => (string)($c['win_from'] ?? ''),
+            'win_to' => (string)($c['win_to'] ?? ''),
+            'silent' => (int)($c['silent'] ?? 1),
+            'auto_delete_min' => (int)($c['auto_delete_min'] ?? 0),
         ];
     }
 
@@ -136,10 +148,15 @@ class Ads
     }
 
     /** Đăng bài mới (ảnh + nội dung + nút) */
-    private static function sendRaw(Telegram $api, string $botKey, $chatId, array $ad): array
+    private static function sendRaw(Telegram $api, string $botKey, $chatId, array $ad, array $extra = []): array
     {
         $kb = self::keyboard(json_decode((string)$ad['buttons'], true) ?: []);
-        $params = ['chat_id' => $chatId, 'caption' => mb_substr((string)$ad['caption'], 0, self::CAPTION_MAX), 'parse_mode' => 'HTML'];
+        if (!$ad['image']) { // bài chỉ có chữ
+            $p = ['chat_id' => $chatId, 'text' => mb_substr((string)$ad['caption'], 0, self::TEXT_MAX), 'parse_mode' => 'HTML', 'link_preview_options' => ['is_disabled' => true]] + $extra;
+            if ($kb) $p['reply_markup'] = $kb;
+            return $api->call('sendMessage', $p);
+        }
+        $params = ['chat_id' => $chatId, 'caption' => mb_substr((string)$ad['caption'], 0, self::CAPTION_MAX), 'parse_mode' => 'HTML'] + $extra;
         if ($kb) $params['reply_markup'] = $kb;
         $fid = self::fileId($ad, $botKey);
         if ($fid) {
@@ -186,14 +203,14 @@ class Ads
         return $ad;
     }
 
-    public static function send(Telegram $api, string $botKey, $chatId, array $ad): array
+    public static function send(Telegram $api, string $botKey, $chatId, array $ad, array $extra = []): array
     {
         try {
-            return self::sendRaw($api, $botKey, $chatId, $ad);
+            return self::sendRaw($api, $botKey, $chatId, $ad, $extra);
         } catch (TelegramException $e) {
             $plain = preg_match('/emoji|icon/i', $e->getMessage()) ? self::withoutIcons($ad) : null;
             if (!$plain) throw $e;
-            return self::sendRaw($api, $botKey, $chatId, $plain); // gửi lại không kèm emoji động
+            return self::sendRaw($api, $botKey, $chatId, $plain, $extra); // gửi lại không kèm emoji động
         }
     }
 
@@ -209,9 +226,108 @@ class Ads
     }
 
     // ================= Xoay vòng =================
-    private static function ads(int $campaignId): array
+    /** Bài đang bật của chiến dịch (xoay vòng cần ảnh; gửi theo lịch cho phép bài chỉ có chữ) */
+    public static function adsFor(array $c): array
     {
-        return DB::all('SELECT * FROM tg_ads WHERE campaign_id = ? AND enabled = 1 AND image IS NOT NULL ORDER BY sort, id', [$campaignId]);
+        if (self::isSchedule($c)) {
+            return DB::all("SELECT * FROM tg_ads WHERE campaign_id = ? AND enabled = 1 AND (image IS NOT NULL OR (caption IS NOT NULL AND caption <> '')) ORDER BY sort, id", [$c['id']]);
+        }
+        return DB::all('SELECT * FROM tg_ads WHERE campaign_id = ? AND enabled = 1 AND image IS NOT NULL ORDER BY sort, id', [$c['id']]);
+    }
+
+    public static function isSchedule(array $c): bool
+    {
+        return ($c['type'] ?? 'rotate') === 'schedule';
+    }
+
+    // ================= Gửi theo lịch =================
+    private static function hm(string $s): ?int
+    {
+        return preg_match('/^([01]\d|2[0-3]):([0-5]\d)$/', $s, $m) ? (int)$m[1] * 3600 + (int)$m[2] * 60 : null;
+    }
+
+    /**
+     * Thời điểm gửi kế tiếp (timestamp) cho 1 nhóm, $last = lần gửi trước (0 = chưa gửi).
+     * <= now() nghĩa là tới hạn. null = không có lịch (VD không chọn ngày nào).
+     */
+    public static function nextAt(array $c, int $last): ?int
+    {
+        $now = now();
+        $days = (string)($c['sched_days'] ?? '1234567');
+        $today = strtotime('today', $now);
+        if (($c['sched_mode'] ?? 'interval') === 'times') {
+            $times = array_filter(array_map([self::class, 'hm'], json_decode((string)$c['sched_times'], true) ?: []), fn($x) => $x !== null);
+            sort($times);
+            for ($i = -1; $i <= 7; $i++) {
+                $day = strtotime(($i >= 0 ? "+$i" : $i) . ' day', $today);
+                if (!str_contains($days, date('N', $day))) continue;
+                foreach ($times as $t) {
+                    $slot = $day + $t;
+                    if ($slot <= $last) continue;
+                    if ($slot >= $now - 600) return $slot; // trễ tối đa 10 phút vẫn gửi (cron chậm)
+                }
+            }
+            return null;
+        }
+        $cand = max($now, $last ? $last + max(1, (int)$c['every_min']) * 60 : $now);
+        $from = self::hm((string)($c['win_from'] ?? ''));
+        $to = self::hm((string)($c['win_to'] ?? ''));
+        for ($i = -1; $i <= 8; $i++) {
+            $day = strtotime(($i >= 0 ? "+$i" : $i) . ' day', $today);
+            if (!str_contains($days, date('N', $day))) continue;
+            $ws = $day + ($from ?? 0);
+            $we = $day + ($to ?? 86400);
+            if ($from !== null && $to !== null && $to <= $from) $we += 86400; // khung giờ qua đêm, VD 20:00–02:00
+            $t = max($cand, $ws);
+            if ($t < $we) return $t;
+        }
+        return null;
+    }
+
+    private static array $failAt = [];
+
+    /** Một lượt cho chiến dịch gửi theo lịch. Trả về số giây tới việc kế tiếp. */
+    private static function tickSchedule(array $c, array $ads): int
+    {
+        $wait = 60;
+        $errors = [];
+        foreach (json_decode((string)$c['group_ids'], true) ?: [] as $gid) {
+            $group = DB::get('SELECT * FROM tg_groups WHERE id = ? AND active = 1', [$gid]);
+            if (!$group) continue;
+            $fk = $c['id'] . ':' . $gid;
+            if (isset(self::$failAt[$fk]) && now() - self::$failAt[$fk] < 120) continue; // lỗi gần đây → thử lại sau 2 phút
+            try {
+            $post = DB::get('SELECT * FROM tg_ad_posts WHERE campaign_id = ? AND group_id = ? AND active = 1', [$c['id'], $gid]);
+            // Tự xoá bài sau N phút
+            if ($post && (int)$c['auto_delete_min'] > 0) {
+                $delAt = (int)$post['created_at'] + (int)$c['auto_delete_min'] * 60;
+                if (now() >= $delAt) {
+                    [$api] = self::botFor($c, $group);
+                    if ($api) $api->tryCall('deleteMessage', ['chat_id' => $post['chat_id'], 'message_id' => $post['message_id']]);
+                    DB::run('UPDATE tg_ad_posts SET active = 0 WHERE id = ?', [$post['id']]);
+                    $post = null;
+                } else {
+                    $wait = min($wait, $delAt - now());
+                }
+            }
+            $last = (int)DB::val('SELECT MAX(created_at) FROM tg_ad_posts WHERE campaign_id = ? AND group_id = ?', [$c['id'], $gid]);
+            $lastAd = $last ? (int)DB::val('SELECT ad_id FROM tg_ad_posts WHERE campaign_id = ? AND group_id = ? ORDER BY id DESC LIMIT 1', [$c['id'], $gid]) : null;
+            $at = self::nextAt($c, $last);
+            if ($at === null) continue;
+            if ($at <= now()) {
+                self::post($c, $group, $post, $ads, $lastAd);
+                $at = self::nextAt($c, now());
+                if ($at === null) continue;
+            }
+            $wait = min($wait, max(1, $at - now()));
+            unset(self::$failAt[$fk]);
+            } catch (Throwable $e) {
+                self::$failAt[$fk] = now();
+                $errors[] = $group['title'] . ': ' . $e->getMessage();
+            }
+        }
+        if ($errors) throw new RuntimeException(implode(' | ', $errors));
+        return $wait;
     }
 
     private static function nextAd(array $campaign, array $ads, ?int $currentId): array
@@ -238,7 +354,8 @@ class Ads
         [$api, $botKey] = self::botFor($c, $group);
         if (!$api) throw new HttpError('Chưa có bot để đăng quảng cáo');
         $ad = self::nextAd($c, $ads, $afterAdId);
-        $r = self::send($api, $botKey, $group['chat_id'], $ad);
+        $sched = self::isSchedule($c);
+        $r = self::send($api, $botKey, $group['chat_id'], $ad, $sched && !empty($c['silent']) ? ['disable_notification' => true] : []);
         if ($c['pin']) {
             try { $api->call('pinChatMessage', ['chat_id' => $group['chat_id'], 'message_id' => $r['message_id'], 'disable_notification' => (bool)$c['pin_silent']]); }
             catch (TelegramException $e) { self::error($c, 'Không ghim được (bot cần quyền ghim tin): ' . $e->getMessage()); }
@@ -254,7 +371,7 @@ class Ads
             'bot_key' => $botKey, 'ad_id' => $ad['id'], 'active' => 1, 'last_rotate_at' => now(), 'created_at' => now(),
         ]);
         DB::run('UPDATE tg_ads SET shows = shows + 1 WHERE id = ?', [$ad['id']]);
-        Repo::log((int)$group['id'], 'Quảng cáo', 'ad_post', null, $c['name'] . ' · đăng & ghim bài "' . ($ad['title'] ?: '#' . $ad['id']) . '"', ['source' => 'bot']);
+        Repo::log((int)$group['id'], 'Quảng cáo', 'ad_post', null, $c['name'] . ($sched ? ' · gửi theo lịch bài "' : ($c['pin'] ? ' · đăng & ghim bài "' : ' · đăng bài "')) . ($ad['title'] ?: '#' . $ad['id']) . '"', ['source' => 'bot']);
         return DB::get('SELECT * FROM tg_ad_posts WHERE campaign_id = ? AND group_id = ? AND active = 1', [$c['id'], $group['id']]);
     }
 
@@ -271,8 +388,17 @@ class Ads
     {
         $next = 60;
         foreach (DB::all('SELECT * FROM tg_ad_campaigns WHERE enabled = 1') as $c) {
-            $ads = self::ads((int)$c['id']);
+            $ads = self::adsFor($c);
             if (!$ads) continue;
+            if (self::isSchedule($c)) {
+                try {
+                    $next = min($next, self::tickSchedule($c, $ads));
+                    if ($c['last_error']) self::error($c, null);
+                } catch (Throwable $e) {
+                    self::error($c, $e->getMessage());
+                }
+                continue;
+            }
             $ok = true;
             foreach (json_decode((string)$c['group_ids'], true) ?: [] as $gid) {
                 $group = DB::get('SELECT * FROM tg_groups WHERE id = ? AND active = 1', [$gid]);
