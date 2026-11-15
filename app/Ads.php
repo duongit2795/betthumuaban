@@ -12,7 +12,7 @@ class Ads
     const INTERVALS = [10, 15, 20, 30, 60, 120, 300, 600, 900, 1800, 3600];
     const CAPTION_MAX = 1024;   // chú thích ảnh
     const TEXT_MAX = 4096;      // tin chỉ có chữ (chiến dịch gửi theo lịch)
-    const EVERY = [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 360, 480, 720, 1440];
+    const EVERY = [1, 2, 3, 5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 360, 480, 720, 1440];
     const DAY_LABELS = ['1' => 'T2', '2' => 'T3', '3' => 'T4', '4' => 'T5', '5' => 'T6', '6' => 'T7', '7' => 'CN'];
     /** Màu nút Telegram (trường style): rỗng = màu mặc định của ứng dụng */
     const STYLES = ['' => 'Mặc định', 'primary' => 'Xanh dương', 'success' => 'Xanh lá', 'danger' => 'Đỏ'];
