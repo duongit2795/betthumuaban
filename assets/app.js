@@ -1390,7 +1390,11 @@
     exact: ['Đúng câu', 'Tin nhắn đúng nguyên câu (không phân biệt hoa thường)'],
     starts: ['Bắt đầu bằng', 'Tin nhắn bắt đầu bằng cụm từ, phần sau là {args}'],
     regex: ['Regex', 'Biểu thức chính quy nâng cao, nhóm (…) đầu tiên là {args}'],
+    reaction: ['Thả cảm xúc 👍', 'Có người thả cảm xúc vào tin nhắn. <b>Người gửi</b> = người thả cảm xúc, <b>người được reply</b> = chủ tin nhắn. Chạm emoji để chọn, để trống = mọi cảm xúc'],
   };
+  // Cảm xúc Telegram cho phép thả (không cần Premium)
+  const REACTIONS = ['👍', '👎', '❤', '🔥', '🥰', '👏', '😁', '🤔', '🤯', '😱', '🤬', '😢', '🎉', '🤩', '🤮', '💩', '🙏', '👌', '🕊', '🤡', '🥱', '🥴', '😍', '🐳', '❤‍🔥', '🌚', '🌭', '💯', '🤣', '⚡', '🍌', '🏆', '💔', '🤨', '😐', '🍓', '🍾', '💋', '🖕', '😈', '😴', '😭', '🤓', '👻', '👨‍💻', '👀', '🎃', '🙈', '😇', '😨', '🤝', '✍', '🤗', '🫡', '🎅', '🎄', '☃', '💅', '🤪', '🗿', '🆒', '💘', '🙉', '🦄', '😘', '💊', '🙊', '😎', '👾', '🤷‍♂', '🤷', '🤷‍♀', '😡'];
+  const emoKey = (e) => e.replace(/[\uFE0E\uFE0F]/g, '');
   const RACT = {
     reply: ['💬 Trả lời tin nhắn', true],
     send: ['📢 Gửi tin vào nhóm', false],
@@ -1732,6 +1736,23 @@
       rule: { name: 'Chào mừng thành viên', trigger_type: 'command', trigger_value: 'chaomung', show_in_menu: 1, conditions: { who: 'admin', require_reply: true, autodel: true, autodel_after: 0, autodel_trigger: true, autodel_reply: false, autodel_target: false },
         actions: [{ type: 'send', who: 'sender', text: '🎉 Chào mừng {target_mention} đến với <b>{group}</b>! Nhóm hiện có {member_count} thành viên. Gõ /noiquy để xem nội quy nhé.' }] } },
 
+    // ---- Cảm xúc ----
+    { cat: '😀 Thả cảm xúc', icon: '❤️', title: 'Thả tim tặng điểm', desc: 'Thả ❤ 🔥 👍 vào tin ai đó · họ +1 điểm',
+      rule: { name: 'Thả tim tặng điểm', trigger_type: 'reaction', trigger_value: '❤ 🔥 👍 🥰 👏', conditions: { who: 'all', once_per_message: true },
+        actions: [{ type: 'points', who: 'target', amount: 1 }] } },
+    { cat: '😀 Thả cảm xúc', icon: '🏆', title: 'Admin thả 🏆 thưởng điểm', desc: 'Admin thả 🏆 · chủ tin +10 điểm, bot báo',
+      rule: { name: 'Admin thưởng điểm bằng 🏆', trigger_type: 'reaction', trigger_value: '🏆', conditions: { who: 'admin', once_per_message: true, autodel: true, autodel_after: 60, autodel_trigger: false, autodel_reply: true, autodel_target: false },
+        actions: [{ type: 'points', who: 'target', amount: 10 }, { type: 'reply', who: 'target', text: '🏆 {target_mention} được {name} thưởng <b>+10 điểm</b>! Tổng: {target_points} điểm' }] } },
+    { cat: '😀 Thả cảm xúc', icon: '🤬', title: 'Admin thả 🤬 xoá tin + cấm', desc: 'Admin thả 🤬 phẫn nộ · xoá tin đó và cấm người gửi khỏi nhóm',
+      rule: { name: 'Admin thả 🤬 → xoá tin + cấm', trigger_type: 'reaction', trigger_value: '🤬', conditions: { who: 'admin', once_per_message: true },
+        actions: [{ type: 'delete', who: 'target' }, { type: 'ban', who: 'target', reason: 'Admin thả 🤬 vào tin nhắn vi phạm' }] } },
+    { cat: '😀 Thả cảm xúc', icon: '😡', title: 'Admin thả 😡 cấm chat 1 ngày', desc: 'Admin thả 😡 · xoá tin + cấm chat 24 giờ',
+      rule: { name: 'Admin thả 😡 → cấm chat 1 ngày', trigger_type: 'reaction', trigger_value: '😡', conditions: { who: 'admin', once_per_message: true },
+        actions: [{ type: 'delete', who: 'target' }, { type: 'mute', who: 'target', minutes: 1440, reason: 'Admin thả 😡 vào tin nhắn vi phạm' }] } },
+    { cat: '😀 Thả cảm xúc', icon: '💩', title: 'Admin thả 💩 xoá tin', desc: 'Admin thả 💩 · xoá tin + cảnh cáo',
+      rule: { name: 'Admin thả 💩 xoá tin', trigger_type: 'reaction', trigger_value: '💩 🤮', conditions: { who: 'admin', once_per_message: true },
+        actions: [{ type: 'delete', who: 'target' }, { type: 'warn', who: 'target', reason: 'Tin nhắn không phù hợp' }] } },
+
     // ---- Quản trị ----
     { cat: '🛡 Quản trị', icon: '🚫', title: 'Chặn từ khoá + cảnh cáo', desc: 'Xoá tin và cảnh cáo người gửi',
       rule: { name: 'Chặn lừa đảo', trigger_type: 'contains', trigger_value: 'lừa đảo|nhận tiền miễn phí', conditions: { who: 'member' },
@@ -1766,6 +1787,7 @@
 
   const triggerChip = (r) => r.trigger_type === 'command'
     ? `<span class="badge blue mono">/${esc(r.trigger_value)}</span>`
+    : r.trigger_type === 'reaction' ? `<span class="badge amber">Cảm xúc: ${r.trigger_value === '*' ? 'bất kỳ' : esc(r.trigger_value)}</span>`
     : `<span class="badge">${TRIGGER[r.trigger_type][0]}: ${esc(r.trigger_value.length > 28 ? r.trigger_value.slice(0, 28) + '…' : r.trigger_value)}</span>`;
 
   function ruleSummary(r) {
@@ -1934,7 +1956,9 @@
     const actionHtml = (a, i) => {
       const [label, hasWho] = RACT[a.type] || ['?', false];
       let f = '';
-      if (hasWho) f += `<div class="segmented" style="margin-top:10px"><button type="button" data-aw="${i}" data-v="sender" class="${a.who !== 'target' ? 'active' : ''}">${a.type === 'reply' ? 'Reply người gửi' : 'Người gửi lệnh'}</button><button type="button" data-aw="${i}" data-v="target" class="${a.who === 'target' ? 'active' : ''}">Người được reply</button></div>`;
+      const isReact = r.trigger_type === 'reaction';
+      if (hasWho && isReact && ['delete', 'pin'].includes(a.type)) { a.who = 'target'; f += `<div class="xs muted" style="margin-top:8px">↳ Áp dụng cho <b>tin nhắn được thả cảm xúc</b></div>`; }
+      else if (hasWho) f += `<div class="segmented" style="margin-top:10px"><button type="button" data-aw="${i}" data-v="sender" class="${a.who !== 'target' ? 'active' : ''}">${isReact ? (a.type === 'reply' ? 'Nhắc người thả' : '😀 Người thả cảm xúc') : a.type === 'reply' ? 'Reply người gửi' : 'Người gửi lệnh'}</button><button type="button" data-aw="${i}" data-v="target" class="${a.who === 'target' ? 'active' : ''}">${isReact ? '✉️ Chủ tin nhắn' : 'Người được reply'}</button></div>`;
       if (['reply', 'send'].includes(a.type)) f += `<textarea class="input" data-rich data-af="${i}" data-k="text" style="margin-top:10px;min-height:80px" placeholder="Nội dung… dùng biến như {mention}, {points}">${esc(a.text || '')}</textarea>
         <div class="pv"><div class="pv-label">👁 Xem trước (giá trị mẫu)</div><div class="pv-body" data-pv="${i}">${a.text ? previewText(a.text) : '<span class="muted">Nội dung sẽ hiện ở đây…</span>'}</div></div>`;
       if (a.type === 'points') f += `<div class="row" style="margin-top:10px"><input class="input" type="number" data-af="${i}" data-k="amount" value="${a.amount ?? 1}" style="text-align:center;font-weight:700"><span class="small muted nowrap">điểm (âm = trừ)</span></div>`;
@@ -1955,9 +1979,15 @@
         <div class="stack">
           <div class="row" style="gap:8px"><span class="badge blue">KHI</span><b>Kích hoạt khi</b></div>
           <div class="chips" style="flex-wrap:wrap">${Object.entries(TRIGGER).map(([k, v]) => `<button type="button" class="chip ${k === r.trigger_type ? 'active' : ''}" data-tt="${k}">${v[0]}</button>`).join('')}</div>
-          <label class="field">${isCmd ? `<div class="input-icon"><span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);font-weight:700;color:var(--muted)">/</span><input class="input mono" name="trigger_value" value="${esc(r.trigger_value)}" placeholder="diemdanh" style="padding-left:28px" autocapitalize="off" required></div>`
+          ${r.trigger_type === 'reaction' ? (() => {
+            const chosen = (r.trigger_value === '*' ? '' : r.trigger_value).split(/[\s|,]+/).filter(Boolean).map(emoKey);
+            return `<div class="field"><input class="input" name="trigger_value" value="${esc(r.trigger_value === '*' ? '' : r.trigger_value)}" placeholder="Để trống = mọi cảm xúc · VD: 👍 ❤ 🔥" style="font-size:20px">
+              <div class="emo-grid">${REACTIONS.map((e) => `<button type="button" class="emo ${chosen.includes(emoKey(e)) ? 'active' : ''}" data-emo="${e}">${e}</button>`).join('')}</div>
+              <div class="hint">${TRIGGER.reaction[1]}.</div>
+              <div class="alert info" style="margin-top:8px">${icon('info')}<div class="xs">Bot phải là <b>quản trị viên</b> của nhóm thì Telegram mới gửi sự kiện thả cảm xúc. Biến <code>{emoji}</code> = cảm xúc vừa thả. Hành động <b>xoá / ghim</b> áp dụng cho tin được thả cảm xúc.</div></div></div>`;
+          })() : `<label class="field">${isCmd ? `<div class="input-icon"><span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);font-weight:700;color:var(--muted)">/</span><input class="input mono" name="trigger_value" value="${esc(r.trigger_value)}" placeholder="diemdanh" style="padding-left:28px" autocapitalize="off" required></div>`
             : `<input class="input" name="trigger_value" value="${esc(r.trigger_value)}" placeholder="${r.trigger_type === 'regex' ? '^gia (\\w+)$' : 'từ khoá 1|từ khoá 2'}" required>`}
-            <div class="hint">${TRIGGER[r.trigger_type][1]}${isCmd ? '. Chỉ chữ thường không dấu, số, dấu _' : ''}</div></label>
+            <div class="hint">${TRIGGER[r.trigger_type][1]}${isCmd ? '. Chỉ chữ thường không dấu, số, dấu _' : ''}</div></label>`}
           <label class="field"><span class="lbl">Tên / mô tả lệnh</span><input class="input" name="name" value="${esc(r.name || '')}" placeholder="VD: Điểm danh hằng ngày" maxlength="120"></label>
           <label class="field"><span class="lbl">Áp dụng cho</span><select class="input" name="group_id">${webAdmin ? '<option value="">Tất cả nhóm</option>' : ''}${groups.map((g) => `<option value="${g.id}" ${g.id === r.group_id ? 'selected' : ''}>${esc(g.title)}</option>`).join('')}</select></label>
         </div>
@@ -1970,7 +2000,9 @@
             <label class="field"><span class="lbl">Tỉ lệ thành công (%)</span><input class="input" type="number" min="1" max="100" name="chance" value="${c.chance || 100}"></label>
           </div>
           <div class="field"><span class="lbl">Thời gian chờ mỗi người</span><div class="row"><input class="input" type="number" min="0" name="cd_val" value="${cd / unit}"><select class="input" name="cd_unit" style="width:auto">${[[1, 'giây'], [60, 'phút'], [3600, 'giờ'], [86400, 'ngày']].map(([v, t]) => `<option value="${v}" ${v === unit ? 'selected' : ''}>${t}</option>`).join('')}</select></div><div class="hint">0 = không giới hạn. VD điểm danh: 1 ngày</div></div>
-          <div class="card" style="box-shadow:none">${sw('require_reply', c.require_reply, 'Bắt buộc reply tin nhắn', usesTarget ? 'Nên bật vì có hành động lên "người được reply"' : 'Phải reply tin của ai đó mới chạy')}</div>
+          <div class="card" style="box-shadow:none">${r.trigger_type === 'reaction'
+            ? sw('once_per_message', c.once_per_message !== false, 'Mỗi người chỉ kích hoạt 1 lần cho mỗi tin', 'Chống thả / gỡ / thả lại để cộng điểm nhiều lần') + `<input type="hidden" name="require_reply" value="">`
+            : sw('require_reply', c.require_reply, 'Bắt buộc reply tin nhắn', usesTarget ? 'Nên bật vì có hành động lên "người được reply"' : 'Phải reply tin của ai đó mới chạy')}</div>
         </div>
 
         <div class="stack">
@@ -1988,7 +2020,9 @@
           <div class="card" style="box-shadow:none">
             ${sw('autodel', c.autodel, 'Tự động xoá tin nhắn', c.autodel ? 'Giữ nhóm gọn gàng sau khi dùng lệnh' : 'Đang tắt: tin nhắn được giữ lại')}
             ${c.autodel ? (() => {
-              const kinds = [['trigger', '🙋 Tin người gửi', 'Tin gõ lệnh / từ khoá'], ['reply', '🤖 Tin bot trả lời', 'Gồm cả tin báo lỗi, VD "Bạn cần đợi…"'], ['target', '↩️ Tin được reply', 'Tin của người nhận']];
+              const kinds = r.trigger_type === 'reaction'
+                ? [['reply', '🤖 Tin bot trả lời', 'Tin bot gửi khi có người thả cảm xúc'], ['target', '😀 Tin được thả cảm xúc', 'Tin của chủ tin nhắn']]
+                : [['trigger', '🙋 Tin người gửi', 'Tin gõ lệnh / từ khoá'], ['reply', '🤖 Tin bot trả lời', 'Gồm cả tin báo lỗi, VD "Bạn cần đợi…"'], ['target', '↩️ Tin được reply', 'Tin của người nhận']];
               const sel = kinds.filter(([k]) => c['autodel_' + k]).length;
               const row = ([k, t, d]) => {
                 const on = !!c['autodel_' + k];
@@ -2041,7 +2075,8 @@
       r.conditions.min_points = Number(f.min_points.value) || 0;
       r.conditions.chance = Number(f.chance.value) || 100;
       r.conditions.cooldown = (Number(f.cd_val.value) || 0) * Number(f.cd_unit.value);
-      r.conditions.require_reply = f.require_reply.checked;
+      r.conditions.require_reply = !!f.require_reply.checked;
+      if (f.once_per_message) r.conditions.once_per_message = f.once_per_message.checked;
       r.conditions.autodel = f.autodel.checked;
       ['trigger', 'reply', 'target'].forEach((k) => {
         if (f['autodel_' + k]) r.conditions['autodel_' + k] = f['autodel_' + k].checked;
@@ -2093,7 +2128,25 @@
       el.addEventListener('click', async (e) => {
         const b = e.target.closest('button');
         if (!b) return;
-        if (b.dataset.tt) { collect(el); r.trigger_type = b.dataset.tt; if (r.trigger_type === 'command') r.trigger_value = r.trigger_value.replace(/[^a-z0-9_]/gi, '').toLowerCase(); draw(); }
+        if (b.dataset.emo) {
+          const inp = $('#fr [name=trigger_value]', el);
+          const list = inp.value.split(/[\s|,]+/).filter(Boolean);
+          const k = emoKey(b.dataset.emo);
+          const i = list.findIndex((x) => emoKey(x) === k);
+          if (i >= 0) list.splice(i, 1); else list.push(b.dataset.emo);
+          inp.value = list.join(' ');
+          b.classList.toggle('active', i < 0);
+          return;
+        }
+        if (b.dataset.tt) {
+          collect(el);
+          const prev = r.trigger_type;
+          r.trigger_type = b.dataset.tt;
+          if (r.trigger_type === 'command') r.trigger_value = r.trigger_value.replace(/[^a-z0-9_]/gi, '').toLowerCase();
+          if ((r.trigger_type === 'reaction') !== (prev === 'reaction')) r.trigger_value = '';
+          if (r.trigger_type === 'reaction') { r.conditions.require_reply = false; if (r.conditions.once_per_message === undefined) r.conditions.once_per_message = true; r.actions.forEach((a) => { if (['delete', 'pin'].includes(a.type)) a.who = 'target'; }); }
+          draw();
+        }
         else if (b.dataset.adc !== undefined) {
           collect(el);
           const v = [{ trigger: 0, reply: 20 }, { trigger: 0, reply: 60 }, { trigger: 30, reply: 30 }, { trigger: 0 }, { trigger: 0, reply: 0, target: 0 }][b.dataset.adc];

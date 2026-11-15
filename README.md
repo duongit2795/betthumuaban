@@ -27,6 +27,7 @@ Web PHP (chạy tốt trên **aaPanel**) để quản lý nhóm Telegram bằng 
   chặn link (có danh sách tên miền cho phép), chặn forward, chống flood, từ cấm, khoá ảnh/video/sticker/GIF/tệp/âm thanh/bình chọn,
   giới hạn cảnh cáo + hành động tự động (mute/kick/ban), cấu hình điểm (điểm mỗi tin, giãn cách, độ dài tối thiểu, thưởng mời bạn)
 - **Lệnh tự tạo** (Khi… Nếu… Thì…), dùng chung mọi nhóm hoặc riêng từng nhóm:
+- **😀 Lệnh kích hoạt bằng cảm xúc**: trong *Lệnh tự tạo* chọn KHI **Thả cảm xúc 👍**, chọn emoji (để trống = mọi cảm xúc). NẾU: ai được dùng (VD *chỉ admin*), điểm tối thiểu, thời gian chờ, *mỗi người 1 lần / tin*. THÌ: xoá tin được thả cảm xúc, cấm / cấm chat / cảnh cáo / đuổi chủ tin, cộng điểm, trả lời… Ví dụ: **admin thả 🤬 → xoá tin + cấm**, admin thả 😡 → cấm chat 1 ngày, thành viên thả ❤️ → chủ tin +1 điểm. Biến `{emoji}`. Bot phải là **quản trị viên** để nhận sự kiện cảm xúc (webhook tự đăng ký thêm sau khi cập nhật).
   - **Khi**: gõ `/lệnh`, tin chứa từ khoá, đúng nguyên câu, bắt đầu bằng, hoặc regex
   - **Nếu**: ai được dùng (mọi người / chỉ admin / không phải admin), điểm tối thiểu, bắt buộc reply, thời gian chờ mỗi người, tỉ lệ thành công %
   - **Thì** (nhiều hành động nối tiếp): trả lời, gửi tin, cộng/trừ điểm, xoá, ghim, cảnh cáo, cấm chat, đuổi, cấm, gỡ cấm. Mỗi hành động áp dụng cho người gửi hoặc người được reply

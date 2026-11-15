@@ -6,7 +6,7 @@ defined('APP') or exit;
  */
 class Rules
 {
-    const TRIGGERS = ['command', 'contains', 'exact', 'starts', 'regex'];
+    const TRIGGERS = ['command', 'contains', 'exact', 'starts', 'regex', 'reaction'];
     const ACTIONS = ['reply', 'send', 'delete', 'points', 'warn', 'mute', 'unmute', 'kick', 'ban', 'unban', 'pin'];
     const MOD_ACTIONS = ['warn', 'mute', 'unmute', 'kick', 'ban', 'unban'];
 
@@ -18,13 +18,17 @@ class Rules
         if ($type === 'command') {
             $value = strtolower(ltrim($value, '/'));
             if (!preg_match('/^[a-z0-9_]{1,32}$/', $value)) throw new HttpError('Tên lệnh chỉ gồm chữ thường không dấu, số, dấu _ (tối đa 32 ký tự)');
+        } elseif ($type === 'reaction') {
+            // Danh sách emoji cách nhau bởi dấu cách hoặc |, để trống / * = mọi cảm xúc
+            $list = self::emojis($value);
+            $value = $list ? implode(' ', array_slice($list, 0, 30)) : '*';
         } else {
             if ($value === '') throw new HttpError('Nhập từ khoá kích hoạt');
             if ($type === 'regex' && @preg_match(self::regex($value), '') === false) throw new HttpError('Biểu thức regex không hợp lệ');
             $value = mb_substr($value, 0, 500);
         }
         $name = trim((string)($in['name'] ?? ''));
-        if ($name === '') $name = $type === 'command' ? "Lệnh /$value" : $value;
+        if ($name === '') $name = $type === 'command' ? "Lệnh /$value" : ($type === 'reaction' ? 'Khi thả cảm xúc ' . ($value === '*' ? '(bất kỳ)' : $value) : $value);
 
         $c = (array)($in['conditions'] ?? []);
         $cond = [
@@ -33,6 +37,7 @@ class Rules
             'require_reply' => !empty($c['require_reply']),
             'cooldown' => max(0, min(31536000, (int)($c['cooldown'] ?? 0))),
             'chance' => max(1, min(100, (int)($c['chance'] ?? 100))),
+            'once_per_message' => !array_key_exists('once_per_message', $c) || !empty($c['once_per_message']), // cảm xúc: mỗi người 1 lần / tin
             // Tự động xoá
             'autodel' => !empty($c['autodel']),
             'autodel_trigger' => !empty($c['autodel_trigger']),
@@ -107,6 +112,23 @@ class Rules
         return '~' . str_replace('~', '\~', $v) . '~iu';
     }
 
+    /** Tách danh sách emoji (bỏ ký tự biến thể FE0F để so khớp ổn định) */
+    public static function emojis(string $v): array
+    {
+        $out = [];
+        foreach (preg_split('/[\s|,]+/u', $v, -1, PREG_SPLIT_NO_EMPTY) as $e) {
+            if ($e === '*') return [];
+            $e = self::emojiKey($e);
+            if ($e !== '' && !in_array($e, $out, true)) $out[] = $e;
+        }
+        return $out;
+    }
+
+    public static function emojiKey(string $e): string
+    {
+        return trim(str_replace(["\u{FE0F}", "\u{FE0E}"], '', $e));
+    }
+
     private static function words(string $v): array
     {
         return array_values(array_filter(array_map('trim', preg_split('/[|\n]/u', $v)), 'strlen'));
@@ -122,7 +144,7 @@ class Rules
     public static function run(Telegram $api, string $botUsername, int $botTgId, array $group, array $msg, array $member, bool $isAdmin, string $text, callable $isAdminFn, int $botId = 0): int
     {
         if ($text === '') return 0;
-        $rules = DB::all('SELECT * FROM tg_rules WHERE enabled = 1 AND (group_id IS NULL OR group_id = ?) ORDER BY priority DESC, id ASC', [$group['id']]);
+        $rules = DB::all("SELECT * FROM tg_rules WHERE enabled = 1 AND trigger_type <> 'reaction' AND (group_id IS NULL OR group_id = ?) ORDER BY priority DESC, id ASC", [$group['id']]);
         if (!$rules) return 0;
 
         $cmd = null;
@@ -167,6 +189,55 @@ class Rules
         return $flags;
     }
 
+    /**
+     * Có người thả cảm xúc vào tin nhắn (update message_reaction).
+     * Người gửi = người thả cảm xúc, người được reply = chủ tin nhắn được thả cảm xúc.
+     */
+    public static function onReaction(Telegram $api, int $botTgId, array $group, array $mr, callable $isAdminFn, int $botId = 0): void
+    {
+        $user = $mr['user'] ?? null;
+        if (!$user || !empty($user['is_bot'])) return; // cảm xúc ẩn danh (kênh / admin ẩn danh) không có người dùng
+        $keys = fn(array $list) => array_values(array_filter(array_map(fn($r) => ($r['type'] ?? '') === 'emoji' ? self::emojiKey((string)$r['emoji'])
+            : (($r['type'] ?? '') === 'custom_emoji' ? 'custom:' . $r['custom_emoji_id'] : ''), $list)));
+        $added = array_values(array_diff($keys($mr['new_reaction'] ?? []), $keys($mr['old_reaction'] ?? [])));
+        if (!$added) return; // chỉ gỡ cảm xúc
+
+        $rules = DB::all("SELECT * FROM tg_rules WHERE enabled = 1 AND trigger_type = 'reaction' AND (group_id IS NULL OR group_id = ?) ORDER BY priority DESC, id ASC", [$group['id']]);
+        if (!$rules) return;
+        $gid = (int)$group['id'];
+        $chatId = $mr['chat']['id'];
+        $mid = (int)$mr['message_id'];
+        $member = Repo::upsertMember($gid, $user);
+        $isAdmin = $isAdminFn((int)$user['id']);
+
+        // Tin nhắn được thả cảm xúc (lấy từ lịch sử chat đã lưu)
+        $row = DB::get('SELECT * FROM tg_messages WHERE group_id = ? AND message_id = ?', [$gid, $mid]);
+        $target = ['message_id' => $mid, 'chat' => $mr['chat'], 'date' => (int)($row['created_at'] ?? now()), 'text' => (string)($row['text'] ?? '')];
+        if ($row && $row['tg_user_id'] && !$row['is_bot']) {
+            [$fn, $ln] = array_pad(explode(' ', (string)$row['name'], 2), 2, null);
+            $target['from'] = ['id' => (int)$row['tg_user_id'], 'first_name' => $fn ?: (string)$row['tg_user_id'], 'last_name' => $ln, 'username' => $row['username'], 'is_bot' => false];
+        }
+        $msg = ['message_id' => $mid, 'chat' => $mr['chat'], 'date' => (int)($mr['date'] ?? now()), 'from' => $user, 'reply_to_message' => $target, '_reaction' => true];
+
+        $fired = 0;
+        foreach ($rules as $r) {
+            $want = $r['trigger_value'] === '*' ? null : explode(' ', $r['trigger_value']);
+            $hit = null;
+            foreach ($added as $e) if ($want === null || in_array($e, $want, true)) { $hit = $e; break; }
+            if ($hit === null) continue;
+            $c = json_decode($r['conditions'] ?: '{}', true) ?: [];
+            if (!array_key_exists('once_per_message', $c) || !empty($c['once_per_message'])) {
+                try {
+                    DB::insert('tg_reaction_hits', ['rule_id' => $r['id'], 'chat_id' => $chatId, 'message_id' => $mid, 'tg_user_id' => $user['id'], 'created_at' => now()]);
+                } catch (PDOException $e) {
+                    continue; // người này đã kích hoạt luật với tin này rồi (thả / gỡ / thả lại)
+                }
+            }
+            self::exec($api, $botId, $botTgId, $group, $msg, $member, $isAdmin, $r, str_starts_with($hit, 'custom:') ? '' : $hit, $isAdminFn, false);
+            if (++$fired >= 3) break;
+        }
+    }
+
     private static function exec(Telegram $api, int $botId, int $botTgId, array $group, array $msg, array $member, bool $isAdmin, array $r, string $args, callable $isAdminFn, bool $isCmd): bool
     {
         $sent = [];
@@ -179,7 +250,7 @@ class Rules
             $common = (int)($c['autodel_after'] ?? 30);
             $after = fn(string $k) => (int)($c["autodel_{$k}_after"] ?? $common);
             $chatId = $msg['chat']['id'];
-            if (!empty($c['autodel_trigger']) && !$deleted) {
+            if (!empty($c['autodel_trigger']) && !$deleted && empty($msg['_reaction'])) {
                 DelQueue::add($api, $botId, $chatId, [$msg['message_id']], $after('trigger'));
                 if ($after('trigger') === 0) $deleted = true;
             }
@@ -238,7 +309,9 @@ class Rules
         if (!$lucky) { $say('🎲 Lần này không may rồi, thử lại sau nhé!'); return $deleted; }
 
         // ---- THÌ: hành động ----
-        $actor = ($r['trigger_type'] === 'command' ? '/' . $r['trigger_value'] : $r['name']) . ' (lệnh tự tạo)';
+        $actor = $r['trigger_type'] === 'reaction'
+            ? Repo::name($member) . ($args !== '' ? " thả $args" : ' thả cảm xúc') . ' (lệnh tự tạo)'
+            : ($r['trigger_type'] === 'command' ? '/' . $r['trigger_value'] : $r['name']) . ' (lệnh tự tạo)';
         foreach ($actions as $a) {
             $isTarget = ($a['who'] ?? 'sender') === 'target';
             $subject = $isTarget ? $target : $member;
@@ -259,7 +332,7 @@ class Rules
                     case 'delete':
                         $mid = $isTarget ? ($targetMsg['message_id'] ?? null) : $msg['message_id'];
                         if ($mid) $api->tryCall('deleteMessage', ['chat_id' => $chatId, 'message_id' => $mid]);
-                        if (!$isTarget) $deleted = true;
+                        if (!$isTarget && empty($msg['_reaction'])) $deleted = true;
                         break;
                     case 'pin':
                         $mid = $isTarget ? ($targetMsg['message_id'] ?? null) : $msg['message_id'];
@@ -378,6 +451,7 @@ class Rules
         $map['{count}'] = (string)((int)$rule['uses'] + 1);
         $map['{command}'] = $rule['trigger_type'] === 'command' ? '/' . $rule['trigger_value'] : tg_esc($rule['name']);
         $map['{random}'] = (string)random_int(1, 100);
+        $map['{emoji}'] = $rule['trigger_type'] === 'reaction' ? $args : '';
 
         // {random:1-6} và {choice:a|b|c}
         $text = preg_replace_callback('/\{random:(-?\d+)-(-?\d+)\}/', function ($x) {

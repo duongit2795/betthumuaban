@@ -5,6 +5,7 @@ try {
     if (installed()) {
         DB::connect();
         if ((int)(Settings::get('schema_version') ?? 0) < DB::SCHEMA_VERSION) DB::migrate();
+        Api::refreshWebhooks();
     }
     (new Api())->dispatch(trim((string)($_GET['r'] ?? 'status'), '/'));
 } catch (HttpError $e) {

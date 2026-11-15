@@ -23,6 +23,7 @@ class BotHandler
         elseif (isset($u['chat_member'])) $this->onChatMember($u['chat_member']);
         elseif (isset($u['message'])) $this->onMessage($u['message']);
         elseif (isset($u['edited_message'])) $this->onMessage($u['edited_message'], true);
+        elseif (isset($u['message_reaction'])) $this->onReaction($u['message_reaction']);
         elseif (isset($u['callback_query'])) {
             $cbq = $u['callback_query'];
             if (!UsernameGuard::onCallback($this->api, $cbq) && !UpdateNotifier::onCallback($this->api, $cbq)) TgLogin::onCallback($this->api, $cbq);
@@ -80,6 +81,15 @@ class BotHandler
         if (in_array($st, ['administrator', 'creator'], true) || in_array($cm['old_chat_member']['status'] ?? '', ['administrator', 'creator'], true)) {
             DB::run('UPDATE tg_groups SET admins_at = 0 WHERE id = ?', [$group['id']]);
         }
+    }
+
+    // ---------- Thả cảm xúc (cần bot là quản trị viên) ----------
+    private function onReaction(array $mr): void
+    {
+        if (!$this->isGroup($mr['chat'])) return;
+        $group = Repo::upsertGroup($mr['chat'], (int)$this->bot['id']);
+        if (!Repo::settings($group)['commands_enabled']) return;
+        Rules::onReaction($this->api, $this->botTgId, $group, $mr, fn(int $uid) => $this->isAdmin($group, $uid), (int)$this->bot['id']);
     }
 
     // ---------- Tin nhắn ----------

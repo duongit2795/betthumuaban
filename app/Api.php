@@ -3,6 +3,25 @@ defined('APP') or exit;
 
 class Api
 {
+    /** Loại update Telegram bot nhận (thêm loại mới → tăng WEBHOOK_V để tự cập nhật bot đã cài) */
+    const UPDATES = ['message', 'edited_message', 'chat_member', 'my_chat_member', 'callback_query', 'message_reaction'];
+    const WEBHOOK_V = '2';
+
+    /** Đăng ký lại loại update cho các bot đã cài (1 lần sau khi cập nhật phiên bản) */
+    public static function refreshWebhooks(): void
+    {
+        if (Settings::get('webhook_v') === self::WEBHOOK_V) return;
+        Settings::set('webhook_v', self::WEBHOOK_V);
+        $base = site_url();
+        if (!str_starts_with($base, 'https://')) return;
+        foreach (DB::all('SELECT * FROM tg_bots WHERE enabled = 1') as $b) {
+            (new Telegram($b['token']))->tryCall('setWebhook', [
+                'url' => $base . '/webhook.php?bot=' . $b['id'], 'secret_token' => self::webhookSecret((int)$b['id']),
+                'allowed_updates' => self::UPDATES, 'max_connections' => 40,
+            ]);
+        }
+    }
+
     private array $in;
     private string $method;
 
@@ -418,7 +437,7 @@ class Api
             $api->call('setWebhook', [
                 'url' => $url,
                 'secret_token' => self::webhookSecret((int)$bot['id']),
-                'allowed_updates' => ['message', 'edited_message', 'chat_member', 'my_chat_member', 'callback_query'],
+                'allowed_updates' => self::UPDATES,
                 'max_connections' => 40,
             ]);
             $this->registerMenus($api);
