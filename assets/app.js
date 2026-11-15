@@ -120,7 +120,7 @@
     settings: ['Cài đặt', 'settings', ''], bot_added: ['Thêm bot vào nhóm', 'bot', 'green'], bot_removed: ['Bot rời nhóm', 'bot', 'red'],
     bot_add: ['Thêm bot', 'bot', 'blue'], bot_delete: ['Xoá bot', 'bot', 'red'], bot_on: ['Bật bot', 'power', 'green'], bot_off: ['Tắt bot', 'power', ''],
     rule: ['Lệnh tự tạo', 'terminal', 'blue'], ad_post: ['Quảng cáo', 'megaphone', 'blue'], username: ['Nhắc đặt username', 'user', 'amber'], login: ['Đăng nhập', 'key', 'green'], update: ['Cập nhật hệ thống', 'download', 'blue'], system: ['Hệ thống', 'settings', ''], pin: ['Ghim tin', 'pin', 'blue'], unpin: ['Bỏ ghim', 'pin', ''],
-    learn: ['Nhắc học tập', 'book', 'amber'], learn_done: ['Hoàn thành bài học', 'book', 'green'],
+    gate: ['Chưa đủ điều kiện chat', 'lock', 'amber'], learn: ['Nhắc học tập', 'book', 'amber'], learn_done: ['Hoàn thành bài học', 'book', 'green'],
     payments_settings: ['Cài đặt nạp tiền', 'bank', ''], wallet_assign: ['Cộng tiền tay', 'wallet', 'green'], wallet_adjust: ['Điều chỉnh số dư', 'wallet', 'blue'],
   };
 
@@ -348,7 +348,7 @@
     if (isWebAdmin()) {
       return {
         tab: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/logs', 'list', 'Nhật ký'], ['/more', 'grid', 'Thêm']],
-        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh'], ['/ads', 'megaphone', 'Quảng cáo'], ['/learn', 'book', 'Học tập'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/payments', 'bank', 'Nạp tiền & ân xá'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ...payNav(), ['/account', 'user', 'Tài khoản']],
+        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh'], ['/ads', 'megaphone', 'Quảng cáo'], ['/learn', 'book', 'Học tập'], ['/gates', 'lock', 'Điều kiện chat'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/payments', 'bank', 'Nạp tiền & ân xá'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ...payNav(), ['/account', 'user', 'Tài khoản']],
       };
     }
     const m = [['/', 'star', 'Của tôi'], ['/rank', 'trophy', 'Xếp hạng'], ...payNav(), ['/account', 'user', 'Tài khoản']];
@@ -376,7 +376,7 @@
     const path = current();
     const direct = (p) => (p === '/' ? path === '/' : path === p || path.startsWith(p + '/') || (p === '/groups' && path.startsWith('/group/')) || (p === '/rules' && path === '/commands'));
     const inTabs = items.tab.some(([p]) => p !== '/more' && direct(p));
-    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments', '/learn', '/keyboard'].some((x) => path.startsWith(x)));
+    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments', '/learn', '/keyboard', '/gates'].some((x) => path.startsWith(x)));
     $('#tabbar').innerHTML = items.tab.map(([p, ic, t]) => `<a href="#${p}" class="${isActive(p) ? 'active' : ''}">${icon(ic)}<span>${t}</span></a>`).join('');
     $('#sidebar').innerHTML = `<div class="brand"><img src="assets/icon.svg" alt="">${esc(S.site)}</div>`
       + items.side.map(([p, ic, t]) => `<a href="#${p}" class="nav ${isActive(p) && !(p === '/more') ? 'active' : ''}">${icon(ic)}${t}</a>`).join('')
@@ -2728,7 +2728,8 @@
       <div class="list">
         <a class="list-item" href="#/rules">${icon('terminal')}<div class="grow">Lệnh tự tạo & lệnh mặc định</div><span class="chev">${icon('chevron')}</span></a>
         ${isWebAdmin() ? `<a class="list-item" href="#/ads">${icon('megaphone')}<div class="grow">Quảng cáo</div><span class="chev">${icon('chevron')}</span></a>
-        <a class="list-item" href="#/learn">${icon('book')}<div class="grow">Học tập bắt buộc</div><span class="chev">${icon('chevron')}</span></a>` : ''}
+        <a class="list-item" href="#/learn">${icon('book')}<div class="grow">Học tập bắt buộc</div><span class="chev">${icon('chevron')}</span></a>
+        <a class="list-item" href="#/gates">${icon('lock')}<div class="grow">Điều kiện nhắn tin giữa các nhóm</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         ${isWebAdmin() ? `<a class="list-item" href="#/users">${icon('key')}<div class="grow">Tài khoản web & phân quyền</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/payments">${icon('bank')}<div class="grow">Nạp tiền & ân xá</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/system">${icon('download')}<div class="grow">Hệ thống & cập nhật</div><span class="chev">${icon('chevron')}</span></a>` : ''}
@@ -3596,6 +3597,95 @@
       },
     };
   }, { webAdmin: true, title: 'Bàn phím bot' });
+
+  // ================= Điều kiện nhắn tin giữa các nhóm =================
+  function gateSheet(r, d, onSaved) {
+    const v = r ? { ...r } : { enabled: true, group_id: d.groups[1]?.id || d.groups[0]?.id, source_id: d.groups[0]?.id, metric: 'points', min: 50, exempt_admins: true, cooldown: 60, autodel: 60, text: '', button_text: '', button_url: '' };
+    const gopt = (sel) => d.groups.map((g) => `<option value="${g.id}" ${g.id === sel ? 'selected' : ''}>${esc(g.title)}</option>`).join('');
+    const draw = () => {
+      const unit = d.metrics[v.metric].unit;
+      const src = d.groups.find((g) => g.id === Number(v.source_id));
+      return `<div class="sheet-head"><h2>${r ? 'Sửa điều kiện' : 'Điều kiện nhắn tin mới'}</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
+      <form id="fgate" class="stack">
+        <label class="field"><span class="lbl">💬 Nhóm áp dụng <span class="xs muted">(chưa đạt thì không chat được ở nhóm này)</span></span><select class="input" name="group_id">${gopt(Number(v.group_id))}</select></label>
+        <label class="field"><span class="lbl">📊 Tính điều kiện ở nhóm</span><select class="input" name="source_id">${gopt(Number(v.source_id))}</select>
+          <div class="hint">Có thể chọn chính nhóm áp dụng, VD cần 10 điểm ở chính nhóm đó mới được gửi tin.</div></label>
+        <div class="field"><span class="lbl">Điều kiện</span><div class="segmented">${Object.entries(d.metrics).map(([k, m]) => `<button type="button" data-metric="${k}" class="${v.metric === k ? 'active' : ''}">${esc(m.name)}</button>`).join('')}</div></div>
+        ${v.metric === 'member' ? `<div class="alert info">${icon('info')}<div class="xs">Phải đang là thành viên nhóm <b>${esc(src?.title || '')}</b> mới chat được ở nhóm áp dụng.</div></div>`
+          : `<label class="field"><span class="lbl">Tối thiểu</span><div class="row"><input class="input" name="min" inputmode="numeric" value="${Number(v.min) || ''}" style="font-weight:700"><span class="small muted nowrap">${unit} ở nhóm ${esc(src?.title || '')}</span></div></label>`}
+        <div class="card" style="box-shadow:none">${sw('exempt_admins', v.exempt_admins, 'Bỏ qua quản trị viên')}${sw('enabled', v.enabled, 'Bật điều kiện này')}</div>
+        <div class="grid grid-2">
+          <label class="field"><span class="lbl">Nhắc lại sau (giây)</span><input class="input" name="cooldown" inputmode="numeric" value="${v.cooldown}"></label>
+          <label class="field"><span class="lbl">Tự xoá tin nhắc sau (giây)</span><input class="input" name="autodel" inputmode="numeric" value="${v.autodel}"></label>
+        </div>
+        <label class="field"><span class="lbl">Nội dung nhắc <span class="xs muted">(để trống = mặc định)</span></span><textarea class="input" name="text" rows="4" placeholder="${esc(v.metric === 'member' ? d.default_text_member : d.default_text)}">${esc(v.text)}</textarea>
+          <div class="hint">Biến: <code>{mention}</code> <code>{name}</code> <code>{need}</code> mức cần · <code>{have}</code> đang có · <code>{missing}</code> còn thiếu · <code>{unit}</code> · <code>{source}</code> nhóm tính điểm · <code>{group}</code>. Được dùng &lt;b&gt;đậm&lt;/b&gt;.</div></label>
+        <div class="grid grid-2">
+          <label class="field"><span class="lbl">Chữ trên nút</span><input class="input" name="button_text" value="${esc(v.button_text)}" placeholder="👉 Vào nhóm ${esc((src?.title || '').slice(0, 20))}"></label>
+          <label class="field"><span class="lbl">Link nút</span><input class="input mono" name="button_url" value="${esc(v.button_url)}" placeholder="${src?.public ? 'tự dùng link nhóm' : 'https://t.me/+… link mời'}"></label>
+        </div>
+        ${!v.button_url && src && !src.public ? `<div class="xs muted" style="margin-top:-6px">Nhóm ${esc(src.title)} là nhóm riêng tư: dán link mời nếu muốn tin nhắc có nút vào nhóm.</div>` : ''}
+        <div class="grid ${r ? 'grid-2' : ''}">${r ? `<button type="button" class="btn soft-danger" data-gdel>${icon('trash', 'sm')}Xoá</button>` : ''}<button class="btn primary">${icon('check', 'sm')}Lưu</button></div>
+      </form>`;
+    };
+    sheet('<div id="gbox"></div>', (el, close) => {
+      const box = $('#gbox', el);
+      const keep = () => { const f = $('#fgate', el); if (f) Object.assign(v, formData(f)); };
+      box.innerHTML = draw();
+      el.addEventListener('change', (e) => { if (e.target.name === 'source_id') { keep(); box.innerHTML = draw(); } });
+      el.addEventListener('click', async (e) => {
+        const m = e.target.closest('[data-metric]');
+        if (m) { keep(); v.metric = m.dataset.metric; box.innerHTML = draw(); return; }
+        if (e.target.closest('[data-gdel]')) {
+          if (!(await confirmBox('Xoá điều kiện?', 'Thành viên sẽ chat bình thường ở nhóm này.', { danger: true, ok: 'Xoá' }))) return;
+          await api('gates/delete', { id: r.id }); close(); toast('Đã xoá'); onSaved();
+        }
+      });
+      el.addEventListener('submit', (e) => {
+        e.preventDefault();
+        keep();
+        withBtn(e.target.querySelector('button.primary'), async () => {
+          try { await api('gates/save', { rule: { ...v, id: r?.id, group_id: Number(v.group_id), source_id: Number(v.source_id), min: Number(String(v.min || 0).replace(/\D/g, '')) } }); close(); toast('Đã lưu điều kiện'); onSaved(); }
+          catch (err) { toast(err.message, 'err'); }
+        });
+      });
+    });
+  }
+
+  route('/gates', async () => {
+    const d = await api('gates');
+    const gname = (id) => d.groups.find((g) => g.id === Number(id))?.title || '(nhóm đã rời)';
+    const desc = (r) => r.metric === 'member' ? `phải là thành viên <b>${esc(gname(r.source_id))}</b>`
+      : `cần ≥ <b>${num(r.min)}</b> ${d.metrics[r.metric].unit} ở <b>${esc(gname(r.source_id))}</b>`;
+    return {
+      title: 'Điều kiện nhắn tin',
+      actions: `<button class="btn primary sm" data-gnew>${icon('plus', 'sm')}Điều kiện</button>`,
+      html: `
+        <div class="alert info" style="margin-bottom:12px">${icon('lock')}<div class="xs">Đặt điều kiện để được nhắn tin, VD <b>cần ít nhất 50 điểm ở nhóm A mới chat được ở nhóm B</b>. Chưa đạt thì bot <b>xoá tin</b> và nhắc còn thiếu bao nhiêu. Một nhóm có thể có nhiều điều kiện (phải đạt tất cả).</div></div>
+        <div class="list">${d.rules.length ? d.rules.map((r) => `<button type="button" class="list-item" data-gedit="${r.id}" style="align-items:flex-start">
+            <span class="log-ico ${r.enabled ? 'blue' : ''}">${icon('lock', 'sm')}</span>
+            <div class="grow" style="min-width:0;text-align:left"><div class="row wrap" style="gap:6px"><b class="ellipsis">💬 ${esc(gname(r.group_id))}</b>${r.enabled ? '' : '<span class="badge">Tắt</span>'}</div>
+              <div class="small text-2" style="margin-top:2px">${desc(r)}</div>
+              <div class="xs muted">${r.exempt_admins ? 'Bỏ qua admin · ' : ''}nhắc lại sau ${r.cooldown}s${r.blocked ? ` · ${r.blocked} người bị nhắc trong 24 giờ` : ''}</div></div><span class="chev">${icon('chevron')}</span></button>`).join('')
+          : empty('lock', 'Chưa có điều kiện nào.<br>Bấm <b>+ Điều kiện</b>, VD: nhóm B cần 50 điểm ở nhóm A.')}</div>
+        <form class="card card-pad stack" id="fgcheck" style="margin-top:14px"><div class="small" style="font-weight:600">🔎 Kiểm tra thử 1 thành viên</div>
+          <div class="row" style="gap:8px"><input class="input grow" name="who" placeholder="ID Telegram hoặc @username" required><button class="btn sm primary">Kiểm tra</button></div><div data-gres></div></form>`,
+      mount: (root) => {
+        $('[data-gnew]').onclick = () => (d.groups.length ? gateSheet(null, d, () => render()) : toast('Chưa có nhóm nào', 'err'));
+        root.addEventListener('click', (e) => { const b = e.target.closest('[data-gedit]'); if (b) gateSheet(d.rules.find((r) => r.id === Number(b.dataset.gedit)), d, () => render()); });
+        $('#fgcheck', root).onsubmit = (e) => {
+          e.preventDefault();
+          withBtn(e.target.querySelector('button'), async () => {
+            const out = $('[data-gres]', root);
+            try {
+              const r = await api('gates/check', { who: e.target.who.value });
+              out.innerHTML = `<div class="small" style="margin-top:4px"><b>${esc(r.name)}</b> <span class="mono xs muted">${esc(r.tg_user_id)}</span></div>` + (r.results.length ? r.results.map((x) => `<div class="row small" style="gap:8px;margin-top:6px"><span>${x.pass ? '✅' : '⛔'}</span><div class="grow">${esc(x.group)}: ${x.metric === 'member' ? `thành viên ${esc(x.source)}` : `${num(x.have)}/${num(x.min)} ${d.metrics[x.metric].unit} ở ${esc(x.source)}`}${x.enabled ? '' : ' <span class="badge">tắt</span>'}</div></div>`).join('') : '<div class="xs muted">Chưa có điều kiện nào</div>');
+            } catch (err) { out.innerHTML = `<div class="alert err" style="margin-top:6px">${icon('alert')}<div class="xs">${esc(err.message)}</div></div>`; }
+          });
+        };
+      },
+    };
+  }, { webAdmin: true, title: 'Điều kiện nhắn tin', back: '/more' });
 
   route('/me', viewMe, { title: 'Điểm của tôi', back: '/more' });
 
