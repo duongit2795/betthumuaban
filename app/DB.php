@@ -6,7 +6,7 @@ class DB
 {
     private static ?PDO $pdo = null;
     private static string $driver = 'sqlite';
-    const SCHEMA_VERSION = 12;
+    const SCHEMA_VERSION = 13;
 
     public static function connect(?array $c = null): PDO
     {
@@ -393,6 +393,8 @@ class DB
         self::addColumn('app_users', 'balance', ($my ? 'BIGINT' : 'INTEGER') . ' NOT NULL DEFAULT 0');
         // Các migration theo phiên bản schema đặt ở đây trong tương lai
         $v = (int)(Settings::get('schema_version') ?? 0);
+        // v13: nhật ký quảng cáo mặc định tắt → dọn các dòng cũ
+        if ($v > 0 && $v < 13) $pdo->exec("DELETE FROM app_logs WHERE action = 'ad_post'");
         if ($v < self::SCHEMA_VERSION) Settings::set('schema_version', (string)self::SCHEMA_VERSION);
     }
 

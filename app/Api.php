@@ -110,6 +110,7 @@ class Api
             'ads/ad/save' => 'adSave',
             'ads/ad/delete' => 'adDelete',
             'ads/ad/move' => 'adMove',
+            'ads/log' => 'adLog',
             'system' => 'system',
             'system/settings' => 'systemSettings',
             'system/check-update' => 'checkUpdate',
@@ -1324,6 +1325,7 @@ class Api
             'groups' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title'], 'bot' => $g['bot_username']],
                 DB::all('SELECT g.id, g.title, b.username AS bot_username FROM tg_groups g LEFT JOIN tg_bots b ON b.id = g.bot_id WHERE g.active = 1 ORDER BY g.title')),
             'last_tick' => (int)Settings::get('ads_last_tick') ?: null,
+            'ads_log' => Settings::get('ads_log') === '1',
             'cron_url' => site_url() . '/cron.php?key=' . Settings::get('cron_key'),
             'cron_path' => ROOT . '/cron.php',
             'cron_cmd' => cron_command(),
@@ -1480,6 +1482,16 @@ class Api
         }
         Repo::log(null, $u['username'], 'system', null, 'Phát quảng cáo ngay: ' . $c['name']);
         return ['done' => $done, 'errors' => $errors];
+    }
+
+    /** Bật / tắt ghi nhật ký mỗi lần đăng quảng cáo (tắt thì xoá luôn nhật ký quảng cáo cũ) */
+    private function adLog(): array
+    {
+        Auth::requireAdmin();
+        $on = (bool)$this->in('on');
+        Settings::set('ads_log', $on ? '1' : '0');
+        $removed = $on ? 0 : DB::run("DELETE FROM app_logs WHERE action = 'ad_post'");
+        return ['on' => $on, 'removed' => $removed];
     }
 
     private function adCampaignStop(): array
