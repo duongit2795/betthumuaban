@@ -39,6 +39,7 @@ class Commands
         'login' => ['private', 'login', 'Đăng nhập web: /login MÃ', 'Đăng nhập web bằng mã 6 ký tự lấy ở trang đăng nhập. Bot sẽ hỏi xác nhận.', '/login MÃ', ['/login K7QX4P', 'Hoặc chỉ gửi mã: K7QX4P'], '', ['dangnhap']],
         'link' => ['private', 'link', 'Liên kết tài khoản web: /link MÃ', 'Liên kết Telegram với tài khoản web đã có bằng mã tạo ở trang Tài khoản.', '/link MÃ', ['/link 8F3A2C1D'], ''],
         'balance' => ['private', 'sodu', 'Số dư ví & cách nạp tiền', 'Xem số dư ví VND, nội dung chuyển khoản nạp tiền và các hình phạt có thể ân xá.', '/sodu', ['/sodu'], 'Cần liên kết Telegram với tài khoản web.', ['naptien']],
+        'learn' => ['private', 'hoctap', 'Học tập (bài học bắt buộc)', 'Bắt đầu / tiếp tục bài học bắt buộc. Học xong mới chat được trong nhóm có bật Học tập. Cũng có thể bấm nút Học tập trên bàn phím bot.', '/hoctap', ['/hoctap'], 'Chỉ hoạt động khi admin web bật tính năng Học tập.'],
         'pme' => ['private', 'me', 'Điểm của tôi', 'Xem điểm và số tin nhắn của bạn ở tất cả các nhóm có bot.', '/me', ['/me'], ''],
     ];
     const FIXED = ['start']; // không đổi tên được

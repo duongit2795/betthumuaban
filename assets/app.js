@@ -56,6 +56,7 @@
     up: '<path d="m18 15-6-6-6 6"/>',
     down: '<path d="m6 9 6 6 6-6"/>',
     terminal: '<path d="m4 17 6-6-6-6M12 19h8"/>',
+    book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/>',
     wallet: '<path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5"/><path d="M17 14h.01"/>',
     heart: '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z"/>',
     bank: '<path d="M3 21h18M4 10h16M5 10v8M9.5 10v8M14.5 10v8M19 10v8M12 3l9 5H3z"/>',
@@ -119,6 +120,7 @@
     settings: ['Cài đặt', 'settings', ''], bot_added: ['Thêm bot vào nhóm', 'bot', 'green'], bot_removed: ['Bot rời nhóm', 'bot', 'red'],
     bot_add: ['Thêm bot', 'bot', 'blue'], bot_delete: ['Xoá bot', 'bot', 'red'], bot_on: ['Bật bot', 'power', 'green'], bot_off: ['Tắt bot', 'power', ''],
     rule: ['Lệnh tự tạo', 'terminal', 'blue'], ad_post: ['Quảng cáo', 'megaphone', 'blue'], username: ['Nhắc đặt username', 'user', 'amber'], login: ['Đăng nhập', 'key', 'green'], update: ['Cập nhật hệ thống', 'download', 'blue'], system: ['Hệ thống', 'settings', ''], pin: ['Ghim tin', 'pin', 'blue'], unpin: ['Bỏ ghim', 'pin', ''],
+    learn: ['Nhắc học tập', 'book', 'amber'], learn_done: ['Hoàn thành bài học', 'book', 'green'],
     payments_settings: ['Cài đặt nạp tiền', 'bank', ''], wallet_assign: ['Cộng tiền tay', 'wallet', 'green'], wallet_adjust: ['Điều chỉnh số dư', 'wallet', 'blue'],
   };
 
@@ -346,7 +348,7 @@
     if (isWebAdmin()) {
       return {
         tab: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/logs', 'list', 'Nhật ký'], ['/more', 'grid', 'Thêm']],
-        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh'], ['/ads', 'megaphone', 'Quảng cáo'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/payments', 'bank', 'Nạp tiền & ân xá'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ...payNav(), ['/account', 'user', 'Tài khoản']],
+        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh'], ['/ads', 'megaphone', 'Quảng cáo'], ['/learn', 'book', 'Học tập'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/payments', 'bank', 'Nạp tiền & ân xá'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ...payNav(), ['/account', 'user', 'Tài khoản']],
       };
     }
     const m = [['/', 'star', 'Của tôi'], ['/rank', 'trophy', 'Xếp hạng'], ...payNav(), ['/account', 'user', 'Tài khoản']];
@@ -374,7 +376,7 @@
     const path = current();
     const direct = (p) => (p === '/' ? path === '/' : path === p || path.startsWith(p + '/') || (p === '/groups' && path.startsWith('/group/')) || (p === '/rules' && path === '/commands'));
     const inTabs = items.tab.some(([p]) => p !== '/more' && direct(p));
-    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments'].some((x) => path.startsWith(x)));
+    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments', '/learn'].some((x) => path.startsWith(x)));
     $('#tabbar').innerHTML = items.tab.map(([p, ic, t]) => `<a href="#${p}" class="${isActive(p) ? 'active' : ''}">${icon(ic)}<span>${t}</span></a>`).join('');
     $('#sidebar').innerHTML = `<div class="brand"><img src="assets/icon.svg" alt="">${esc(S.site)}</div>`
       + items.side.map(([p, ic, t]) => `<a href="#${p}" class="nav ${isActive(p) && !(p === '/more') ? 'active' : ''}">${icon(ic)}${t}</a>`).join('')
@@ -2629,7 +2631,8 @@
       <div class="card card-pad row" style="margin-bottom:14px">${avatar(S.user.display_name, S.user.id, 'lg')}<div class="grow"><h2>${esc(S.user.display_name)}</h2><div class="small muted">@${esc(S.user.username)} · ${roleLabel()}</div></div></div>
       <div class="list">
         <a class="list-item" href="#/rules">${icon('terminal')}<div class="grow">Lệnh tự tạo & lệnh mặc định</div><span class="chev">${icon('chevron')}</span></a>
-        ${isWebAdmin() ? `<a class="list-item" href="#/ads">${icon('megaphone')}<div class="grow">Quảng cáo xoay vòng</div><span class="chev">${icon('chevron')}</span></a>` : ''}
+        ${isWebAdmin() ? `<a class="list-item" href="#/ads">${icon('megaphone')}<div class="grow">Quảng cáo</div><span class="chev">${icon('chevron')}</span></a>
+        <a class="list-item" href="#/learn">${icon('book')}<div class="grow">Học tập bắt buộc</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         ${isWebAdmin() ? `<a class="list-item" href="#/users">${icon('key')}<div class="grow">Tài khoản web & phân quyền</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/payments">${icon('bank')}<div class="grow">Nạp tiền & ân xá</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/system">${icon('download')}<div class="grow">Hệ thống & cập nhật</div><span class="chev">${icon('chevron')}</span></a>` : ''}
@@ -3245,6 +3248,173 @@
       },
     };
   }, { webAdmin: true, title: 'Nạp tiền & ân xá', back: '/more' });
+
+  // ================= Học tập (bài học bắt buộc) =================
+  const LEARN_ST = { required: ['Cần học', 'amber'], learning: ['Đang học', 'blue'], done: ['Đã học', 'green'] };
+  const LEARN_VARS = {
+    group_text: [['{mention}', 'Tag thành viên'], ['{name}', 'Tên'], ['{group}', 'Tên nhóm'], ['{bot}', '@bot']],
+    done_text: [['{mention}', 'Tag thành viên'], ['{name}', 'Tên'], ['{group}', 'Tên nhóm']],
+    intro_text: [['{name}', 'Tên'], ['{total}', 'Số câu hỏi']],
+    finish_text: [['{name}', 'Tên'], ['{mention}', 'Tag'], ['{total}', 'Số câu hỏi']],
+  };
+  const learnNorm = (s) => stripTags(String(s || '')).replace(/[​-‍﻿]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+  function questionSheet(q, d, onSaved) {
+    sheet(`<div class="sheet-head"><h2>${q ? 'Sửa câu hỏi' : 'Câu hỏi mới'}</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
+      <form id="fq" class="stack">
+        <label class="field"><span class="lbl">Câu hỏi</span><textarea class="input" data-rich name="question" style="min-height:110px" placeholder="@coohhi là thằng scam, bạn hãy viết lại @coohhi để hoàn thành câu hỏi">${esc(q?.question || '')}</textarea></label>
+        <label class="field"><span class="lbl">Đáp án đúng <span class="xs muted">(mỗi dòng 1 đáp án, khớp 1 trong các dòng là qua)</span></span><textarea class="input mono" name="answers" rows="3" placeholder="@coohhi">${esc((q?.answers || []).join('\n'))}</textarea></label>
+        <label class="field"><span class="lbl">Cách so khớp</span><select class="input" name="match_mode">${Object.entries(d.modes).map(([k, l]) => `<option value="${k}" ${(q?.match_mode || 'exact') === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>
+          <div class="hint">Không phân biệt chữ hoa / thường và khoảng trắng thừa. <b>Có chứa</b>: câu trả lời chỉ cần chứa đáp án (VD trả lời "@coohhi scam" vẫn đúng).</div></label>
+        <label class="field"><span class="lbl">Gợi ý khi trả lời sai (tuỳ chọn)</span><input class="input" name="hint" value="${esc(q?.hint || '')}" placeholder="VD: Gõ đúng @coohhi, có dấu @"></label>
+        <div class="card card-pad" style="box-shadow:none;background:var(--surface-2)">
+          <div class="small" style="font-weight:600;margin-bottom:6px">🧪 Thử trả lời</div>
+          <div class="row" style="gap:8px"><input class="input grow" data-try placeholder="Gõ thử câu trả lời…"><span data-tryres class="nowrap small"></span></div>
+        </div>
+        <div class="card" style="box-shadow:none">${sw('enabled', q ? q.enabled : 1, 'Bật câu hỏi này')}</div>
+        <div class="grid ${q ? 'grid-2' : ''}">${q ? `<button type="button" class="btn soft-danger" data-delq>${icon('trash', 'sm')}Xoá</button>` : ''}<button class="btn primary">${icon('check', 'sm')}Lưu</button></div>
+      </form>`, (el, close) => {
+      const f = $('#fq', el);
+      const test = () => {
+        const a = learnNorm($('[data-try]', el).value);
+        const res = $('[data-tryres]', el);
+        if (!a) { res.textContent = ''; return; }
+        const oks = f.answers.value.split('\n').map(learnNorm).filter(Boolean);
+        const ok = oks.some((x) => (f.match_mode.value === 'contains' ? a.includes(x) : a === x));
+        res.innerHTML = ok ? '<b style="color:var(--success)">✅ Đúng</b>' : '<b style="color:var(--danger)">❌ Sai</b>';
+      };
+      el.addEventListener('input', test);
+      el.addEventListener('change', test);
+      $('[data-delq]', el)?.addEventListener('click', async () => {
+        if (!(await confirmBox('Xoá câu hỏi?', 'Câu hỏi sẽ bị xoá khỏi bài học.', { danger: true, ok: 'Xoá' }))) return;
+        await api('learn/question/delete', { id: q.id }); close(); toast('Đã xoá'); onSaved();
+      });
+      f.onsubmit = (e) => {
+        e.preventDefault();
+        withBtn(f.querySelector('button.primary'), async () => {
+          try { await api('learn/question/save', { id: q?.id, question: f.question.value, answers: f.answers.value, match_mode: f.match_mode.value, hint: f.hint.value, enabled: f.enabled.checked }); close(); toast('Đã lưu câu hỏi'); onSaved(); }
+          catch (err) { toast(err.message, 'err'); }
+        });
+      };
+    });
+  }
+
+  route('/learn', async () => {
+    const d = await api('learn');
+    const c = d.config;
+    const tab = sessionStorage.getItem('learnTab') || 'questions';
+    const total = d.questions.filter((q) => q.enabled).length;
+    const bot = d.bots[0];
+    const varChips = (k) => `<div class="chips" style="flex-wrap:wrap">${(LEARN_VARS[k] || []).map(([v, t]) => `<button type="button" class="chip var-chip" data-lvar="${v}" data-for="${k}" title="${esc(t)}"><code>${v}</code><small>${esc(t)}</small></button>`).join('')}</div>`;
+    const txt = (k, label, hint = '') => `<div class="field"><span class="lbl">${label}</span><textarea class="input" data-rich name="${k}" style="min-height:80px">${esc(c[k])}</textarea>${LEARN_VARS[k] ? varChips(k) : ''}${hint ? `<div class="hint">${hint}</div>` : ''}</div>`;
+    const progItem = (p) => { const [l, cl] = LEARN_ST[p.status] || [p.status, '']; return `<div class="list-item" style="align-items:flex-start">${avatar(p.name, p.tg_user_id)}
+      <div class="grow" style="min-width:0"><div class="row wrap" style="gap:6px"><b class="ellipsis">${esc(p.name)}</b>${p.username ? `<span class="xs muted">@${esc(p.username)}</span>` : ''}<span class="badge ${cl}">${l}</span></div>
+      <div class="xs muted"><span class="mono">${esc(p.tg_user_id)}</span> · ${p.status === 'done' ? 'xong ' + ago(p.done_at) : `câu ${Math.min(p.step, total)}/${total}`}${p.wrong ? ` · sai ${p.wrong} lần` : ''} · ${ago(p.updated_at)}</div>
+      <div class="row" style="gap:6px;margin-top:6px">${p.status !== 'done' ? `<button class="btn sm soft" data-lpass="${esc(p.tg_user_id)}">${icon('check', 'sm')}Cho qua</button>` : ''}<button class="btn sm ghost" data-lreset="${esc(p.tg_user_id)}">${icon('refresh', 'sm')}Bắt học lại</button></div></div></div>`; };
+    return {
+      title: 'Học tập',
+      actions: `<button class="btn primary sm" data-newq>${icon('plus', 'sm')}Câu hỏi</button>`,
+      html: `
+      <div class="card card-pad" style="margin-bottom:14px">
+        <div class="row" style="align-items:flex-start"><div class="feat-ico">📚</div><div class="grow"><div class="row wrap" style="gap:6px"><b style="font-size:16px">Học tập bắt buộc</b>${c.enabled ? '<span class="badge green">Đang bật</span>' : '<span class="badge">Đang tắt</span>'}</div>
+          <div class="xs text-2" style="margin-top:4px">Thành viên chưa học mà nhắn trong nhóm → <b>xoá tin</b> + nhắc vào bot học. Trong bot bấm nút <b>${esc(c.button)}</b> (hoặc /${esc(d.cmd)}), trả lời đúng hết <b>${total}</b> câu là chat được.</div></div></div>
+        <div class="grid grid-3x" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px">
+          <div class="stat" style="padding:8px 0;text-align:center"><div class="value" style="margin:0;font-size:22px;color:var(--success)">${num(d.stats.done)}</div><div class="sub">Đã học</div></div>
+          <div class="stat" style="padding:8px 0;text-align:center"><div class="value" style="margin:0;font-size:22px;color:var(--primary)">${num(d.stats.learning)}</div><div class="sub">Đang học</div></div>
+          <div class="stat" style="padding:8px 0;text-align:center"><div class="value" style="margin:0;font-size:22px;color:var(--warning)">${num(d.stats.required)}</div><div class="sub">Chưa học</div></div>
+        </div>
+        ${c.enabled && !total ? `<div class="alert warn" style="margin-top:10px">${icon('alert')}<div class="xs">Chưa có câu hỏi nào đang bật nên bot <b>chưa chặn</b> ai. Thêm câu hỏi để bắt đầu.</div></div>` : ''}
+        ${bot ? `<div class="xs muted" style="margin-top:8px">Link học: <span class="mono">t.me/${esc(bot)}?start=learn</span> <button class="btn icon sm ghost" data-copy="https://t.me/${esc(bot)}?start=learn">${icon('copy', 'sm')}</button></div>` : ''}
+      </div>
+      <div class="tabs" data-tabs><button data-t="questions">Câu hỏi (${d.questions.length})</button><button data-t="settings">Cài đặt</button><button data-t="progress">Tiến độ</button></div>
+
+      <div data-pane="questions">
+        <div class="list">${d.questions.length ? d.questions.map((q, i) => `<div class="list-item ${q.enabled ? '' : 'off'}" style="align-items:flex-start">
+          <div class="rank" style="flex:none">${i + 1}</div>
+          <button type="button" class="grow" data-editq="${q.id}" style="text-align:left;background:none;border:0;padding:0;min-width:0;cursor:pointer;color:inherit">
+            <div class="small" style="font-weight:600;overflow-wrap:anywhere">${esc(stripTags(q.question).slice(0, 160))}</div>
+            <div class="row wrap" style="gap:4px;margin-top:6px">${q.answers.map((a) => `<span class="badge green mono">${esc(a)}</span>`).join('')}<span class="badge">${esc(d.modes[q.match_mode])}</span>${q.enabled ? '' : '<span class="badge red">Tắt</span>'}${q.hint ? '<span class="badge blue">💡 gợi ý</span>' : ''}</div>
+          </button>
+          <div class="ad-move"><button class="btn icon sm ghost" data-qmove="${q.id}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="Lên">${icon('up', 'sm')}</button><button class="btn icon sm ghost" data-qmove="${q.id}" data-dir="1" ${i === d.questions.length - 1 ? 'disabled' : ''} aria-label="Xuống">${icon('down', 'sm')}</button></div>
+        </div>`).join('') : empty('note', 'Chưa có câu hỏi.<br>Bấm <b>+ Câu hỏi</b> để thêm, VD: <i>"@coohhi là thằng scam, bạn hãy viết lại @coohhi để hoàn thành câu hỏi"</i> với đáp án <b>@coohhi</b>.')}
+          <button type="button" class="list-item" data-newq style="color:var(--primary);justify-content:center">${icon('plus', 'sm')}<b>Thêm câu hỏi</b></button></div>
+        <div class="xs muted" style="margin-top:10px">Thành viên trả lời lần lượt từ câu 1. Trả lời sai thì làm lại câu đó (kèm gợi ý nếu có).</div>
+      </div>
+
+      <form class="stack hidden" data-pane="settings" id="flearn">
+        <div class="card">${sw('enabled', c.enabled, 'Bật Học tập bắt buộc')}${sw('exempt_admins', c.exempt_admins, 'Bỏ qua quản trị viên')}</div>
+        <div class="card card-pad stack">
+          <div class="field"><span class="lbl">Áp dụng cho nhóm <span class="xs muted">(không chọn = tất cả)</span></span><div class="chips" style="flex-wrap:wrap">${d.groups.map((g) => `<button type="button" class="chip ${c.groups.includes(g.id) ? 'active' : ''}" data-lg="${g.id}">${esc(g.title)}</button>`).join('') || '<span class="xs muted">Chưa có nhóm</span>'}</div></div>
+          <label class="field"><span class="lbl">Ai phải học</span><select class="input" name="scope">${Object.entries(d.scopes).map(([k, l]) => `<option value="${k}" ${c.scope === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>
+            <div class="hint"><b>Chỉ thành viên mới</b>: người vào nhóm sau khi chọn chế độ này mới phải học; thành viên cũ chat bình thường.</div></label>
+        </div>
+        <div class="card card-pad stack">
+          <h3>🤖 Trong bot</h3>
+          <label class="field"><span class="lbl">Tên nút Học tập (bàn phím bot)</span><input class="input" name="button" value="${esc(c.button)}" maxlength="30"></label>
+          ${txt('intro_text', 'Lời mở đầu bài học')}
+          <div class="grid grid-2"><label class="field"><span class="lbl">Khi trả lời đúng</span><input class="input" name="correct_text" value="${esc(c.correct_text)}"></label><label class="field"><span class="lbl">Khi trả lời sai</span><input class="input" name="wrong_text" value="${esc(c.wrong_text)}"></label></div>
+          ${txt('finish_text', 'Khi hoàn thành (trong bot)')}
+        </div>
+        <div class="card card-pad stack">
+          <h3>👥 Trong nhóm</h3>
+          ${txt('group_text', 'Tin nhắc khi chưa học mà chat', 'Kèm nút mở bot để học.')}
+          <div class="grid grid-2">
+            <label class="field"><span class="lbl">Chữ trên nút</span><input class="input" name="group_button" value="${esc(c.group_button)}" maxlength="40"></label>
+            <label class="field"><span class="lbl">Nhắc lại sau (giây)</span><input class="input" name="cooldown" inputmode="numeric" value="${c.cooldown}"></label>
+          </div>
+          <label class="field"><span class="lbl">Tự xoá tin nhắc sau (giây, 0 = không)</span><input class="input" name="autodel" inputmode="numeric" value="${c.autodel}"></label>
+          <div class="card" style="box-shadow:none">${sw('notify_done', c.notify_done, 'Thông báo trong nhóm khi học xong')}</div>
+          ${txt('done_text', 'Thông báo hoàn thành trong nhóm')}
+          <label class="field"><span class="lbl">Tự xoá thông báo hoàn thành sau (giây, 0 = không)</span><input class="input" name="done_autodel" inputmode="numeric" value="${c.done_autodel}"></label>
+        </div>
+        <button class="btn primary block">Lưu cài đặt Học tập</button>
+      </form>
+
+      <div class="hidden" data-pane="progress">
+        <div class="chips" style="margin-bottom:8px">${[['', 'Tất cả'], ['required', 'Chưa học'], ['learning', 'Đang học'], ['done', 'Đã học']].map(([k, l]) => `<button class="chip ${k === '' ? 'active' : ''}" data-lst="${k}">${l}</button>`).join('')}</div>
+        <div class="input-icon" style="margin-bottom:10px">${icon('search')}<input class="input" data-lq placeholder="Tìm tên, @username, ID"></div>
+        <div class="list" data-llist>${d.progress.length ? d.progress.map(progItem).join('') : empty('users', 'Chưa có ai')}</div>
+        <form class="card card-pad stack" id="flid" style="margin-top:12px"><div class="small" style="font-weight:600">Xử lý theo ID Telegram</div>
+          <input class="input" name="tg" inputmode="numeric" placeholder="VD 123456789" required>
+          <div class="grid grid-2"><button type="button" class="btn sm soft" data-idpass>Cho qua</button><button type="button" class="btn sm" data-idreset>Bắt học lại</button></div></form>
+      </div>`,
+      mount: (root) => {
+        const setTab = (t) => { sessionStorage.setItem('learnTab', t); $$('[data-t]', root).forEach((b) => b.classList.toggle('active', b.dataset.t === t)); $$('[data-pane]', root).forEach((x) => x.classList.toggle('hidden', x.dataset.pane !== t)); };
+        setTab(tab);
+        $('[data-tabs]', root).onclick = (e) => { const b = e.target.closest('[data-t]'); if (b) setTab(b.dataset.t); };
+        let sel = [...c.groups], st = '';
+        const loadProg = async () => {
+          const r = await api('learn', undefined, { query: { status: st, q: $('[data-lq]', root).value } });
+          $('[data-llist]', root).innerHTML = r.progress.length ? r.progress.map(progItem).join('') : empty('users', 'Không có ai');
+        };
+        $('[data-lq]', root).addEventListener('input', debounce(loadProg, 350));
+        const doId = async (route, tg, ok) => { try { await api(route, { tg_user_id: tg }); toast(ok); await loadProg(); } catch (err) { toast(err.message, 'err'); } };
+        root.addEventListener('click', async (e) => {
+          const t = (s) => e.target.closest(s);
+          let b;
+          if (t('[data-newq]')) return questionSheet(null, d, () => render());
+          if ((b = t('[data-editq]'))) return questionSheet(d.questions.find((q) => q.id === +b.dataset.editq), d, () => render());
+          if ((b = t('[data-qmove]'))) { await api('learn/question/move', { id: +b.dataset.qmove, dir: +b.dataset.dir }); return render(); }
+          if ((b = t('[data-lg]'))) { const id = +b.dataset.lg; sel = sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id]; b.classList.toggle('active'); return; }
+          if ((b = t('[data-lvar]'))) { const ta = $(`#flearn textarea[name=${b.dataset.for}]`, root); if (ta._rich) ta._rich.insert(b.dataset.lvar); else ta.value += b.dataset.lvar; return; }
+          if ((b = t('[data-lst]'))) { st = b.dataset.lst; $$('[data-lst]', root).forEach((x) => x.classList.toggle('active', x === b)); return loadProg(); }
+          if ((b = t('[data-lpass]'))) return doId('learn/pass', b.dataset.lpass, 'Đã cho qua');
+          if ((b = t('[data-lreset]'))) { if (await confirmBox('Bắt học lại?', 'Người này phải học lại từ câu 1 mới chat được.', { ok: 'Bắt học lại' })) doId('learn/reset', b.dataset.lreset, 'Đã đặt lại'); return; }
+          if (t('[data-idpass]') || t('[data-idreset]')) {
+            const tg = $('#flid', root).tg.value.trim();
+            if (!/^\d{3,15}$/.test(tg)) return toast('Nhập ID Telegram (dãy số)', 'err');
+            return t('[data-idpass]') ? doId('learn/pass', tg, 'Đã cho qua') : doId('learn/reset', tg, 'Đã đặt lại');
+          }
+        });
+        $('#flearn', root).onsubmit = (e) => {
+          e.preventDefault();
+          withBtn(e.target.querySelector('button.primary'), async () => {
+            try { await api('learn/save', { config: { ...formData(e.target), groups: sel } }); toast('Đã lưu'); render(); } catch (err) { toast(err.message, 'err'); }
+          });
+        };
+      },
+    };
+  }, { webAdmin: true, title: 'Học tập', back: '/more' });
 
   route('/me', viewMe, { title: 'Điểm của tôi', back: '/more' });
 

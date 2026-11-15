@@ -6,7 +6,7 @@ class DB
 {
     private static ?PDO $pdo = null;
     private static string $driver = 'sqlite';
-    const SCHEMA_VERSION = 9;
+    const SCHEMA_VERSION = 10;
 
     public static function connect(?array $c = null): PDO
     {
@@ -306,6 +306,30 @@ class DB
                 meta TEXT,
                 created_at INT NOT NULL
             )",
+            "CREATE TABLE IF NOT EXISTS learn_questions (
+                id $pk,
+                sort INT NOT NULL DEFAULT 0,
+                question TEXT NOT NULL,
+                answers TEXT,
+                match_mode VARCHAR(16) NOT NULL DEFAULT 'exact',
+                hint TEXT,
+                enabled INT NOT NULL DEFAULT 1,
+                created_at INT NOT NULL,
+                updated_at INT NOT NULL
+            )",
+            "CREATE TABLE IF NOT EXISTS learn_progress (
+                tg_user_id $big NOT NULL PRIMARY KEY,
+                status VARCHAR(16) NOT NULL DEFAULT 'required',
+                step INT NOT NULL DEFAULT 0,
+                wrong INT NOT NULL DEFAULT 0,
+                groups_json TEXT,
+                first_name $str,
+                last_name $str,
+                username $str,
+                started_at INT,
+                done_at INT,
+                updated_at INT NOT NULL
+            )",
             "CREATE TABLE IF NOT EXISTS bank_tx (
                 id $pk,
                 txid VARCHAR(64) NOT NULL UNIQUE,
@@ -329,6 +353,7 @@ class DB
             'idx_msg_updated' => 'tg_messages (group_id, updated_at)',
             'idx_wallet_user' => 'wallet_tx (user_id, id)',
             'idx_bank_status' => 'bank_tx (status, id)',
+            'idx_learn_status' => 'learn_progress (status, updated_at)',
         ];
         foreach ($indexes as $name => $def) {
             try {

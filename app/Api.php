@@ -110,6 +110,13 @@ class Api
             'payments/ignore' => 'paymentsIgnore',
             'users/balance' => 'userBalance',
             'users/tx' => 'userTx',
+            'learn' => 'learn',
+            'learn/save' => 'learnSave',
+            'learn/question/save' => 'learnQuestionSave',
+            'learn/question/delete' => 'learnQuestionDelete',
+            'learn/question/move' => 'learnQuestionMove',
+            'learn/reset' => 'learnReset',
+            'learn/pass' => 'learnPass',
         ];
         $writeRoutes = ['install', 'auth/login', 'auth/register', 'auth/logout', 'me/update', 'me/link-code', 'me/unlink'];
         if (!isset($map[$route])) fail('Không tìm thấy API', 404);
@@ -1859,5 +1866,128 @@ class Api
         Auth::requireAdmin();
         $u = $this->findUser();
         return ['balance' => (int)$u['balance'], 'rows' => array_map([$this, 'txRow'], DB::all('SELECT * FROM wallet_tx WHERE user_id = ? ORDER BY id DESC LIMIT 100', [$u['id']]))];
+    }
+
+    // ================= Học tập =================
+    private function learnRow(array $p): array
+    {
+        return [
+            'tg_user_id' => (string)$p['tg_user_id'], 'status' => $p['status'], 'step' => (int)$p['step'], 'wrong' => (int)$p['wrong'],
+            'name' => Repo::name($p + ['tg_user_id' => $p['tg_user_id']]), 'username' => $p['username'],
+            'groups' => json_decode((string)$p['groups_json'], true) ?: [],
+            'started_at' => $p['started_at'] ? (int)$p['started_at'] : null, 'done_at' => $p['done_at'] ? (int)$p['done_at'] : null, 'updated_at' => (int)$p['updated_at'],
+        ];
+    }
+
+    private function learn(): array
+    {
+        Auth::requireAdmin();
+        $status = (string)$this->in('status', '');
+        $q = trim((string)$this->in('q', ''));
+        $where = [];
+        $p = [];
+        if (in_array($status, ['required', 'learning', 'done'], true)) { $where[] = 'status = ?'; $p[] = $status; }
+        if ($q !== '') {
+            $where[] = '(LOWER(first_name) LIKE ? OR LOWER(last_name) LIKE ? OR LOWER(username) LIKE ? OR CAST(tg_user_id AS CHAR) LIKE ?)';
+            $like = '%' . mb_strtolower(ltrim($q, '@')) . '%';
+            array_push($p, $like, $like, $like, $like);
+        }
+        $rows = DB::all('SELECT * FROM learn_progress' . ($where ? ' WHERE ' . implode(' AND ', $where) : '') . ' ORDER BY updated_at DESC LIMIT 100', $p);
+        $count = fn($st) => (int)DB::val('SELECT COUNT(*) FROM learn_progress WHERE status = ?', [$st]);
+        return [
+            'config' => Learn::config(),
+            'defaults' => Learn::DEFAULTS,
+            'scopes' => Learn::SCOPES,
+            'modes' => Learn::MODES,
+            'questions' => array_map([Learn::class, 'questionRow'], Learn::questions(false)),
+            'groups' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title']], DB::all('SELECT id, title FROM tg_groups WHERE active = 1 ORDER BY title')),
+            'bots' => array_map(fn($b) => $b['username'], DB::all('SELECT username FROM tg_bots WHERE enabled = 1 AND username IS NOT NULL ORDER BY id')),
+            'cmd' => Commands::name('learn'),
+            'stats' => ['done' => $count('done'), 'learning' => $count('learning'), 'required' => $count('required')],
+            'progress' => array_map([$this, 'learnRow'], $rows),
+        ];
+    }
+
+    private function learnSave(): array
+    {
+        $u = Auth::requireAdmin();
+        $c = Learn::save((array)$this->in('config', []));
+        Repo::log(null, $u['username'], 'system', null, 'Cài đặt Học tập: ' . ($c['enabled'] ? 'bật' : 'tắt'));
+        return ['config' => $c];
+    }
+
+    private function learnQuestionSave(): array
+    {
+        Auth::requireAdmin();
+        $id = $this->int('id');
+        $question = trim((string)$this->in('question', ''));
+        if (Learn::norm($question) === '') fail('Nhập nội dung câu hỏi');
+        if (mb_strlen($question) > 3500) fail('Câu hỏi quá dài (tối đa ~3500 ký tự)');
+        $answers = $this->in('answers', []);
+        if (is_string($answers)) $answers = preg_split('/\r?\n/', $answers);
+        $answers = array_values(array_unique(array_filter(array_map(fn($a) => trim(mb_substr((string)$a, 0, 500)), (array)$answers), fn($a) => $a !== '')));
+        if (!$answers) fail('Nhập ít nhất 1 đáp án đúng');
+        if (count($answers) > 20) fail('Tối đa 20 đáp án cho 1 câu');
+        $data = [
+            'question' => $question,
+            'answers' => json_encode($answers, JSON_UNESCAPED_UNICODE),
+            'match_mode' => isset(Learn::MODES[$this->in('match_mode')]) ? $this->in('match_mode') : 'exact',
+            'hint' => trim(mb_substr((string)$this->in('hint', ''), 0, 500)),
+            'enabled' => $this->in('enabled', true) ? 1 : 0,
+            'updated_at' => now(),
+        ];
+        if ($id) {
+            DB::get('SELECT id FROM learn_questions WHERE id = ?', [$id]) ?: fail('Không tìm thấy câu hỏi', 404);
+            DB::update('learn_questions', $data, 'id = ?', [$id]);
+        } else {
+            $data += ['sort' => (int)DB::val('SELECT COALESCE(MAX(sort), 0) + 1 FROM learn_questions'), 'created_at' => now()];
+            $id = DB::insert('learn_questions', $data);
+        }
+        return ['question' => Learn::questionRow(DB::get('SELECT * FROM learn_questions WHERE id = ?', [$id]))];
+    }
+
+    private function learnQuestionDelete(): array
+    {
+        Auth::requireAdmin();
+        DB::run('DELETE FROM learn_questions WHERE id = ?', [$this->int('id')]);
+        return [];
+    }
+
+    private function learnQuestionMove(): array
+    {
+        Auth::requireAdmin();
+        $ids = array_map(fn($r) => (int)$r['id'], DB::all('SELECT id FROM learn_questions ORDER BY sort, id'));
+        $i = array_search($this->int('id'), $ids, true);
+        if ($i === false) fail('Không tìm thấy câu hỏi', 404);
+        $j = $i + ($this->int('dir') < 0 ? -1 : 1);
+        if ($j >= 0 && $j < count($ids)) [$ids[$i], $ids[$j]] = [$ids[$j], $ids[$i]];
+        foreach ($ids as $k => $qid) DB::run('UPDATE learn_questions SET sort = ? WHERE id = ?', [$k + 1, $qid]);
+        return [];
+    }
+
+    /** Bắt học lại từ đầu */
+    private function learnReset(): array
+    {
+        $u = Auth::requireAdmin();
+        $tg = (string)$this->in('tg_user_id', '');
+        if (!preg_match('/^\d{3,15}$/', $tg)) fail('ID Telegram không hợp lệ');
+        if (!DB::run("UPDATE learn_progress SET status = 'required', step = 0, wrong = 0, done_at = NULL, updated_at = ? WHERE tg_user_id = ?", [now(), $tg])) {
+            DB::insert('learn_progress', ['tg_user_id' => $tg, 'status' => 'required', 'step' => 0, 'wrong' => 0, 'groups_json' => '[]', 'updated_at' => now()]);
+        }
+        Repo::log(null, $u['username'], 'system', null, "Học tập: bắt học lại ID $tg");
+        return [];
+    }
+
+    /** Đánh dấu đã học (cho chat ngay) */
+    private function learnPass(): array
+    {
+        $u = Auth::requireAdmin();
+        $tg = (string)$this->in('tg_user_id', '');
+        if (!preg_match('/^\d{3,15}$/', $tg)) fail('ID Telegram không hợp lệ');
+        $p = Learn::progress($tg);
+        $m = DB::get('SELECT * FROM tg_members WHERE tg_user_id = ? ORDER BY last_active DESC', [$tg]);
+        $from = ['id' => $tg, 'first_name' => $p['first_name'] ?? $m['first_name'] ?? $tg, 'last_name' => $p['last_name'] ?? $m['last_name'] ?? null, 'username' => $p['username'] ?? $m['username'] ?? null];
+        Learn::finish(null, null, $from, '', $u['username']);
+        return [];
     }
 }
