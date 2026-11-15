@@ -508,6 +508,12 @@ class BotHandler
         }
         $c = fn(string $k) => '/' . Commands::name($k);
 
+        // Nút trên bàn phím bot (trang Bàn phím bot): trả lời / mở link, hoặc chuyển sang chức năng có sẵn
+        if ($key === null && ($kbBtn = BotKeyboard::match($text))) {
+            if (BotKeyboard::respond($this->api, $msg['chat']['id'], $kbBtn, $from)) return;
+            $key = ['learn' => 'learn', 'balance' => 'balance', 'points' => 'pme', 'start' => 'start'][$kbBtn['action']] ?? null;
+        }
+
         // Đăng nhập web: /start login_ABC123 (deep link), lệnh đăng nhập + mã, hoặc chỉ gửi mã
         $loginCode = null;
         if ($payload !== null && preg_match('~^login_([A-Za-z0-9]{6})$~', $payload, $lm)) $loginCode = $lm[1];
@@ -568,8 +574,8 @@ class BotHandler
             . (Commands::names('link') ? '🔗 Liên kết tài khoản web: ' . $c('link') . " MÃ\n" : '')
             . (Commands::names('pme') ? '⭐ Xem điểm: ' . $c('pme') . "\n" : '')
             . (Commands::names('balance') ? '💳 Số dư ví: ' . $c('balance') . "\n" : '')
-            . (Learn::config()['enabled'] ? '📚 Học tập: bấm nút <b>' . tg_esc(Learn::config()['button']) . "</b> bên dưới\n" : '')
-            . "\nID của bạn: <code>{$from['id']}</code>", ($kb = Learn::replyKeyboard()) ? ['reply_markup' => $kb] : []);
+            . (Learn::config()['enabled'] ? '📚 Học tập: ' . $c('learn') . " hoặc bấm nút bên dưới\n" : '')
+            . "\nID của bạn: <code>{$from['id']}</code>", ['reply_markup' => BotKeyboard::markup() ?: ['remove_keyboard' => true]]);
     }
 
     // ---------- Tiện ích ----------

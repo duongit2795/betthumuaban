@@ -376,7 +376,7 @@
     const path = current();
     const direct = (p) => (p === '/' ? path === '/' : path === p || path.startsWith(p + '/') || (p === '/groups' && path.startsWith('/group/')) || (p === '/rules' && path === '/commands'));
     const inTabs = items.tab.some(([p]) => p !== '/more' && direct(p));
-    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments', '/learn'].some((x) => path.startsWith(x)));
+    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments', '/learn', '/keyboard'].some((x) => path.startsWith(x)));
     $('#tabbar').innerHTML = items.tab.map(([p, ic, t]) => `<a href="#${p}" class="${isActive(p) ? 'active' : ''}">${icon(ic)}<span>${t}</span></a>`).join('');
     $('#sidebar').innerHTML = `<div class="brand"><img src="assets/icon.svg" alt="">${esc(S.site)}</div>`
       + items.side.map(([p, ic, t]) => `<a href="#${p}" class="nav ${isActive(p) && !(p === '/more') ? 'active' : ''}">${icon(ic)}${t}</a>`).join('')
@@ -2131,7 +2131,7 @@
     });
   }
 
-  const cmdTabs = (active) => `<div class="segmented" style="margin:4px 0 14px"><button type="button" class="${active === 'rules' ? 'active' : ''}" onclick="location.hash='/rules'">✨ Lệnh tự tạo</button><button type="button" class="${active === 'commands' ? 'active' : ''}" onclick="location.hash='/commands'">📚 Lệnh mặc định</button></div>`;
+  const cmdTabs = (active) => `<div class="segmented" style="margin:4px 0 14px"><button type="button" class="${active === 'rules' ? 'active' : ''}" onclick="location.hash='/rules'">✨ Lệnh tự tạo</button><button type="button" class="${active === 'commands' ? 'active' : ''}" onclick="location.hash='/commands'">📚 Lệnh mặc định</button>${isWebAdmin() ? `<button type="button" class="${active === 'keyboard' ? 'active' : ''}" onclick="location.hash='/keyboard'">⌨️ Bàn phím</button>` : ''}</div>`;
   route('/rules', async () => { const { body, mount } = rulesBlock(null); return { title: 'Lệnh', html: cmdTabs('rules') + body, mount }; }, { manage: true, title: 'Lệnh' });
 
   // ================= Lệnh mặc định: đổi tên, bật/tắt, xem chi tiết =================
@@ -3317,7 +3317,7 @@
       html: `
       <div class="card card-pad" style="margin-bottom:14px">
         <div class="row" style="align-items:flex-start"><div class="feat-ico">📚</div><div class="grow"><div class="row wrap" style="gap:6px"><b style="font-size:16px">Học tập bắt buộc</b>${c.enabled ? '<span class="badge green">Đang bật</span>' : '<span class="badge">Đang tắt</span>'}</div>
-          <div class="xs text-2" style="margin-top:4px">Thành viên chưa học mà nhắn trong nhóm → <b>xoá tin</b> + nhắc vào bot học. Trong bot bấm nút <b>${esc(c.button)}</b> (hoặc /${esc(d.cmd)}), trả lời đúng hết <b>${total}</b> câu là chat được.</div></div></div>
+          <div class="xs text-2" style="margin-top:4px">Thành viên chưa học mà nhắn trong nhóm → <b>xoá tin</b> + nhắc vào bot học. Trong bot bấm nút <b>Học tập</b> (hoặc /${esc(d.cmd)}), trả lời đúng hết <b>${total}</b> câu là chat được.</div></div></div>
         <div class="grid grid-3x" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px">
           <div class="stat" style="padding:8px 0;text-align:center"><div class="value" style="margin:0;font-size:22px;color:var(--success)">${num(d.stats.done)}</div><div class="sub">Đã học</div></div>
           <div class="stat" style="padding:8px 0;text-align:center"><div class="value" style="margin:0;font-size:22px;color:var(--primary)">${num(d.stats.learning)}</div><div class="sub">Đang học</div></div>
@@ -3350,7 +3350,7 @@
         </div>
         <div class="card card-pad stack">
           <h3>🤖 Trong bot</h3>
-          <label class="field"><span class="lbl">Tên nút Học tập (bàn phím bot)</span><input class="input" name="button" value="${esc(c.button)}" maxlength="30"></label>
+          <div class="alert info">${icon('info')}<div class="xs">Đổi tên nút <b>Học tập</b> hoặc thêm nút khác ở <a href="#/keyboard">Lệnh → ⌨️ Bàn phím</a>.</div></div>
           ${txt('intro_text', 'Lời mở đầu bài học')}
           <div class="grid grid-2"><label class="field"><span class="lbl">Khi trả lời đúng</span><input class="input" name="correct_text" value="${esc(c.correct_text)}"></label><label class="field"><span class="lbl">Khi trả lời sai</span><input class="input" name="wrong_text" value="${esc(c.wrong_text)}"></label></div>
           ${txt('finish_text', 'Khi hoàn thành (trong bot)')}
@@ -3415,6 +3415,91 @@
       },
     };
   }, { webAdmin: true, title: 'Học tập', back: '/more' });
+
+  // ================= Bàn phím bot (chat riêng) =================
+  route('/keyboard', async () => {
+    const d = await api('keyboard');
+    const st = { enabled: d.config.enabled, placeholder: d.config.placeholder, buttons: d.config.buttons.map((b, i, a) => ({ ...b, same: i > 0 && b.row === a[i - 1].row })) };
+    const rowsOf = () => { let r = -1; return st.buttons.map((b, i) => ({ ...b, row: (r = i > 0 && b.same ? r : r + 1) })); };
+    const hidden = (b) => b.action === 'learn' && !d.learn_enabled;
+    const preview = () => {
+      const rows = [];
+      rowsOf().forEach((b) => { if (!b.text.trim() || hidden(b)) return; (rows[b.row] = rows[b.row] || []).push(b); });
+      const list = rows.filter(Boolean);
+      return `<div class="kb-pv"><div class="kb-input">${esc(st.placeholder || 'Tin nhắn')}</div>${list.length && st.enabled ? `<div class="kb-keys">${list.map((r) => `<div class="kb-row">${r.slice(0, 4).map((b) => `<span>${esc(b.text)}</span>`).join('')}</div>`).join('')}</div>` : '<div class="xs muted center" style="padding:14px">Không hiện bàn phím</div>'}</div>`;
+    };
+    const item = (b, i) => `<div class="card card-pad stack kb-item" style="gap:8px">
+      <div class="row" style="gap:6px"><b class="small grow">Nút ${i + 1}${hidden(b) ? ' <span class="badge">ẩn vì Học tập đang tắt</span>' : ''}</b>
+        <button type="button" class="btn icon sm ghost" data-kmove="${i}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="Lên">${icon('up', 'sm')}</button>
+        <button type="button" class="btn icon sm ghost" data-kmove="${i}" data-dir="1" ${i === st.buttons.length - 1 ? 'disabled' : ''} aria-label="Xuống">${icon('down', 'sm')}</button>
+        <button type="button" class="btn icon sm ghost" data-kdel="${i}" aria-label="Xoá nút">${icon('trash', 'sm')}</button></div>
+      <input class="input" data-k="text" data-i="${i}" value="${esc(b.text)}" placeholder="Chữ trên nút, VD: 📞 Liên hệ admin" maxlength="40">
+      <select class="input" data-k="action" data-i="${i}">${Object.entries(d.actions).map(([k, a]) => `<option value="${k}" ${b.action === k ? 'selected' : ''}>${esc(a.name)} — ${esc(a.desc)}</option>`).join('')}</select>
+      ${b.action === 'reply' || b.action === 'link' ? `<textarea class="input" rows="3" data-k="reply" data-i="${i}" placeholder="${b.action === 'link' ? 'Lời nhắn kèm nút (tuỳ chọn)' : 'Nội dung bot trả lời, VD: Liên hệ admin @domino_real để được hỗ trợ'}">${esc(b.reply)}</textarea>
+        <div class="xs muted">Được dùng <code>&lt;b&gt;đậm&lt;/b&gt;</code>, <code>&lt;i&gt;nghiêng&lt;/i&gt;</code>, biến <code>{name}</code> <code>{username}</code> <code>{id}</code>.</div>
+        <div class="grid grid-2"><input class="input mono" data-k="url" data-i="${i}" value="${esc(b.url)}" placeholder="${b.action === 'link' ? 'https://… hoặc @kenh' : 'Link kèm theo (tuỳ chọn)'}"><input class="input" data-k="url_label" data-i="${i}" value="${esc(b.url_label)}" placeholder="Chữ trên nút link"></div>` : ''}
+      ${i > 0 ? `<label class="row xs" style="gap:6px;cursor:pointer"><input type="checkbox" data-k="same" data-i="${i}" ${b.same ? 'checked' : ''}> Cùng hàng với nút phía trên</label>` : ''}
+    </div>`;
+    return {
+      title: 'Bàn phím bot',
+      html: cmdTabs('keyboard') + `
+      <div class="card" style="margin-bottom:12px">${sw('enabled', st.enabled, 'Hiện bàn phím nút trong chat riêng với bot', 'Các nút nằm dưới ô nhập tin nhắn, bấm là bot làm việc tương ứng')}</div>
+      <div class="kb-layout">
+        <div class="stack">
+          <label class="field"><span class="lbl">Chữ mờ trong ô nhập tin (tuỳ chọn)</span><input class="input" data-ph value="${esc(st.placeholder)}" maxlength="64" placeholder="VD: Chọn chức năng bên dưới 👇"></label>
+          <div class="stack" data-kblist>${st.buttons.map(item).join('')}</div>
+          <button type="button" class="btn soft block" data-kadd>${icon('plus', 'sm')}Thêm nút</button>
+          <button type="button" class="btn primary block" data-ksave>${icon('check', 'sm')}Lưu bàn phím</button>
+          <div class="alert info">${icon('info')}<div class="xs">Người dùng thấy bàn phím mới khi gõ <b>/start</b> với bot hoặc bấm một nút bất kỳ. Tối đa 4 nút mỗi hàng, ${d.max} nút. Nút <b>Học tập</b> chỉ hiện khi bật Học tập bắt buộc.</div></div>
+        </div>
+        <div class="kb-side"><div class="pv-label">👁 Xem trước trên Telegram</div><div data-kbpv>${preview()}</div></div>
+      </div>`,
+      mount: (root) => {
+        const list = $('[data-kblist]', root);
+        const redraw = () => { list.innerHTML = st.buttons.map(item).join(''); $('[data-kbpv]', root).innerHTML = preview(); };
+        const pv = () => { $('[data-kbpv]', root).innerHTML = preview(); };
+        root.addEventListener('input', (e) => {
+          if (e.target.matches('[data-ph]')) { st.placeholder = e.target.value; return pv(); }
+          const el = e.target.closest('[data-k]');
+          if (!el) return;
+          const b = st.buttons[+el.dataset.i];
+          if (el.type === 'checkbox') b.same = el.checked; else b[el.dataset.k] = el.value;
+          pv();
+        });
+        root.addEventListener('change', (e) => {
+          if (e.target.matches('[name=enabled]')) { st.enabled = e.target.checked; return pv(); }
+          const el = e.target.closest('[data-k=action]');
+          if (el) { st.buttons[+el.dataset.i].action = el.value; redraw(); }
+          const cb = e.target.closest('[data-k=same]');
+          if (cb) { st.buttons[+cb.dataset.i].same = cb.checked; pv(); }
+        });
+        root.addEventListener('click', async (e) => {
+          let b;
+          if (e.target.closest('[data-kadd]')) {
+            if (st.buttons.length >= d.max) return toast(`Tối đa ${d.max} nút`, 'err');
+            st.buttons.push({ text: '', action: 'reply', reply: '', url: '', url_label: '', same: false }); redraw();
+            $$('[data-k=text]', root).pop()?.focus(); return;
+          }
+          if ((b = e.target.closest('[data-kdel]'))) { st.buttons.splice(+b.dataset.kdel, 1); if (st.buttons[0]) st.buttons[0].same = false; return redraw(); }
+          if ((b = e.target.closest('[data-kmove]'))) {
+            const i = +b.dataset.kmove, j = i + +b.dataset.dir;
+            if (j < 0 || j >= st.buttons.length) return;
+            [st.buttons[i], st.buttons[j]] = [st.buttons[j], st.buttons[i]];
+            if (st.buttons[0]) st.buttons[0].same = false;
+            return redraw();
+          }
+          if ((b = e.target.closest('[data-ksave]'))) {
+            return withBtn(b, async () => {
+              try {
+                const r = await api('keyboard/save', { config: { enabled: st.enabled, placeholder: st.placeholder, buttons: rowsOf().map(({ same, ...x }) => x) } });
+                toast(`Đã lưu ${r.config.buttons.length} nút`);
+              } catch (err) { toast(err.message, 'err'); }
+            });
+          }
+        });
+      },
+    };
+  }, { webAdmin: true, title: 'Bàn phím bot' });
 
   route('/me', viewMe, { title: 'Điểm của tôi', back: '/more' });
 
