@@ -3725,7 +3725,7 @@
       html: `
       <div class="hero ck-hero"><div class="muted small">📅 Điểm danh hằng ngày</div>
         <div style="font-size:22px;font-weight:700;margin-top:4px">+${num(d.points)} điểm mỗi ngày</div>
-        <div class="muted small" style="margin-top:4px">${d.streak_bonus ? `Điểm danh liên tiếp thưởng thêm <b>+${num(d.streak_bonus)}</b> mỗi ngày (tối đa +${num(d.streak_bonus * d.streak_max)}). Bỏ 1 ngày là chuỗi về 0.` : 'Mỗi nhóm điểm danh 1 lần / ngày.'}</div></div>
+        <div class="muted small" style="margin-top:4px">Gõ <b>/diemdanh</b> trong nhóm hoặc bấm nút bên dưới. ${d.streak_bonus ? `Điểm danh liên tiếp thưởng thêm <b>+${num(d.streak_bonus)}</b> mỗi ngày (tối đa +${num(d.streak_bonus * d.streak_max)}). Bỏ 1 ngày là chuỗi về 0.` : 'Mỗi nhóm điểm danh 1 lần / ngày.'}</div></div>
       ${!d.enabled ? `<div class="alert info" style="margin-top:12px">${icon('info')}<div class="small">Tính năng điểm danh đang tắt.${ad ? ' Bật ở phần cài đặt bên dưới.' : ''}</div></div>` : ''}
       ${d.enabled && !d.linked ? `<div class="card" style="margin-top:12px">${empty('link', 'Liên kết Telegram ở trang <a href="#/account">Tài khoản</a> để điểm danh nhận điểm.')}</div>` : ''}
       ${d.enabled && d.linked ? `<div class="section-title"><h2>Chọn nhóm để điểm danh</h2></div>
@@ -3744,6 +3744,8 @@
           <label class="field"><span class="lbl">Nội dung báo vào nhóm</span><textarea class="input" name="notify_text" rows="3">${esc(ad.config.notify_text)}</textarea>
             <div class="hint">Biến: <code>{mention}</code> <code>{name}</code> <code>{points}</code> <code>{streak}</code> <code>{total}</code> <code>{group}</code></div></label>
           <label class="field"><span class="lbl">Tự xoá tin báo sau (giây, 0 = không)</span><input class="input" name="notify_autodel" inputmode="numeric" value="${ad.config.notify_autodel}"></label>
+          <label class="field"><span class="lbl">Lệnh /diemdanh trong nhóm: tự xoá lệnh + tin trả lời sau (giây, 0 = không)</span><input class="input" name="cmd_autodel" inputmode="numeric" value="${ad.config.cmd_autodel}">
+            <div class="hint">Thành viên gõ <b>/diemdanh</b> trong nhóm để điểm danh ngay, bot trả lời kèm nút <b>📅 Điểm danh tại đây</b> mở trang này.</div></label>
         </div>
         <button class="btn primary block">Lưu cài đặt điểm danh</button>
       </form>` : ''}`,

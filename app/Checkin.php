@@ -16,6 +16,7 @@ class Checkin
         'notify' => false,       // báo vào nhóm
         'notify_autodel' => 60,
         'notify_text' => "📅 {mention} vừa điểm danh: <b>+{points} điểm</b> · chuỗi {streak} ngày 🔥\nTổng: {total} điểm",
+        'cmd_autodel' => 60,     // lệnh /diemdanh trong nhóm: tự xoá lệnh + tin trả lời sau N giây (0 = không)
     ];
 
     public static function config(): array
@@ -33,6 +34,7 @@ class Checkin
         if (isset($in['streak_bonus'])) $c['streak_bonus'] = max(0, min(100000, (int)$in['streak_bonus']));
         if (isset($in['streak_max'])) $c['streak_max'] = max(0, min(365, (int)$in['streak_max']));
         if (isset($in['notify_autodel'])) $c['notify_autodel'] = max(0, min(172800, (int)$in['notify_autodel']));
+        if (isset($in['cmd_autodel'])) $c['cmd_autodel'] = max(0, min(172800, (int)$in['cmd_autodel']));
         if (isset($in['notify_text'])) {
             $t = trim(mb_substr((string)$in['notify_text'], 0, 1000));
             $c['notify_text'] = $t !== '' ? $t : self::DEFAULTS['notify_text'];
@@ -65,30 +67,41 @@ class Checkin
     }
 
     /** Điểm danh. Trả về [points, streak, total] */
+    /** Điểm danh từ web (tài khoản đã liên kết Telegram) */
     public static function perform(array $u, int $groupId): array
     {
-        $c = self::config();
-        if (!$c['enabled']) throw new HttpError('Tính năng điểm danh đang tắt');
         if (!$u['tg_user_id']) throw new HttpError('Hãy liên kết Telegram ở trang Tài khoản trước khi điểm danh');
         $group = Repo::group($groupId);
         if (!$group || !$group['active']) throw new HttpError('Không tìm thấy nhóm', 404);
-        if (!self::applies($c, $groupId)) throw new HttpError('Nhóm này không áp dụng điểm danh');
         $m = Repo::member($groupId, $u['tg_user_id']);
         if (!$m || !in_array($m['status'], ['member', 'muted'], true)) throw new HttpError('Bạn cần đang ở trong nhóm này mới điểm danh được');
-        $st = self::streak($u['tg_user_id'], $groupId);
-        if ($st['today']) throw new HttpError('Hôm nay bạn đã điểm danh nhóm này rồi, quay lại vào ngày mai nhé!');
+        return self::run($group, $m, 'web');
+    }
+
+    /**
+     * Lõi điểm danh cho 1 thành viên (web hoặc lệnh /diemdanh trong nhóm).
+     * Lỗi "đã điểm danh" có mã 409 để lệnh trong nhóm báo nhẹ nhàng.
+     */
+    public static function run(array $group, array $m, string $source = 'web'): array
+    {
+        $c = self::config();
+        if (!$c['enabled']) throw new HttpError('Tính năng điểm danh đang tắt');
+        $groupId = (int)$group['id'];
+        if (!self::applies($c, $groupId)) throw new HttpError('Nhóm này không áp dụng điểm danh');
+        $st = self::streak($m['tg_user_id'], $groupId);
+        if ($st['today']) throw new HttpError('Hôm nay bạn đã điểm danh nhóm này rồi, quay lại vào ngày mai nhé!', 409);
         $streak = $st['streak'] + 1;
         $pts = self::reward($c, $streak);
         try {
-            DB::insert('checkins', ['tg_user_id' => $u['tg_user_id'], 'group_id' => $groupId, 'day' => date('Y-m-d'), 'points' => $pts, 'streak' => $streak, 'created_at' => now()]);
+            DB::insert('checkins', ['tg_user_id' => $m['tg_user_id'], 'group_id' => $groupId, 'day' => date('Y-m-d'), 'points' => $pts, 'streak' => $streak, 'created_at' => now()]);
         } catch (PDOException $e) {
-            throw new HttpError('Hôm nay bạn đã điểm danh nhóm này rồi');
+            throw new HttpError('Hôm nay bạn đã điểm danh nhóm này rồi', 409);
         }
         DB::run('UPDATE tg_members SET points = points + ? WHERE id = ?', [$pts, $m['id']]);
         $total = (int)DB::val('SELECT points FROM tg_members WHERE id = ?', [$m['id']]);
-        Repo::log($groupId, Repo::name($m) . ' (web)', 'checkin', $m, "+$pts điểm · chuỗi $streak ngày",
-            ['source' => 'web', 'amount' => $pts, 'before' => $total - $pts, 'after' => $total, 'streak' => $streak]);
-        if ($c['notify'] && ($api = Repo::apiForGroup($group))) {
+        Repo::log($groupId, Repo::name($m) . ($source === 'web' ? ' (web)' : ' (Telegram)'), 'checkin', $m, "+$pts điểm · chuỗi $streak ngày" . ($source === 'web' ? '' : ' · /diemdanh'),
+            ['source' => $source === 'web' ? 'web' : 'telegram', 'amount' => $pts, 'before' => $total - $pts, 'after' => $total, 'streak' => $streak]);
+        if ($source === 'web' && $c['notify'] && ($api = Repo::apiForGroup($group))) {
             $sent = $api->trySend($group['chat_id'], strtr($c['notify_text'], ['{mention}' => Repo::mention($m), '{name}' => tg_esc(Repo::name($m)),
                 '{points}' => (string)$pts, '{streak}' => (string)$streak, '{total}' => (string)$total, '{group}' => tg_esc($group['title'])]));
             if ($sent && !empty($sent['message_id']) && $c['notify_autodel'] > 0 && $group['bot_id']) {
