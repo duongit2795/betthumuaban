@@ -357,7 +357,7 @@ class BotHandler
             switch ($cmd) {
                 case 'help':
                     $line = fn(string $k) => Commands::names($k) ? $c($k) . ' – ' . tg_esc(Commands::config()[$k]['description']) : null;
-                    $t = "📖 <b>Lệnh thành viên</b>\n" . implode("\n", array_filter(array_map($line, ['rules', 'me', 'top', 'info', 'amnesty', 'id'])));
+                    $t = "📖 <b>Lệnh thành viên</b>\n" . implode("\n", array_filter(array_map($line, ['rules', 'me', 'top', 'checkin', 'info', 'amnesty', 'id'])));
                     $custom = Rules::helpLines($gid, $isAdmin);
                     if ($custom) $t .= "\n\n✨ <b>Lệnh riêng của nhóm</b>\n" . implode("\n", $custom);
                     if ($isAdmin) {
@@ -385,6 +385,9 @@ class BotHandler
                     return;
                 case 'amnesty':
                     $this->reply($msg, $this->amnestyText($group, $msg), $this->webButton('🕊 Mở trang Ân xá', '/amnesty'));
+                    return;
+                case 'checkin':
+                    $this->checkinCmd($group, $msg, $member);
                     return;
                 case 'top':
                     $rows = DB::all("SELECT * FROM tg_members WHERE group_id = ? AND is_bot = 0 AND status <> 'banned' AND points > 0 ORDER BY points DESC, messages DESC LIMIT 10", [$gid]);
@@ -603,6 +606,29 @@ class BotHandler
         $url = site_url();
         if (!str_starts_with($url, 'https://')) return [];
         return ['reply_markup' => ['inline_keyboard' => [[['text' => $label, 'url' => $url . '/#' . $path]]]]];
+    }
+
+    /** Lệnh /diemdanh trong nhóm: điểm danh ngay cho người gõ, kèm nút mở trang điểm danh trên web */
+    private function checkinCmd(array $group, array $msg, array $member): void
+    {
+        $c = Checkin::config();
+        if (!$c['enabled']) { $this->reply($msg, '📅 Tính năng điểm danh chưa được bật.'); return; }
+        $btn = $this->webButton('📅 Điểm danh tại đây', '/checkin');
+        try {
+            $r = Checkin::run($group, $member, 'telegram');
+            $text = "📅 " . Repo::mention($member) . " điểm danh thành công: <b>+{$r['points']} điểm</b>\n🔥 Chuỗi: <b>{$r['streak']} ngày</b> · Tổng: <b>{$r['total']}</b> điểm\n⏭ Ngày mai điểm danh tiếp: +{$r['next']} điểm";
+        } catch (HttpError $e) {
+            if ($e->status === 409) {
+                $st = Checkin::streak($member['tg_user_id'], (int)$group['id']);
+                $text = '✅ ' . Repo::mention($member) . " hôm nay đã điểm danh rồi (chuỗi {$st['streak']} ngày 🔥).\nQuay lại vào ngày mai để nhận <b>+" . Checkin::reward($c, $st['streak'] + 1) . ' điểm</b> nhé!';
+            } else {
+                $text = '📅 ' . tg_esc($e->getMessage());
+            }
+        }
+        $sent = $this->api->trySend($msg['chat']['id'], $text, ['reply_parameters' => ['message_id' => $msg['message_id'], 'allow_sending_without_reply' => true]] + $btn);
+        if ($c['cmd_autodel'] > 0) {
+            DelQueue::add($this->api, (int)$this->bot['id'], $msg['chat']['id'], array_filter([$msg['message_id'], $sent['message_id'] ?? null]), (int)$c['cmd_autodel']);
+        }
     }
 
     /** Nội dung lệnh /anxa trong nhóm */

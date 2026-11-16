@@ -17,6 +17,7 @@ class Commands
         'me' => ['member', 'me', 'Thông tin & điểm của bạn', 'Xem thông tin của chính bạn trong nhóm: điểm, hạng, số tin nhắn, cảnh cáo, ngày vào nhóm.', '/me', ['/me'], ''],
         'top' => ['member', 'top', 'Bảng xếp hạng tương tác', 'Hiện 10 thành viên có điểm tương tác cao nhất nhóm.', '/top', ['/top'], ''],
         'info' => ['member', 'info', 'Thông tin thành viên', 'Xem thông tin một thành viên. Không chỉ định ai thì hiện thông tin của chính bạn.', '/info (reply) | /info @username | /info ID', ['Reply tin rồi gõ /info', '/info @lan99', '/info 123456789'], ''],
+        'checkin' => ['member', 'diemdanh', 'Điểm danh nhận điểm', 'Điểm danh hằng ngày để nhận điểm tương tác của nhóm (1 lần / ngày). Điểm danh liên tiếp được thưởng thêm. Bot trả lời kèm nút mở trang điểm danh trên web.', '/diemdanh', ['/diemdanh'], 'Chỉ hoạt động khi admin web bật Điểm danh. Nếu có lệnh tự tạo cùng tên /diemdanh thì lệnh tự tạo được ưu tiên.'],
         'amnesty' => ['member', 'anxa', 'Ân xá thành viên (trả phí)', 'Hiện bảng giá ân xá và nút mở trang Ân xá trên web. Reply tin của người bị phạt để xem họ đang bị gì và phí ân xá.', '/anxa | /anxa (reply)', ['/anxa', 'Reply tin rồi gõ /anxa'], 'Chỉ hoạt động khi admin web bật tính năng Ân xá.'],
         'id' => ['member', 'id', 'Xem ID', 'Hiện ID của nhóm, của bạn và của người được reply (nếu có).', '/id', ['/id', 'Reply tin rồi gõ /id'], ''],
         // ---- Quản trị (admin nhóm / admin web đã liên kết Telegram)
