@@ -61,6 +61,7 @@ class Api
             'me/update' => 'meUpdate',
             'me/link-code' => 'meLinkCode',
             'me/unlink' => 'meUnlink',
+            'me/logs' => 'meLogs',
             'leaderboard' => 'leaderboard',
             'dashboard' => 'dashboard',
             'bots' => 'bots',
@@ -148,7 +149,7 @@ class Api
         $writeRoutes = ['install', 'auth/login', 'auth/register', 'auth/logout', 'me/update', 'me/link-code', 'me/unlink'];
         if (!isset($map[$route])) fail('Không tìm thấy API', 404);
         $fn = $map[$route];
-        $isWrite = in_array($route, $writeRoutes, true) || str_contains($route, '/') && !in_array($route, ['system/check-update', 'chat/poll', 'ads/image', 'amnesty/search', 'users/tx', 'chat/media'], true);
+        $isWrite = in_array($route, $writeRoutes, true) || str_contains($route, '/') && !in_array($route, ['system/check-update', 'chat/poll', 'ads/image', 'me/logs', 'amnesty/search', 'users/tx', 'chat/media'], true);
         if ($isWrite && $this->method !== 'POST') fail('Phương thức không hợp lệ', 405);
         json_out(['ok' => true, 'data' => $this->$fn()]);
     }
@@ -1028,6 +1029,36 @@ class Api
             'evidence' => !empty($l['evidence']) ? (json_decode($l['evidence'], true) ?: null) : null,
             'created_at' => (int)$l['created_at'],
         ], $rows);
+    }
+
+    /** Nhật ký của chính mình: chỉ các dòng mà tài khoản Telegram của mình là đối tượng */
+    private function meLogs(): array
+    {
+        $u = Auth::requireUser();
+        if (!$u['tg_user_id']) return ['linked' => false, 'total' => 0, 'page' => 1, 'pages' => 1, 'rows' => []];
+        $where = ['l.target_tg_id = ?'];
+        $p = [$u['tg_user_id']];
+        $a = (string)$this->in('action', '');
+        if ($a === 'moderation') $where[] = "l.action IN ('ban','unban','kick','mute','unmute','warn','unwarn','resetwarn','delete','username','learn','learn_done','gate')";
+        elseif ($a === 'points') $where[] = "l.action IN ('points','setpoints','reset_points')";
+        elseif ($a === 'members') $where[] = "l.action IN ('join','leave')";
+        $page = max(1, $this->int('page', 1));
+        $per = 40;
+        $w = implode(' AND ', $where);
+        $total = (int)DB::val("SELECT COUNT(*) FROM app_logs l WHERE $w", $p);
+        $rows = DB::all("SELECT l.*, g.title AS group_title, g.settings AS group_settings FROM app_logs l LEFT JOIN tg_groups g ON g.id = l.group_id WHERE $w ORDER BY l.id DESC LIMIT $per OFFSET " . (($page - 1) * $per), $p);
+        $out = [];
+        foreach ($this->formatLogs($rows) as $i => $l) {
+            // Ẩn thông tin nội bộ; ẩn tên người xử lý nếu nhóm tắt "hiện người xử lý"
+            $s = json_decode((string)($rows[$i]['group_settings'] ?? ''), true) ?: [];
+            $showAdmin = !array_key_exists('mod_show_admin', $s) || !empty($s['mod_show_admin']);
+            $isMod = in_array($l['action'], ['ban', 'unban', 'kick', 'mute', 'unmute', 'warn', 'unwarn', 'resetwarn', 'points', 'setpoints'], true);
+            if ($isMod && !$showAdmin && !in_array($l['actor'], ['Bot', 'Telegram', 'system'], true) && !str_contains((string)$l['actor'], '(ân xá)')) $l['actor'] = 'Quản trị viên';
+            if ($l['meta']) $l['meta'] = array_intersect_key($l['meta'], array_flip(['source', 'reason', 'minutes', 'until', 'warns', 'limit', 'amount', 'before', 'after', 'previous_until', 'escalated_from', 'escalate_to', 'link', 'amnesty']));
+            if (isset($l['meta']['amnesty'])) $l['meta']['amnesty'] = array_intersect_key($l['meta']['amnesty'], array_flip(['kind', 'price', 'payer', 'self', 'before']));
+            $out[] = $l;
+        }
+        return ['linked' => true, 'total' => $total, 'page' => $page, 'pages' => max(1, (int)ceil($total / $per)), 'rows' => $out];
     }
 
     private function logs(): array
