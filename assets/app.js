@@ -352,7 +352,7 @@
       };
     }
     const m = [['/', 'star', 'Của tôi'], ['/rank', 'trophy', 'Xếp hạng'], ...payNav(), ['/account', 'user', 'Tài khoản']];
-    return { tab: m, side: m };
+    return { tab: m, side: [...m.slice(0, -1), ['/mylogs', 'list', 'Nhật ký của tôi'], m[m.length - 1]] };
   }
 
   function shell(nav, title, back) {
@@ -376,7 +376,7 @@
     const path = current();
     const direct = (p) => (p === '/' ? path === '/' : path === p || path.startsWith(p + '/') || (p === '/groups' && path.startsWith('/group/')) || (p === '/rules' && path === '/commands'));
     const inTabs = items.tab.some(([p]) => p !== '/more' && direct(p));
-    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments', '/learn', '/keyboard', '/gates'].some((x) => path.startsWith(x)));
+    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments', '/learn', '/keyboard', '/gates', '/mylogs'].some((x) => path.startsWith(x)));
     $('#tabbar').innerHTML = items.tab.map(([p, ic, t]) => `<a href="#${p}" class="${isActive(p) ? 'active' : ''}">${icon(ic)}<span>${t}</span></a>`).join('');
     $('#sidebar').innerHTML = `<div class="brand"><img src="assets/icon.svg" alt="">${esc(S.site)}</div>`
       + items.side.map(([p, ic, t]) => `<a href="#${p}" class="nav ${isActive(p) && !(p === '/more') ? 'active' : ''}">${icon(ic)}${t}</a>`).join('')
@@ -1325,20 +1325,23 @@
     return { body, mount };
   }
 
-  function logsBlock(groupId) {
+  function logsBlock(groupId, mine = false) {
     const st = { action: '', page: 1, q: '' };
     if (groupId) st.group_id = groupId;
-    const f = [['', 'Tất cả'], ['moderation', 'Xử lý vi phạm'], ['points', 'Điểm'], ['members', 'Ra / vào'], ['system', 'Hệ thống']];
-    const body = `<div class="input-icon" style="margin-bottom:10px">${icon('search')}<input class="input" id="lq" placeholder="Tìm theo tên, người xử lý, ID…"></div>
+    const f = mine ? [['', 'Tất cả'], ['moderation', 'Xử lý vi phạm'], ['points', 'Điểm'], ['members', 'Ra / vào']]
+      : [['', 'Tất cả'], ['moderation', 'Xử lý vi phạm'], ['points', 'Điểm'], ['members', 'Ra / vào'], ['system', 'Hệ thống']];
+    const body = `${mine ? '' : `<div class="input-icon" style="margin-bottom:10px">${icon('search')}<input class="input" id="lq" placeholder="Tìm theo tên, người xử lý, ID…"></div>`}
       <div class="chips" style="margin-bottom:12px">${f.map(([k, t]) => `<button class="chip ${k === '' ? 'active' : ''}" data-lf="${k}">${t}</button>`).join('')}</div>
       <div class="list" id="llist">${loading()}</div><div class="pager" id="lpager"></div>`;
     const mount = (root) => {
       const load = async () => {
-        const r = await api('logs', undefined, { query: st });
-        $('#llist', root).innerHTML = r.rows.length ? r.rows.map(logItem).join('') : empty('list', 'Chưa có nhật ký');
+        const r = await api(mine ? 'me/logs' : 'logs', undefined, { query: st });
+        $('#llist', root).innerHTML = r.rows.length ? r.rows.map(logItem).join('')
+          : mine && r.linked === false ? empty('link', 'Hãy liên kết Telegram ở trang <a href="#/account">Tài khoản</a> để xem nhật ký của bạn.')
+          : empty('list', mine ? 'Bạn chưa có nhật ký nào 🎉' : 'Chưa có nhật ký');
         $('#lpager', root).innerHTML = r.pages > 1 ? `<button class="btn sm" ${r.page <= 1 ? 'disabled' : ''} data-lp="-1">${icon('back', 'sm')}</button><span class="small">${r.page}/${r.pages}</span><button class="btn sm" ${r.page >= r.pages ? 'disabled' : ''} data-lp="1">${icon('chevron', 'sm')}</button>` : '';
       };
-      $('#lq', root).oninput = debounce((e) => { st.q = e.target.value; st.page = 1; load(); });
+      if ($('#lq', root)) $('#lq', root).oninput = debounce((e) => { st.q = e.target.value; st.page = 1; load(); });
       root.addEventListener('click', (e) => {
         const c = e.target.closest('[data-lf]');
         if (c) { $$('[data-lf]', root).forEach((x) => x.classList.toggle('active', x === c)); st.action = c.dataset.lf; st.page = 1; load(); }
@@ -1352,6 +1355,10 @@
   const groupLogs = (d) => logsBlock(d.group.id);
 
   route('/logs', async () => { const { body, mount } = logsBlock(null); return { title: 'Nhật ký', html: body, mount }; }, { manage: true, perm: 'logs', title: 'Nhật ký' });
+  route('/mylogs', async () => {
+    const { body, mount } = logsBlock(null, true);
+    return { title: 'Nhật ký của tôi', html: `<div class="alert info" style="margin-bottom:12px">${icon('info')}<div class="xs">Chỉ hiện các việc liên quan tới <b>bạn</b> ở các nhóm: cảnh cáo, cấm chat, cộng / trừ điểm, ân xá, ra / vào nhóm…</div></div>` + body, mount };
+  }, { title: 'Nhật ký của tôi', back: '/account' });
 
   // ================= Admin: Bots =================
   route('/bots', async () => {
@@ -2744,6 +2751,7 @@
         ${S.pay?.wallet || isWebAdmin() ? `<a class="list-item" href="#/wallet">${icon('wallet')}<div class="grow">Ví của tôi</div><span class="small muted">${money(S.user.balance || 0)}</span><span class="chev">${icon('chevron')}</span></a>` : ''}
         ${S.pay?.amnesty || isWebAdmin() ? `<a class="list-item" href="#/amnesty">${icon('heart')}<div class="grow">Ân xá thành viên</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         <a class="list-item" href="#/me">${icon('star')}<div class="grow">Điểm của tôi</div><span class="chev">${icon('chevron')}</span></a>
+        <a class="list-item" href="#/mylogs">${icon('list')}<div class="grow">Nhật ký của tôi</div><span class="chev">${icon('chevron')}</span></a>
         ${!isWebAdmin() ? `<a class="list-item" href="#/rank">${icon('trophy')}<div class="grow">Xếp hạng</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         <a class="list-item" href="#/account">${icon('user')}<div class="grow">Tài khoản & liên kết Telegram</div><span class="chev">${icon('chevron')}</span></a>
         <button class="list-item" data-theme-toggle>${icon('moon')}<div class="grow">Giao diện sáng / tối</div></button>
@@ -2977,7 +2985,7 @@
         <div class="big">${num(total)}</div>
         <div class="row wrap small" style="gap:14px;margin-top:6px"><span>${icon('msg', 'sm')} ${num(msgs)} tin nhắn</span><span>${icon('users', 'sm')} ${ms.length} nhóm</span>${best ? `<span>${icon('trophy', 'sm')} Hạng cao nhất #${best.rank}</span>` : ''}</div>
       </div>
-      <div class="section-title"><h2>Nhóm của bạn</h2></div>
+      <div class="section-title"><h2>Nhóm của bạn</h2><a href="#/mylogs" class="small">📝 Nhật ký của tôi</a></div>
       ${ms.length ? ms.map((m) => `
         <a class="card card-pad" href="#/rank/${m.group_id}" style="display:block;color:inherit;margin-bottom:12px">
           <div class="row">${avatar(m.title, m.group_id, 'sq')}<div class="grow"><div class="ellipsis" style="font-weight:600">${esc(m.title)}</div>
@@ -3750,6 +3758,7 @@
         <button class="btn primary block">Lưu</button>
       </form>
       <div class="list" style="margin-top:14px">
+        <a class="list-item" href="#/mylogs">${icon('list')}<div class="grow">Nhật ký của tôi</div><span class="chev">${icon('chevron')}</span></a>
         <button class="list-item" data-theme-toggle>${icon('moon')}<div class="grow">Giao diện sáng / tối</div></button>
         <button class="list-item" data-logout style="color:var(--danger)">${icon('logout')}<div class="grow">Đăng xuất</div></button>
       </div>`,
