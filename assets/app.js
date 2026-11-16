@@ -120,7 +120,7 @@
     settings: ['Cài đặt', 'settings', ''], bot_added: ['Thêm bot vào nhóm', 'bot', 'green'], bot_removed: ['Bot rời nhóm', 'bot', 'red'],
     bot_add: ['Thêm bot', 'bot', 'blue'], bot_delete: ['Xoá bot', 'bot', 'red'], bot_on: ['Bật bot', 'power', 'green'], bot_off: ['Tắt bot', 'power', ''],
     rule: ['Lệnh tự tạo', 'terminal', 'blue'], ad_post: ['Quảng cáo', 'megaphone', 'blue'], username: ['Nhắc đặt username', 'user', 'amber'], login: ['Đăng nhập', 'key', 'green'], update: ['Cập nhật hệ thống', 'download', 'blue'], system: ['Hệ thống', 'settings', ''], pin: ['Ghim tin', 'pin', 'blue'], unpin: ['Bỏ ghim', 'pin', ''],
-    gate: ['Chưa đủ điều kiện chat', 'lock', 'amber'], learn: ['Nhắc học tập', 'book', 'amber'], learn_done: ['Hoàn thành bài học', 'book', 'green'],
+    gate: ['Chưa đủ điều kiện chat', 'lock', 'amber'], checkin: ['Điểm danh', 'calendar', 'green'], learn: ['Nhắc học tập', 'book', 'amber'], learn_done: ['Hoàn thành bài học', 'book', 'green'],
     payments_settings: ['Cài đặt nạp tiền', 'bank', ''], wallet_assign: ['Cộng tiền tay', 'wallet', 'green'], wallet_adjust: ['Điều chỉnh số dư', 'wallet', 'blue'],
   };
 
@@ -342,17 +342,19 @@
     if (!isWebAdmin() && isManager()) {
       return {
         tab: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/rules', 'terminal', 'Lệnh'], ...(can('logs') ? [['/logs', 'list', 'Nhật ký']] : []), ['/more', 'grid', 'Thêm']],
-        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm của tôi'], ['/rules', 'terminal', 'Lệnh'], ...(can('logs') ? [['/logs', 'list', 'Nhật ký']] : []), ['/me', 'star', 'Điểm của tôi'], ['/rank', 'trophy', 'Xếp hạng'], ...payNav(), ['/account', 'user', 'Tài khoản']],
+        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm của tôi'], ['/rules', 'terminal', 'Lệnh'], ...(can('logs') ? [['/logs', 'list', 'Nhật ký']] : []), ['/me', 'star', 'Điểm của tôi'], ...(S.pay?.checkin ? [['/checkin', 'calendar', 'Điểm danh']] : []), ['/rank', 'trophy', 'Xếp hạng'], ...payNav(), ['/account', 'user', 'Tài khoản']],
       };
     }
     if (isWebAdmin()) {
       return {
         tab: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/logs', 'list', 'Nhật ký'], ['/more', 'grid', 'Thêm']],
-        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh'], ['/ads', 'megaphone', 'Quảng cáo'], ['/learn', 'book', 'Học tập'], ['/gates', 'lock', 'Điều kiện chat'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/payments', 'bank', 'Nạp tiền & ân xá'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ...payNav(), ['/account', 'user', 'Tài khoản']],
+        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh'], ['/ads', 'megaphone', 'Quảng cáo'], ['/learn', 'book', 'Học tập'], ['/gates', 'lock', 'Điều kiện chat'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/payments', 'bank', 'Nạp tiền & ân xá'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ['/checkin', 'calendar', 'Điểm danh'], ...payNav(), ['/account', 'user', 'Tài khoản']],
       };
     }
-    const m = [['/', 'star', 'Của tôi'], ['/rank', 'trophy', 'Xếp hạng'], ...payNav(), ['/account', 'user', 'Tài khoản']];
-    return { tab: m, side: [...m.slice(0, -1), ['/mylogs', 'list', 'Nhật ký của tôi'], m[m.length - 1]] };
+    const ck = S.pay?.checkin ? [['/checkin', 'calendar', 'Điểm danh']] : [];
+    const m = [['/', 'star', 'Của tôi'], ...ck, ['/rank', 'trophy', 'Xếp hạng'], ...payNav(), ['/account', 'user', 'Tài khoản']];
+    const tab = m.length > 5 ? m.filter(([p]) => p !== '/rank') : m;
+    return { tab, side: [...m.slice(0, -1), ['/mylogs', 'list', 'Nhật ký của tôi'], m[m.length - 1]] };
   }
 
   function shell(nav, title, back) {
@@ -376,7 +378,7 @@
     const path = current();
     const direct = (p) => (p === '/' ? path === '/' : path === p || path.startsWith(p + '/') || (p === '/groups' && path.startsWith('/group/')) || (p === '/rules' && path === '/commands'));
     const inTabs = items.tab.some(([p]) => p !== '/more' && direct(p));
-    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments', '/learn', '/keyboard', '/gates', '/mylogs'].some((x) => path.startsWith(x)));
+    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments', '/learn', '/keyboard', '/gates', '/mylogs', '/checkin'].some((x) => path.startsWith(x)));
     $('#tabbar').innerHTML = items.tab.map(([p, ic, t]) => `<a href="#${p}" class="${isActive(p) ? 'active' : ''}">${icon(ic)}<span>${t}</span></a>`).join('');
     $('#sidebar').innerHTML = `<div class="brand"><img src="assets/icon.svg" alt="">${esc(S.site)}</div>`
       + items.side.map(([p, ic, t]) => `<a href="#${p}" class="nav ${isActive(p) && !(p === '/more') ? 'active' : ''}">${icon(ic)}${t}</a>`).join('')
@@ -2752,6 +2754,7 @@
         ${S.pay?.amnesty || isWebAdmin() ? `<a class="list-item" href="#/amnesty">${icon('heart')}<div class="grow">Ân xá thành viên</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         <a class="list-item" href="#/me">${icon('star')}<div class="grow">Điểm của tôi</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/mylogs">${icon('list')}<div class="grow">Nhật ký của tôi</div><span class="chev">${icon('chevron')}</span></a>
+        ${S.pay?.checkin || isWebAdmin() ? `<a class="list-item" href="#/checkin">${icon('calendar')}<div class="grow">Điểm danh hằng ngày</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         ${!isWebAdmin() ? `<a class="list-item" href="#/rank">${icon('trophy')}<div class="grow">Xếp hạng</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         <a class="list-item" href="#/account">${icon('user')}<div class="grow">Tài khoản & liên kết Telegram</div><span class="chev">${icon('chevron')}</span></a>
         <button class="list-item" data-theme-toggle>${icon('moon')}<div class="grow">Giao diện sáng / tối</div></button>
@@ -2985,6 +2988,7 @@
         <div class="big">${num(total)}</div>
         <div class="row wrap small" style="gap:14px;margin-top:6px"><span>${icon('msg', 'sm')} ${num(msgs)} tin nhắn</span><span>${icon('users', 'sm')} ${ms.length} nhóm</span>${best ? `<span>${icon('trophy', 'sm')} Hạng cao nhất #${best.rank}</span>` : ''}</div>
       </div>
+      ${S.pay?.checkin ? `<a class="card card-pad row ck-link" href="#/checkin" style="margin-top:12px;color:inherit"><span style="font-size:26px">📅</span><div class="grow"><b>Điểm danh hôm nay</b><div class="xs muted">Nhận điểm tương tác cho nhóm bạn chọn</div></div><span class="btn sm primary">Điểm danh</span></a>` : ''}
       <div class="section-title"><h2>Nhóm của bạn</h2><a href="#/mylogs" class="small">📝 Nhật ký của tôi</a></div>
       ${ms.length ? ms.map((m) => `
         <a class="card card-pad" href="#/rank/${m.group_id}" style="display:block;color:inherit;margin-bottom:12px">
@@ -3702,6 +3706,71 @@
       },
     };
   }, { webAdmin: true, title: 'Điều kiện nhắn tin', back: '/more' });
+
+  // ================= Điểm danh trên web =================
+  route('/checkin', async () => {
+    const d = await api('checkin');
+    const ad = d.admin;
+    const dayLbl = (s) => { const dt = new Date(s + 'T00:00:00'); return ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][dt.getDay()]; };
+    const card = (g) => `<div class="card card-pad ck-card ${g.today ? 'done' : ''}" data-ckg="${g.id}">
+      <div class="row">${avatar(g.title, g.id, 'sq')}<div class="grow" style="min-width:0"><div class="ellipsis" style="font-weight:700">${esc(g.title)}</div>
+        <div class="xs muted">⭐ <b data-ckpts>${num(g.points)}</b> điểm · ${num(g.total_days)} ngày đã điểm danh</div></div>
+        ${g.streak ? `<span class="badge amber" title="Chuỗi ngày liên tiếp">🔥 ${g.streak} ngày</span>` : ''}</div>
+      <div class="ck-week">${d.week.map((day) => `<div class="${g.week.includes(day) ? 'on' : ''} ${day === d.today ? 'today' : ''}"><span>${g.week.includes(day) ? '✓' : ''}</span><small>${day === d.today ? 'Nay' : dayLbl(day)}</small></div>`).join('')}</div>
+      ${g.today ? `<div class="ck-done">✅ Đã điểm danh hôm nay · ngày mai <b>+${num(g.reward)}</b> điểm</div>`
+        : `<button class="btn primary block ck-btn" data-ck="${g.id}">📅 Điểm danh · <b>+${num(g.reward)} điểm</b></button>`}
+    </div>`;
+    return {
+      title: 'Điểm danh',
+      html: `
+      <div class="hero ck-hero"><div class="muted small">📅 Điểm danh hằng ngày</div>
+        <div style="font-size:22px;font-weight:700;margin-top:4px">+${num(d.points)} điểm mỗi ngày</div>
+        <div class="muted small" style="margin-top:4px">${d.streak_bonus ? `Điểm danh liên tiếp thưởng thêm <b>+${num(d.streak_bonus)}</b> mỗi ngày (tối đa +${num(d.streak_bonus * d.streak_max)}). Bỏ 1 ngày là chuỗi về 0.` : 'Mỗi nhóm điểm danh 1 lần / ngày.'}</div></div>
+      ${!d.enabled ? `<div class="alert info" style="margin-top:12px">${icon('info')}<div class="small">Tính năng điểm danh đang tắt.${ad ? ' Bật ở phần cài đặt bên dưới.' : ''}</div></div>` : ''}
+      ${d.enabled && !d.linked ? `<div class="card" style="margin-top:12px">${empty('link', 'Liên kết Telegram ở trang <a href="#/account">Tài khoản</a> để điểm danh nhận điểm.')}</div>` : ''}
+      ${d.enabled && d.linked ? `<div class="section-title"><h2>Chọn nhóm để điểm danh</h2></div>
+        ${d.groups.length ? `<div class="stack">${d.groups.map(card).join('')}</div>` : `<div class="card">${empty('users', 'Bạn chưa ở trong nhóm nào có điểm danh.')}</div>`}` : ''}
+      ${ad ? `<div class="section-title"><h2>⚙️ Cài đặt (admin)</h2><span class="xs muted">Hôm nay: ${num(ad.today_count)} lượt · ${num(ad.today_points)} điểm</span></div>
+      <form class="stack" id="fck">
+        <div class="card">${sw('enabled', ad.config.enabled, 'Bật điểm danh trên web')}${sw('notify', ad.config.notify, 'Báo vào nhóm khi có người điểm danh')}</div>
+        <div class="card card-pad stack">
+          <div class="field"><span class="lbl">Nhóm áp dụng <span class="xs muted">(không chọn = tất cả)</span></span><div class="chips" style="flex-wrap:wrap">${ad.all_groups.map((g) => `<button type="button" class="chip ${ad.config.groups.includes(g.id) ? 'active' : ''}" data-ckgrp="${g.id}">${esc(g.title)}</button>`).join('')}</div></div>
+          <div class="grid grid-2">
+            <label class="field"><span class="lbl">Điểm mỗi lần</span><input class="input" name="points" inputmode="numeric" value="${ad.config.points}"></label>
+            <label class="field"><span class="lbl">Thưởng mỗi ngày liên tiếp</span><input class="input" name="streak_bonus" inputmode="numeric" value="${ad.config.streak_bonus}"></label>
+          </div>
+          <label class="field"><span class="lbl">Thưởng chuỗi tối đa (số ngày)</span><input class="input" name="streak_max" inputmode="numeric" value="${ad.config.streak_max}">
+            <div class="hint">VD 5 điểm, thưởng 1, tối đa 7 ngày: ngày 1 = 5, ngày 2 = 6 … từ ngày 8 trở đi = 12 điểm.</div></label>
+          <label class="field"><span class="lbl">Nội dung báo vào nhóm</span><textarea class="input" name="notify_text" rows="3">${esc(ad.config.notify_text)}</textarea>
+            <div class="hint">Biến: <code>{mention}</code> <code>{name}</code> <code>{points}</code> <code>{streak}</code> <code>{total}</code> <code>{group}</code></div></label>
+          <label class="field"><span class="lbl">Tự xoá tin báo sau (giây, 0 = không)</span><input class="input" name="notify_autodel" inputmode="numeric" value="${ad.config.notify_autodel}"></label>
+        </div>
+        <button class="btn primary block">Lưu cài đặt điểm danh</button>
+      </form>` : ''}`,
+      mount: (root) => {
+        let sel = ad ? [...ad.config.groups] : [];
+        root.addEventListener('click', (e) => {
+          const gb = e.target.closest('[data-ckgrp]');
+          if (gb) { const id = +gb.dataset.ckgrp; sel = sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id]; gb.classList.toggle('active'); return; }
+          const b = e.target.closest('[data-ck]');
+          if (!b) return;
+          withBtn(b, async () => {
+            try {
+              const r = await api('checkin/do', { group_id: +b.dataset.ck });
+              toast(`Điểm danh thành công +${num(r.points)} điểm · chuỗi ${r.streak} ngày 🔥`);
+              render();
+            } catch (err) { toast(err.message, 'err'); }
+          });
+        });
+        $('#fck', root)?.addEventListener('submit', (e) => {
+          e.preventDefault();
+          withBtn(e.target.querySelector('button.primary'), async () => {
+            try { await api('checkin/save', { config: { ...formData(e.target), groups: sel } }); toast('Đã lưu'); await boot(); render(); } catch (err) { toast(err.message, 'err'); }
+          });
+        });
+      },
+    };
+  }, { title: 'Điểm danh' });
 
   route('/me', viewMe, { title: 'Điểm của tôi', back: '/more' });
 

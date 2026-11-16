@@ -132,6 +132,9 @@ class Api
             'payments/ignore' => 'paymentsIgnore',
             'users/balance' => 'userBalance',
             'users/tx' => 'userTx',
+            'checkin' => 'checkin',
+            'checkin/do' => 'checkinDo',
+            'checkin/save' => 'checkinSave',
             'gates' => 'gates',
             'gates/save' => 'gateSave',
             'gates/delete' => 'gateDelete',
@@ -166,7 +169,7 @@ class Api
             'site_name' => $inst ? Settings::get('site_name') : 'Tele Manager',
             'allow_register' => $inst ? Settings::get('allow_register') === '1' : false,
             'tg_login' => $inst && TgLogin::enabled() ? ['bots' => TgLogin::bots(), 'cmd' => Commands::name('login')] : null,
-            'pay' => $inst ? ['wallet' => Wallet::config()['enabled'] && Wallet::config()['account_no'] !== '', 'amnesty' => Amnesty::config()['enabled']] : null,
+            'pay' => $inst ? ['wallet' => Wallet::config()['enabled'] && Wallet::config()['account_no'] !== '', 'amnesty' => Amnesty::config()['enabled'], 'checkin' => Checkin::config()['enabled']] : null,
             'version' => APP_VERSION,
             'php' => PHP_VERSION,
             'checks' => $inst ? null : [
@@ -1040,7 +1043,7 @@ class Api
         $p = [$u['tg_user_id']];
         $a = (string)$this->in('action', '');
         if ($a === 'moderation') $where[] = "l.action IN ('ban','unban','kick','mute','unmute','warn','unwarn','resetwarn','delete','username','learn','learn_done','gate')";
-        elseif ($a === 'points') $where[] = "l.action IN ('points','setpoints','reset_points')";
+        elseif ($a === 'points') $where[] = "l.action IN ('points','setpoints','reset_points','checkin')";
         elseif ($a === 'members') $where[] = "l.action IN ('join','leave')";
         $page = max(1, $this->int('page', 1));
         $per = 40;
@@ -1071,9 +1074,9 @@ class Api
         if ($gid) { $where[] = 'l.group_id = ?'; $p[] = $gid; }
         if ($a = (string)$this->in('action', '')) {
             if ($a === 'moderation') $where[] = "l.action IN ('ban','unban','kick','mute','unmute','warn','unwarn','resetwarn','delete')";
-            elseif ($a === 'points') $where[] = "l.action IN ('points','setpoints','reset_points')";
+            elseif ($a === 'points') $where[] = "l.action IN ('points','setpoints','reset_points','checkin')";
             elseif ($a === 'members') $where[] = "l.action IN ('join','leave')";
-            elseif ($a === 'system') $where[] = "l.action NOT IN ('ban','unban','kick','mute','unmute','warn','unwarn','resetwarn','delete','points','setpoints','join','leave')";
+            elseif ($a === 'system') $where[] = "l.action NOT IN ('ban','unban','kick','mute','unmute','warn','unwarn','resetwarn','delete','points','setpoints','join','leave','checkin')";
         }
         if ($q = trim((string)$this->in('q', ''))) {
             $where[] = '(LOWER(l.target_name) LIKE ? OR LOWER(l.actor) LIKE ? OR CAST(l.target_tg_id AS CHAR) LIKE ?)';
@@ -2170,5 +2173,49 @@ class Api
         }
         $m = DB::get('SELECT * FROM tg_members WHERE tg_user_id = ? ORDER BY last_active DESC', [$tg]);
         return ['tg_user_id' => (string)$tg, 'name' => $m ? Repo::name($m) : (string)$tg, 'results' => $out];
+    }
+
+    // ================= Điểm danh trên web =================
+    private function checkin(): array
+    {
+        $u = Auth::requireUser();
+        $c = Checkin::config();
+        $groups = [];
+        if ($u['tg_user_id']) {
+            foreach (DB::all("SELECT m.points, m.status, g.id, g.title FROM tg_members m JOIN tg_groups g ON g.id = m.group_id WHERE g.active = 1 AND m.tg_user_id = ? AND m.status IN ('member','muted') ORDER BY g.title", [$u['tg_user_id']]) as $r) {
+                if (!Checkin::applies($c, (int)$r['id'])) continue;
+                $st = Checkin::streak($u['tg_user_id'], (int)$r['id']);
+                $days = array_column(DB::all('SELECT day FROM checkins WHERE tg_user_id = ? AND group_id = ? AND day >= ?', [$u['tg_user_id'], $r['id'], date('Y-m-d', strtotime('-6 day'))]), 'day');
+                $groups[] = ['id' => (int)$r['id'], 'title' => $r['title'], 'points' => (int)$r['points'], 'today' => $st['today'], 'streak' => $st['streak'],
+                    'reward' => Checkin::reward($c, $st['streak'] + 1), 'week' => $days,
+                    'total_days' => (int)DB::val('SELECT COUNT(*) FROM checkins WHERE tg_user_id = ? AND group_id = ?', [$u['tg_user_id'], $r['id']])];
+            }
+        }
+        $out = ['enabled' => $c['enabled'], 'linked' => (bool)$u['tg_user_id'], 'points' => $c['points'], 'streak_bonus' => $c['streak_bonus'], 'streak_max' => $c['streak_max'],
+            'groups' => $groups, 'today' => date('Y-m-d'), 'week' => array_map(fn($i) => date('Y-m-d', strtotime("-$i day")), range(6, 0))];
+        if (Access::isWebAdmin($u)) {
+            $out['admin'] = [
+                'config' => $c,
+                'all_groups' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title']], DB::all('SELECT id, title FROM tg_groups WHERE active = 1 ORDER BY title')),
+                'today_count' => (int)DB::val('SELECT COUNT(*) FROM checkins WHERE day = ?', [date('Y-m-d')]),
+                'today_points' => (int)DB::val('SELECT COALESCE(SUM(points),0) FROM checkins WHERE day = ?', [date('Y-m-d')]),
+                'default_text' => Checkin::DEFAULTS['notify_text'],
+            ];
+        }
+        return $out;
+    }
+
+    private function checkinDo(): array
+    {
+        $u = Auth::requireUser();
+        return Checkin::perform($u, $this->int('group_id'));
+    }
+
+    private function checkinSave(): array
+    {
+        $u = Auth::requireAdmin();
+        $c = Checkin::save((array)$this->in('config', []));
+        Repo::log(null, $u['username'], 'system', null, 'Điểm danh: ' . ($c['enabled'] ? "bật · {$c['points']} điểm" : 'tắt'));
+        return ['config' => $c];
     }
 }

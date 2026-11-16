@@ -626,3 +626,16 @@ tg-spoiler, .tg-spoiler { background: color-mix(in srgb, var(--text) 18%, transp
 .lb-body { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 8px; }
 .lb-body img, .lb-body video { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; }
 .lb-cap { color: #eee; font-size: 14px; padding: 10px 16px calc(14px + env(safe-area-inset-bottom, 0px)); max-height: 30vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+
+/* ===== Điểm danh ===== */
+.ck-hero { background: linear-gradient(135deg, #f59e0b, #ef4444); }
+.ck-card.done { background: linear-gradient(180deg, var(--success-soft), var(--surface) 60%); }
+.ck-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin: 14px 0 12px; }
+.ck-week > div { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.ck-week span { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-3); color: #fff; font-weight: 800; font-size: 14px; }
+.ck-week .on span { background: linear-gradient(135deg, #f59e0b, #ef4444); }
+.ck-week .today span { box-shadow: 0 0 0 2px var(--primary); }
+.ck-week small { font-size: 11px; color: var(--muted); }
+.ck-done { text-align: center; font-size: 13.5px; color: var(--success); font-weight: 600; padding: 8px; border-radius: 12px; background: var(--success-soft); }
+.ck-btn { height: 46px; font-size: 15px; }
