@@ -661,3 +661,7 @@ tg-spoiler, .tg-spoiler { background: color-mix(in srgb, var(--text) 18%, transp
 .ex-box.open { background: var(--success-soft); }
 .ex-box.open b { color: var(--success); }
 .vip-plan { border-color: color-mix(in srgb, #b45309 40%, var(--border)); }
+/* Khung 2 cột (Bàn phím bot, Captcha): không để nội dung dài đẩy tràn ngang */
+@media (max-width: 899px) { .kb-layout { grid-template-columns: minmax(0, 1fr); } }
+.kb-layout > * { min-width: 0; }
+.segmented button { min-width: 0; overflow: hidden; text-overflow: ellipsis; }

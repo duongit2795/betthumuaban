@@ -26,6 +26,7 @@ class BotHandler
         elseif (isset($u['message_reaction'])) $this->onReaction($u['message_reaction']);
         elseif (isset($u['callback_query'])) {
             $cbq = $u['callback_query'];
+            if ($cap = Captcha::onCallback($this->api, $cbq)) { $this->afterCaptcha($cap); return; }
             if (!UsernameGuard::onCallback($this->api, $cbq) && !UpdateNotifier::onCallback($this->api, $cbq)) TgLogin::onCallback($this->api, $cbq);
         }
     }
@@ -79,6 +80,15 @@ class BotHandler
         }
         DB::run('UPDATE tg_members SET is_admin = ? WHERE id = ?', [in_array($st, ['administrator', 'creator'], true) ? 1 : 0, $m['id']]);
         $nm = $cm['new_chat_member'];
+        $oldSt = $cm['old_chat_member']['status'] ?? '';
+        $wasOut = in_array($oldSt, ['left', 'kicked'], true) || ($oldSt === 'restricted' && empty($cm['old_chat_member']['is_member']));
+        $isIn = $st === 'member' || ($st === 'restricted' && !empty($nm['is_member']));
+        if ($wasOut && $isIn && empty($user['is_bot'])) {
+            $by = (int)($cm['from']['id'] ?? 0);
+            Captcha::start($this->api, (int)$this->bot['id'], $group, $user, $by && $by != $user['id'] ? $by : null, fn(int $id) => $this->isAdmin($group, $id));
+        } elseif (in_array($st, ['left', 'kicked'], true)) {
+            Captcha::left($group, $user['id'], $this->api);
+        }
         if (in_array($st, ['member', 'restricted'], true) && array_key_exists('tag', $nm)) MemberTag::seen((int)$group['id'], $user['id'], $nm['tag']);
         elseif ($st === 'administrator' && array_key_exists('custom_title', $nm)) MemberTag::seen((int)$group['id'], $user['id'], $nm['custom_title']);
         if (in_array($st, ['administrator', 'creator'], true) || in_array($cm['old_chat_member']['status'] ?? '', ['administrator', 'creator'], true)) {
@@ -241,8 +251,11 @@ class BotHandler
     {
         $gid = (int)$group['id'];
         $names = [];
+        $captcha = []; // người phải xác minh: chào sau khi qua captcha
         foreach ($msg['new_chat_members'] as $u) {
             if ($u['id'] == $this->botTgId) continue;
+            $addedBy = !empty($msg['from']) && $msg['from']['id'] != $u['id'] ? (int)$msg['from']['id'] : null;
+            if (Captcha::start($this->api, (int)$this->bot['id'], $group, $u, $addedBy, fn(int $id) => $this->isAdmin($group, $id))) $captcha[$u['id']] = true;
             $m = Repo::upsertMember($gid, $u, ['status' => 'member', 'joined' => true]);
             if ($m['status'] === 'left') DB::run("UPDATE tg_members SET status = 'member' WHERE id = ?", [$m['id']]);
             if ($s['points_per_join'] > 0 && !empty($msg['from']) && $msg['from']['id'] != $u['id']) {
@@ -255,23 +268,35 @@ class BotHandler
             if (empty($u['is_bot'])) $names[] = $m;
         }
         DB::run('UPDATE tg_groups SET member_count = member_count + ? WHERE id = ?', [count($names), $gid]);
-        if ($s['delete_service_messages']) $this->del($msg['chat']['id'], $msg['message_id']);
+        if ($s['delete_service_messages'] || ($captcha && Captcha::config()['delete_join'])) $this->del($msg['chat']['id'], $msg['message_id']);
         if ($s['welcome_enabled'] && $names) {
             foreach ($names as $m) {
+                if (isset($captcha[$m['tg_user_id']])) continue;
                 $this->api->trySend($msg['chat']['id'], $this->tpl($s['welcome_text'], $m, $group));
             }
         }
         // Thành viên mới chưa có username → xử lý theo cài đặt "Yêu cầu đặt Username"
         foreach ($msg['new_chat_members'] as $u) {
-            if ($u['id'] != $this->botTgId) UsernameGuard::check($this->api, (int)$this->bot['id'], $group, $u, null, false, true);
+            if ($u['id'] != $this->botTgId && !isset($captcha[$u['id']])) UsernameGuard::check($this->api, (int)$this->bot['id'], $group, $u, null, false, true);
             if ($u['id'] != $this->botTgId) Learn::onJoin($group, $u);
         }
+    }
+
+    /** Sau khi bấm nút captcha: qua thì gửi lời chào của nhóm */
+    private function afterCaptcha(array $cap): void
+    {
+        [$res, $group, $m] = $cap;
+        if ($res !== 'pass' || !$group || !$m) return;
+        $s = Repo::settings($group);
+        if ($s['welcome_enabled']) $this->api->trySend($group['chat_id'], $this->tpl($s['welcome_text'], $m, $group));
+        UsernameGuard::check($this->api, (int)$this->bot['id'], $group, ['id' => (int)$m['tg_user_id'], 'username' => $m['username'], 'first_name' => $m['first_name']], null, false, true);
     }
 
     private function onLeave(array $group, array $s, array $msg): void
     {
         $u = $msg['left_chat_member'];
         $gid = (int)$group['id'];
+        Captcha::left($group, $u['id'], $this->api);
         if ($s['delete_service_messages']) $this->del($msg['chat']['id'], $msg['message_id']);
         if ($u['id'] == $this->botTgId) return;
         $m = Repo::upsertMember($gid, $u);
