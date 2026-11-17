@@ -6,7 +6,7 @@ class DB
 {
     private static ?PDO $pdo = null;
     private static string $driver = 'sqlite';
-    const SCHEMA_VERSION = 15;
+    const SCHEMA_VERSION = 16;
 
     public static function connect(?array $c = null): PDO
     {
@@ -384,6 +384,8 @@ class DB
         // v6: nhật ký lưu chi tiết + bằng chứng vi phạm
         self::addColumn('app_logs', 'meta', 'TEXT');
         self::addColumn('app_logs', 'evidence', 'TEXT');
+        // v16: mua tag bằng số dư ví (hạn dùng)
+        self::addColumn('tg_members', 'tag_until', 'INT');
         // v15: tag thành viên
         self::addColumn('tg_members', 'tag', $my ? 'VARCHAR(64)' : 'TEXT');
         self::addColumn('tg_members', 'tag_source', 'VARCHAR(8)');

@@ -643,3 +643,10 @@ tg-spoiler, .tg-spoiler { background: color-mix(in srgb, var(--text) 18%, transp
 /* Tag thành viên */
 .badge.tagb { background: color-mix(in srgb, #8b5cf6 14%, transparent); color: #7c3aed; }
 .tag-lv .input { height: 40px; }
+
+/* Cửa hàng tag */
+.shop-hero { background: linear-gradient(135deg, #8b5cf6, #ec4899); }
+.shop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.shop-item { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 10px; border-radius: 14px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; font: inherit; color: inherit; box-shadow: var(--shadow); }
+.shop-item:active { transform: scale(.97); }
+.shop-item .badge { font-size: 13.5px; }

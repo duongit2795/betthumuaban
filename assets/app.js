@@ -339,6 +339,7 @@
   }
 
   const payNav = () => [...(S.pay?.wallet ? [['/wallet', 'wallet', 'Ví']] : []), ...(S.pay?.amnesty ? [['/amnesty', 'heart', 'Ân xá']] : [])];
+  const shopNav = () => (S.pay?.tagshop ? [['/tagshop', 'tagi', 'Mua tag']] : []);
   function navItems() {
     if (!isWebAdmin() && isManager()) {
       return {
@@ -355,7 +356,7 @@
     const ck = S.pay?.checkin ? [['/checkin', 'calendar', 'Điểm danh']] : [];
     const m = [['/', 'star', 'Của tôi'], ...ck, ['/rank', 'trophy', 'Xếp hạng'], ...payNav(), ['/account', 'user', 'Tài khoản']];
     const tab = m.length > 5 ? m.filter(([p]) => p !== '/rank') : m;
-    return { tab, side: [...m.slice(0, -1), ['/mylogs', 'list', 'Nhật ký của tôi'], m[m.length - 1]] };
+    return { tab, side: [...m.slice(0, -1), ...shopNav(), ['/mylogs', 'list', 'Nhật ký của tôi'], m[m.length - 1]] };
   }
 
   function shell(nav, title, back) {
@@ -379,7 +380,7 @@
     const path = current();
     const direct = (p) => (p === '/' ? path === '/' : path === p || path.startsWith(p + '/') || (p === '/groups' && path.startsWith('/group/')) || (p === '/rules' && path === '/commands'));
     const inTabs = items.tab.some(([p]) => p !== '/more' && direct(p));
-    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments', '/learn', '/keyboard', '/gates', '/mylogs', '/checkin', '/tags'].some((x) => path.startsWith(x)));
+    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments', '/learn', '/keyboard', '/gates', '/mylogs', '/checkin', '/tags', '/tagshop'].some((x) => path.startsWith(x)));
     $('#tabbar').innerHTML = items.tab.map(([p, ic, t]) => `<a href="#${p}" class="${isActive(p) ? 'active' : ''}">${icon(ic)}<span>${t}</span></a>`).join('');
     $('#sidebar').innerHTML = `<div class="brand"><img src="assets/icon.svg" alt="">${esc(S.site)}</div>`
       + items.side.map(([p, ic, t]) => `<a href="#${p}" class="nav ${isActive(p) && !(p === '/more') ? 'active' : ''}">${icon(ic)}${t}</a>`).join('')
@@ -2791,6 +2792,7 @@
         ${S.pay?.amnesty || isWebAdmin() ? `<a class="list-item" href="#/amnesty">${icon('heart')}<div class="grow">Ân xá thành viên</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         <a class="list-item" href="#/me">${icon('star')}<div class="grow">Điểm của tôi</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/mylogs">${icon('list')}<div class="grow">Nhật ký của tôi</div><span class="chev">${icon('chevron')}</span></a>
+        ${S.pay?.tagshop || isWebAdmin() ? `<a class="list-item" href="#/tagshop">${icon('tagi')}<div class="grow">Mua tag bằng số dư ví</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         ${S.pay?.checkin || isWebAdmin() ? `<a class="list-item" href="#/checkin">${icon('calendar')}<div class="grow">Điểm danh hằng ngày</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         ${!isWebAdmin() ? `<a class="list-item" href="#/rank">${icon('trophy')}<div class="grow">Xếp hạng</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         <a class="list-item" href="#/account">${icon('user')}<div class="grow">Tài khoản & liên kết Telegram</div><span class="chev">${icon('chevron')}</span></a>
@@ -3070,7 +3072,7 @@
   // ================= Ví & nạp tiền =================
   const money = (v) => num(v) + 'đ';
   const qrSrc = (w, amount) => w.account_no ? `https://img.vietqr.io/image/${encodeURIComponent(w.bank)}-${encodeURIComponent(w.account_no)}-compact2.png?` + new URLSearchParams({ ...(amount > 0 ? { amount } : {}), addInfo: w.code, ...(w.account_name ? { accountName: w.account_name } : {}) }) : '';
-  const TX_ICON = { deposit: ['plus', 'green'], amnesty: ['heart', 'amber'], amnesty_fail: ['x', ''], refund: ['refresh', 'blue'], admin: ['key', ''] };
+  const TX_ICON = { deposit: ['plus', 'green'], amnesty: ['heart', 'amber'], amnesty_fail: ['x', ''], tag: ['tagi', 'blue'], tag_fail: ['x', ''], refund: ['refresh', 'blue'], admin: ['key', ''] };
   const txItem = (t) => { const [ic, c] = TX_ICON[t.type] || ['info', '']; return `<div class="list-item"><span class="log-ico ${c}">${icon(ic, 'sm')}</span>
     <div class="grow" style="min-width:0"><div class="ellipsis" style="font-weight:600">${esc(t.note || t.type_label)}</div><div class="xs muted">${esc(t.type_label)} · ${fmtDate(t.created_at, true)}</div></div>
     <div style="text-align:right" class="nowrap"><div class="tx-amt ${t.amount > 0 ? 'in' : 'out'}">${t.amount > 0 ? '+' : '−'}${money(Math.abs(t.amount))}</div><div class="xs muted">Dư ${money(t.balance_after)}</div></div></div>`; };
@@ -3085,7 +3087,7 @@
         <div class="muted small">${icon('wallet', 'sm')} Số dư ví</div>
         <div class="big" data-bal>${money(w.balance)}</div>
         <div class="row wrap small" style="gap:14px;margin-top:6px"><span>Đã nạp ${money(w.stats.deposit)}</span><span>Đã dùng ${money(w.stats.spent)}</span></div>
-        ${S.pay?.amnesty ? `<a class="btn sm" href="#/amnesty" style="margin-top:12px;background:rgba(255,255,255,.18);color:#fff;border-color:transparent">${icon('heart', 'sm')}Ân xá thành viên</a>` : ''}
+        <div class="row wrap" style="gap:8px;margin-top:12px">${S.pay?.amnesty ? `<a class="btn sm" href="#/amnesty" style="background:rgba(255,255,255,.18);color:#fff;border-color:transparent">${icon('heart', 'sm')}Ân xá thành viên</a>` : ''}${S.pay?.tagshop ? `<a class="btn sm" href="#/tagshop" style="background:rgba(255,255,255,.18);color:#fff;border-color:transparent">${icon('tagi', 'sm')}Mua tag</a>` : ''}</div>
       </div>
       ${!w.enabled ? `<div class="alert info" style="margin-top:12px">${icon('info')}<div class="small">Admin chưa bật nạp tiền. Liên hệ admin để được cộng tiền vào ví.</div></div>` : `
       <div class="section-title"><h2>Nạp tiền</h2>${w.auto ? `<span class="badge green">${icon('zap', 'sm')}Tự động</span>` : '<span class="badge">Admin duyệt tay</span>'}</div>
@@ -3815,7 +3817,10 @@
   route('/tags', async () => {
     const d = await api('tags');
     const c = d.config;
-    const st = { levels: c.auto_levels.map((l) => ({ ...l })), groups: [...c.auto_groups] };
+    const st = { levels: c.auto_levels.map((l) => ({ ...l })), groups: [...c.auto_groups], items: c.shop_items.map((x) => ({ ...x })), sgroups: [...c.shop_groups] };
+    const itRow = (x, i) => `<div class="row tag-lv" style="gap:8px"><input class="input grow" data-it="${i}" data-k="tag" value="${esc(x.tag || '')}" maxlength="16" placeholder="Tag, VD: Đại gia">
+      <input class="input" data-it="${i}" data-k="price" inputmode="numeric" value="${x.price ?? ''}" placeholder="Giá (đ)" style="width:120px">
+      <button type="button" class="btn icon sm ghost" data-itdel="${i}" aria-label="Xoá">${icon('trash', 'sm')}</button></div>`;
     const lvRow = (l, i) => `<div class="row tag-lv" style="gap:8px">
       <div class="row" style="gap:6px;flex:none"><span class="small muted">≥</span><input class="input" data-lv="${i}" data-k="min" inputmode="numeric" value="${l.min ?? ''}" placeholder="100" style="width:90px"><span class="small muted">điểm</span></div>
       <input class="input grow" data-lv="${i}" data-k="tag" value="${esc(l.tag || '')}" maxlength="16" placeholder="Tag, VD: Tích cực">
@@ -3837,6 +3842,19 @@
           <label class="field"><span class="lbl">Nội dung báo khi lên mốc</span><textarea class="input" name="auto_text" rows="2">${esc(c.auto_text)}</textarea></label>
         </div>
         <div class="card card-pad stack">
+          <h3>🛒 Cửa hàng tag <span class="xs muted" style="font-weight:400">— thành viên mua bằng số dư ví (trang <a href="#/tagshop">Mua tag</a>)</span></h3>
+          <div class="card" style="box-shadow:none">${sw('shop', c.shop, 'Bật cửa hàng tag')}${sw('shop_custom', c.shop_custom, 'Cho tự đặt chữ', 'Thành viên tự gõ tag theo ý, giá cố định bên dưới')}${sw('shop_notify', c.shop_notify, 'Báo vào nhóm khi có người mua')}</div>
+          <div class="field"><span class="lbl">Tag có sẵn + giá</span><div class="stack" style="gap:8px" data-its>${st.items.map(itRow).join('')}</div>
+            <button type="button" class="btn soft sm block" data-itadd style="margin-top:8px">${icon('plus', 'sm')}Thêm tag bán</button></div>
+          <div class="grid grid-2">
+            <label class="field"><span class="lbl">Giá tự đặt chữ (đ)</span><input class="input" name="shop_custom_price" inputmode="numeric" value="${c.shop_custom_price}"></label>
+            <label class="field"><span class="lbl">Hạn dùng (ngày, 0 = vĩnh viễn)</span><input class="input" name="shop_days" inputmode="numeric" value="${c.shop_days}"></label>
+          </div>
+          <label class="field"><span class="lbl">Từ cấm trong tag tự đặt (cách nhau dấu phẩy)</span><textarea class="input" name="shop_banned" rows="2">${esc(c.shop_banned)}</textarea><div class="hint">Chống giả mạo admin / hỗ trợ. Không phân biệt hoa thường.</div></label>
+          <div class="field"><span class="lbl">Nhóm bán tag <span class="xs muted">(không chọn = tất cả)</span></span><div class="chips" style="flex-wrap:wrap">${d.groups.map((g) => `<button type="button" class="chip ${st.sgroups.includes(g.id) ? 'active' : ''}" data-sg="${g.id}">${esc(g.title)}</button>`).join('')}</div></div>
+          <label class="field"><span class="lbl">Nội dung báo khi mua</span><textarea class="input" name="shop_text" rows="2">${esc(c.shop_text)}</textarea><div class="hint">Biến: <code>{mention}</code> <code>{name}</code> <code>{tag}</code> <code>{price}</code> <code>{until}</code> <code>{group}</code></div></label>
+        </div>
+        <div class="card card-pad stack">
           <h3>📣 Khi admin đổi tag</h3>
           <div class="card" style="box-shadow:none">${sw('notify', c.notify, 'Báo vào nhóm khi đổi tag trên web / lệnh tự tạo')}</div>
           <label class="field"><span class="lbl">Nội dung báo</span><textarea class="input" name="notify_text" rows="2">${esc(c.notify_text)}</textarea>
@@ -3851,11 +3869,15 @@
       mount: (root) => {
         const lvs = $('[data-lvs]', root);
         const draw = () => { lvs.innerHTML = st.levels.map(lvRow).join(''); };
-        root.addEventListener('input', (e) => { const x = e.target.closest('[data-lv]'); if (x) st.levels[+x.dataset.lv][x.dataset.k] = x.value; });
+        root.addEventListener('input', (e) => { const x = e.target.closest('[data-lv]'); if (x) st.levels[+x.dataset.lv][x.dataset.k] = x.value; const y = e.target.closest('[data-it]'); if (y) st.items[+y.dataset.it][y.dataset.k] = y.value; });
+        const drawIt = () => { $('[data-its]', root).innerHTML = st.items.map(itRow).join(''); };
         root.addEventListener('click', (e) => {
           let b;
           if (e.target.closest('[data-lvadd]')) { const last = st.levels[st.levels.length - 1]; st.levels.push({ min: last ? Number(last.min || 0) * 5 || 100 : 100, tag: '' }); draw(); return; }
           if ((b = e.target.closest('[data-lvdel]'))) { st.levels.splice(+b.dataset.lvdel, 1); draw(); return; }
+          if (e.target.closest('[data-itadd]')) { st.items.push({ tag: '', price: 50000 }); drawIt(); return; }
+          if ((b = e.target.closest('[data-itdel]'))) { st.items.splice(+b.dataset.itdel, 1); drawIt(); return; }
+          if ((b = e.target.closest('[data-sg]'))) { const id = +b.dataset.sg; st.sgroups = st.sgroups.includes(id) ? st.sgroups.filter((x) => x !== id) : [...st.sgroups, id]; b.classList.toggle('active'); return; }
           if ((b = e.target.closest('[data-tg]'))) { const id = +b.dataset.tg; st.groups = st.groups.includes(id) ? st.groups.filter((x) => x !== id) : [...st.groups, id]; b.classList.toggle('active'); return; }
           if ((b = e.target.closest('[data-tapply]'))) {
             return withBtn(b, async () => {
@@ -3872,14 +3894,100 @@
           e.preventDefault();
           withBtn(e.target.querySelector('button.primary'), async () => {
             try {
-              await api('tags/save', { config: { ...formData(e.target), auto_groups: st.groups, auto_levels: st.levels.filter((l) => String(l.tag).trim() || String(l.min).trim()).map((l) => ({ min: Number(l.min) || 0, tag: l.tag })) } });
-              toast('Đã lưu'); render();
+              await api('tags/save', { config: { ...formData(e.target), shop_groups: st.sgroups, shop_items: st.items.filter((x) => String(x.tag).trim()).map((x) => ({ tag: x.tag, price: Number(String(x.price).replace(/\D/g, '')) || 0 })), auto_groups: st.groups, auto_levels: st.levels.filter((l) => String(l.tag).trim() || String(l.min).trim()).map((l) => ({ min: Number(l.min) || 0, tag: l.tag })) } });
+              toast('Đã lưu'); await boot(); render();
             } catch (err) { toast(err.message, 'err'); }
           });
         };
       },
     };
   }, { webAdmin: true, title: 'Tag thành viên', back: '/more' });
+
+  // ================= Cửa hàng tag (thành viên mua bằng số dư ví) =================
+  route('/tagshop', async () => {
+    const d = await api('tagshop');
+    let gid = Number(sessionStorage.getItem('tagshopG')) || d.groups[0]?.id;
+    if (!d.groups.some((g) => g.id === gid)) gid = d.groups[0]?.id;
+    let balance = d.balance;
+    const cur = () => d.groups.find((g) => g.id === gid);
+    const curHtml = () => {
+      const g = cur();
+      if (!g) return '';
+      return `<div class="card card-pad row" style="gap:10px"><div class="grow"><div class="xs muted">Tag hiện tại ở ${esc(g.title)}</div>
+        <div style="margin-top:4px">${g.tag ? `<span class="badge tagb" style="font-size:14px">🏷 ${esc(g.tag)}</span>${g.until ? ` <span class="xs muted">đến ${fmtDate(g.until)}</span>` : g.source === 'shop' ? ' <span class="xs muted">vĩnh viễn</span>' : ''}` : '<span class="muted small">Chưa có tag</span>'}</div></div>
+        ${g.is_admin ? '<span class="badge blue">Admin</span>' : ''}</div>`;
+    };
+    const buySheet = (tag, price, custom) => {
+      const after = balance - price;
+      const g = cur();
+      sheet(`<div class="sheet-head"><h2>🛒 Mua tag</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
+        <div class="card card-pad center" style="box-shadow:none;background:var(--surface-2)">
+          <div class="xs muted">Hiển thị trong nhóm ${esc(g.title)}</div>
+          <div style="margin-top:8px;font-size:16px"><b>${esc(S.user.display_name)}</b> <span class="badge tagb" style="font-size:13px">${esc(tag)}</span></div></div>
+        <dl class="kv" style="margin:16px 0">
+          <dt>Giá</dt><dd><b>${money(price)}</b></dd>
+          <dt>Thời hạn</dt><dd>${d.days ? d.days + ' ngày' : 'Vĩnh viễn'}</dd>
+          <dt>Số dư hiện tại</dt><dd>${money(balance)}</dd>
+          <dt>Số dư sau</dt><dd style="color:${after < 0 ? 'var(--danger)' : 'var(--success)'}"><b>${after < 0 ? 'Không đủ' : money(after)}</b></dd>
+        </dl>
+        ${g.tag ? `<div class="xs muted" style="margin-bottom:12px">Tag cũ <b>${esc(g.tag)}</b> sẽ được thay bằng tag mới.</div>` : ''}
+        ${after < 0 ? `<a class="btn primary block" href="#/wallet">${icon('plus', 'sm')}Nạp thêm ${money(-after)}</a>`
+          : `<div class="grid grid-2"><button class="btn" data-close>Huỷ</button><button class="btn primary" data-buy>${icon('check', 'sm')}Mua ngay</button></div>`}`,
+      (el, close) => {
+        $('[data-buy]', el)?.addEventListener('click', (e) => withBtn(e.currentTarget, async () => {
+          try {
+            const r = await api('tagshop/buy', { group_id: gid, tag, custom });
+            close(); toast(`Đã mua tag "${r.tag}" 🎉`); render();
+          } catch (err) { toast(err.message, 'err'); }
+        }));
+      });
+    };
+    return {
+      title: 'Mua tag',
+      html: `
+      <div class="hero shop-hero"><div class="row between" style="align-items:flex-start"><div><div class="muted small">🏷 Cửa hàng tag</div><div class="big" style="font-size:28px">${money(balance)}</div><div class="muted xs">Số dư ví</div></div>
+        ${d.wallet ? `<a class="btn sm" href="#/wallet" style="background:rgba(255,255,255,.18);color:#fff;border-color:transparent">${icon('plus', 'sm')}Nạp tiền</a>` : ''}</div>
+        <div class="muted small" style="margin-top:8px">Tag hiện cạnh tên bạn trong nhóm${d.days ? ` · dùng ${d.days} ngày` : ' · dùng vĩnh viễn'}.</div></div>
+      ${!d.enabled ? `<div class="alert info" style="margin-top:12px">${icon('info')}<div class="small">Cửa hàng tag đang tắt.${isWebAdmin() ? ' Bật ở <a href="#/tags">Tag thành viên</a>.' : ''}</div></div>` : ''}
+      ${d.enabled && !d.linked ? `<div class="card" style="margin-top:12px">${empty('link', 'Liên kết Telegram ở trang <a href="#/account">Tài khoản</a> để mua tag.')}</div>` : ''}
+      ${d.enabled && d.linked && !d.groups.length ? `<div class="card" style="margin-top:12px">${empty('users', 'Bạn chưa ở trong nhóm nào bán tag.')}</div>` : ''}
+      ${d.enabled && d.linked && d.groups.length ? `
+        <div class="section-title"><h2>Chọn nhóm</h2></div>
+        <div class="chips" data-sg>${d.groups.map((g) => `<button class="chip ${g.id === gid ? 'active' : ''}" data-g="${g.id}">${esc(g.title)}</button>`).join('')}</div>
+        <div data-cur style="margin-top:10px">${curHtml()}</div>
+        ${d.items.length ? `<div class="section-title"><h2>Tag có sẵn</h2></div>
+          <div class="shop-grid">${d.items.map((it) => `<button class="shop-item" data-item="${esc(it.tag)}" data-price="${it.price}"><span class="badge tagb">🏷 ${esc(it.tag)}</span><b>${money(it.price)}</b></button>`).join('')}</div>` : ''}
+        ${d.custom ? `<div class="section-title"><h2>Tự đặt tag</h2><span class="small" style="font-weight:700">${money(d.custom_price)}</span></div>
+          <form class="card card-pad stack" id="fcustom">
+            <div class="row" style="gap:8px"><input class="input grow" name="tag" maxlength="16" placeholder="Tag của bạn, VD: Dân chơi" autocomplete="off"><span class="xs muted nowrap" data-cn>0/16</span></div>
+            <div class="xs muted">Tối đa 16 ký tự, không emoji${d.banned.length ? `, không chứa: ${d.banned.map(esc).join(', ')}` : ''}.</div>
+            <button class="btn primary block">🛒 Mua tag này · ${money(d.custom_price)}</button>
+          </form>` : ''}` : ''}
+      ${d.history.length ? `<div class="section-title"><h2>Lịch sử mua tag</h2></div><div class="list">${d.history.map(txItem).join('')}</div>` : ''}`,
+      mount: (root) => {
+        root.addEventListener('click', (e) => {
+          const g = e.target.closest('[data-g]');
+          if (g) { gid = +g.dataset.g; sessionStorage.setItem('tagshopG', gid); $$('[data-g]', root).forEach((x) => x.classList.toggle('active', x === g)); $('[data-cur]', root).innerHTML = curHtml(); return; }
+          const it = e.target.closest('[data-item]');
+          if (it) { if (cur()?.is_admin) return toast('Bạn là quản trị viên nhóm: đổi danh hiệu admin trong Telegram', 'err'); buySheet(it.dataset.item, +it.dataset.price, false); }
+        });
+        const f = $('#fcustom', root);
+        if (f) {
+          f.tag.addEventListener('input', () => { $('[data-cn]', root).textContent = `${f.tag.value.length}/16`; });
+          f.onsubmit = (e) => {
+            e.preventDefault();
+            const t = f.tag.value.trim();
+            if (!t) return toast('Nhập tag muốn mua', 'err');
+            if (/\p{Extended_Pictographic}/u.test(t)) return toast('Tag không được chứa emoji', 'err');
+            const bad = d.banned.find((w) => t.toLowerCase().includes(w.toLowerCase()));
+            if (bad) return toast(`Tag không được chứa "${bad}"`, 'err');
+            if (cur()?.is_admin) return toast('Bạn là quản trị viên nhóm: đổi danh hiệu admin trong Telegram', 'err');
+            buySheet(t, d.custom_price, true);
+          };
+        }
+      },
+    };
+  }, { title: 'Mua tag' });
 
   route('/me', viewMe, { title: 'Điểm của tôi', back: '/more' });
 
@@ -3937,6 +4045,7 @@
       </form>
       <div class="list" style="margin-top:14px">
         <a class="list-item" href="#/mylogs">${icon('list')}<div class="grow">Nhật ký của tôi</div><span class="chev">${icon('chevron')}</span></a>
+        ${S.pay?.tagshop ? `<a class="list-item" href="#/tagshop">${icon('tagi')}<div class="grow">Mua tag bằng số dư ví</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         <button class="list-item" data-theme-toggle>${icon('moon')}<div class="grow">Giao diện sáng / tối</div></button>
         <button class="list-item" data-logout style="color:var(--danger)">${icon('logout')}<div class="grow">Đăng xuất</div></button>
       </div>`,
