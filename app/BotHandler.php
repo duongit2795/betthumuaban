@@ -24,6 +24,10 @@ class BotHandler
         elseif (isset($u['message'])) $this->onMessage($u['message']);
         elseif (isset($u['edited_message'])) $this->onMessage($u['edited_message'], true);
         elseif (isset($u['message_reaction'])) $this->onReaction($u['message_reaction']);
+        elseif (isset($u['chat_join_request'])) {
+            $jr = $u['chat_join_request'];
+            if ($this->isGroup($jr['chat'])) AntiRaid::onRequest($this->api, Repo::upsertGroup($jr['chat'], (int)$this->bot['id']), $jr);
+        }
         elseif (isset($u['callback_query'])) {
             $cbq = $u['callback_query'];
             if ($cap = Captcha::onCallback($this->api, $cbq)) { $this->afterCaptcha($cap); return; }
@@ -85,6 +89,7 @@ class BotHandler
         $isIn = $st === 'member' || ($st === 'restricted' && !empty($nm['is_member']));
         if ($wasOut && $isIn && empty($user['is_bot'])) {
             $by = (int)($cm['from']['id'] ?? 0);
+            if (!AntiRaid::onJoin($this->api, $group, $user, in_array($st, ['administrator', 'creator'], true), $by && $by != $user['id'] ? $by : null, fn(int $id) => $this->isAdmin($group, $id)))
             Captcha::start($this->api, (int)$this->bot['id'], $group, $user, $by && $by != $user['id'] ? $by : null, fn(int $id) => $this->isAdmin($group, $id));
         } elseif (in_array($st, ['left', 'kicked'], true)) {
             Captcha::left($group, $user['id'], $this->api);
@@ -255,6 +260,7 @@ class BotHandler
         foreach ($msg['new_chat_members'] as $u) {
             if ($u['id'] == $this->botTgId) continue;
             $addedBy = !empty($msg['from']) && $msg['from']['id'] != $u['id'] ? (int)$msg['from']['id'] : null;
+            if (AntiRaid::onJoin($this->api, $group, $u, $this->isAdmin($group, (int)$u['id']), $addedBy, fn(int $id) => $this->isAdmin($group, $id))) { $captcha[$u['id']] = true; continue; } // chống raid đã xử lý
             if (Captcha::start($this->api, (int)$this->bot['id'], $group, $u, $addedBy, fn(int $id) => $this->isAdmin($group, $id))) $captcha[$u['id']] = true;
             $m = Repo::upsertMember($gid, $u, ['status' => 'member', 'joined' => true]);
             if ($m['status'] === 'left') DB::run("UPDATE tg_members SET status = 'member' WHERE id = ?", [$m['id']]);

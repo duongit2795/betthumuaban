@@ -4,8 +4,8 @@ defined('APP') or exit;
 class Api
 {
     /** Loại update Telegram bot nhận (thêm loại mới → tăng WEBHOOK_V để tự cập nhật bot đã cài) */
-    const UPDATES = ['message', 'edited_message', 'chat_member', 'my_chat_member', 'callback_query', 'message_reaction'];
-    const WEBHOOK_V = '2';
+    const UPDATES = ['message', 'edited_message', 'chat_member', 'my_chat_member', 'callback_query', 'message_reaction', 'chat_join_request'];
+    const WEBHOOK_V = '3';
 
     /** Đăng ký lại loại update cho các bot đã cài (1 lần sau khi cập nhật phiên bản) */
     public static function refreshWebhooks(): void
@@ -143,6 +143,11 @@ class Api
             'exchange/do' => 'exchangeDo',
             'exchange/buy' => 'exchangeBuy',
             'exchange/save' => 'exchangeSave',
+            'antiraid' => 'antiRaid',
+            'antiraid/save' => 'antiRaidSave',
+            'antiraid/lock' => 'antiRaidLock',
+            'antiraid/decide' => 'antiRaidDecide',
+            'antiraid/decide-all' => 'antiRaidDecideAll',
             'captcha' => 'captcha',
             'captcha/save' => 'captchaSave',
             'gift' => 'gift',
@@ -2494,5 +2499,70 @@ class Api
         $c = Captcha::save((array)$this->in('config', []));
         Repo::log(null, $u['username'], 'system', null, 'Captcha: ' . ($c['enabled'] ? 'bật · ' . Captcha::MODES[$c['mode']] . ' · ' . $c['timeout'] . 's' : 'tắt'));
         return ['config' => $c];
+    }
+
+    // ================= Chống raid + duyệt yêu cầu tham gia =================
+    private function antiRaid(): array
+    {
+        Auth::requireAdmin();
+        $groups = [];
+        foreach (DB::all('SELECT * FROM tg_groups WHERE active = 1 ORDER BY title') as $g) {
+            $st = AntiRaid::state((int)$g['id']);
+            $groups[] = ['id' => (int)$g['id'], 'title' => $g['title'], 'bot_admin' => (int)$g['bot_is_admin'], 'public' => (bool)$g['username'],
+                'locked' => $st && (int)$st['until'] > now(), 'until' => $st ? (int)$st['until'] : null, 'why' => $st['why'] ?? null,
+                'pending' => (int)DB::val("SELECT COUNT(*) FROM join_requests WHERE group_id = ? AND status = 'pending'", [$g['id']]),
+                'joins_hour' => (int)DB::val('SELECT COUNT(*) FROM join_events WHERE group_id = ? AND created_at > ?', [$g['id'], now() - 3600])];
+        }
+        $reqs = DB::all("SELECT r.*, g.title FROM join_requests r JOIN tg_groups g ON g.id = r.group_id WHERE r.status = 'pending' ORDER BY r.id DESC LIMIT 200");
+        return [
+            'config' => AntiRaid::config(), 'defaults' => AntiRaid::DEFAULTS, 'actions' => AntiRaid::ACTIONS, 'groups' => $groups,
+            'requests' => array_map(fn($r) => ['id' => (int)$r['id'], 'group_id' => (int)$r['group_id'], 'group' => $r['title'], 'tg_user_id' => (string)$r['tg_user_id'],
+                'name' => $r['name'], 'username' => $r['username'], 'bio' => $r['bio'], 'created_at' => (int)$r['created_at']], $reqs),
+            'decided' => (int)DB::val("SELECT COUNT(*) FROM join_requests WHERE status = 'approved' AND decided_by = 'Bot (tự duyệt)' AND decided_at > ?", [now() - 86400]),
+        ];
+    }
+
+    private function antiRaidSave(): array
+    {
+        $u = Auth::requireAdmin();
+        $c = AntiRaid::save((array)$this->in('config', []));
+        Repo::log(null, $u['username'], 'system', null, 'Chống raid: ' . ($c['enabled'] ? "bật · {$c['threshold']} người / {$c['window']}s → khoá {$c['lock_minutes']} phút" : 'tắt'));
+        return ['config' => $c];
+    }
+
+    /** Khoá / mở khoá tay (minutes = 0 → mở) */
+    private function antiRaidLock(): array
+    {
+        $u = Auth::requireAdmin();
+        $g = $this->loadGroup();
+        $api = Repo::apiForGroup($g) ?: fail('Nhóm chưa có bot hoạt động');
+        $min = $this->int('minutes');
+        if ($min > 0) AntiRaid::lock($api, $g, min(1440, $min), 'Admin khoá tay', 0, $u['username']);
+        else AntiRaid::unlock($api, $g, $u['username']);
+        return ['locked' => AntiRaid::locked((int)$g['id'])];
+    }
+
+    private function antiRaidDecide(): array
+    {
+        $u = Auth::requireAdmin();
+        $r = DB::get('SELECT * FROM join_requests WHERE id = ?', [$this->int('id')]) ?: fail('Không tìm thấy yêu cầu', 404);
+        $g = Repo::group((int)$r['group_id']) ?: fail('Không tìm thấy nhóm', 404);
+        $api = Repo::apiForGroup($g) ?: fail('Nhóm chưa có bot hoạt động');
+        AntiRaid::decide($api, $g, (int)$r['id'], (bool)$this->in('approve'), $u['username']);
+        return [];
+    }
+
+    private function antiRaidDecideAll(): array
+    {
+        $u = Auth::requireAdmin();
+        $g = $this->loadGroup();
+        $api = Repo::apiForGroup($g) ?: fail('Nhóm chưa có bot hoạt động');
+        @set_time_limit(120);
+        $ok = 0; $err = 0;
+        foreach (DB::all("SELECT id FROM join_requests WHERE group_id = ? AND status = 'pending' ORDER BY id LIMIT 200", [$g['id']]) as $r) {
+            try { if (AntiRaid::decide($api, $g, (int)$r['id'], (bool)$this->in('approve'), $u['username'])) $ok++; } catch (HttpError $e) { $err++; }
+            usleep(60000);
+        }
+        return ['done' => $ok, 'failed' => $err];
     }
 }

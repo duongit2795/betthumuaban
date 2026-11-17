@@ -121,7 +121,7 @@
     settings: ['Cài đặt', 'settings', ''], bot_added: ['Thêm bot vào nhóm', 'bot', 'green'], bot_removed: ['Bot rời nhóm', 'bot', 'red'],
     bot_add: ['Thêm bot', 'bot', 'blue'], bot_delete: ['Xoá bot', 'bot', 'red'], bot_on: ['Bật bot', 'power', 'green'], bot_off: ['Tắt bot', 'power', ''],
     rule: ['Lệnh tự tạo', 'terminal', 'blue'], ad_post: ['Quảng cáo', 'megaphone', 'blue'], username: ['Nhắc đặt username', 'user', 'amber'], login: ['Đăng nhập', 'key', 'green'], update: ['Cập nhật hệ thống', 'download', 'blue'], system: ['Hệ thống', 'settings', ''], pin: ['Ghim tin', 'pin', 'blue'], unpin: ['Bỏ ghim', 'pin', ''],
-    gate: ['Chưa đủ điều kiện chat', 'lock', 'amber'], captcha: ['Captcha', 'shield', 'blue'], captcha_ok: ['Qua captcha', 'shield', 'green'], captcha_fail: ['Không qua captcha', 'shield', 'red'], exchange: ['Đổi điểm', 'refresh', 'green'], gift: ['Mã quà tặng', 'star', 'green'], vip: ['VIP', 'trophy', 'amber'], checkin: ['Điểm danh', 'calendar', 'green'], tag: ['Đổi tag', 'tagi', 'blue'], learn: ['Nhắc học tập', 'book', 'amber'], learn_done: ['Hoàn thành bài học', 'book', 'green'],
+    gate: ['Chưa đủ điều kiện chat', 'lock', 'amber'], captcha: ['Captcha', 'shield', 'blue'], raid: ['Khoá chống raid', 'shield', 'red'], raid_end: ['Mở khoá chống raid', 'shield', 'green'], captcha_ok: ['Qua captcha', 'shield', 'green'], captcha_fail: ['Không qua captcha', 'shield', 'red'], exchange: ['Đổi điểm', 'refresh', 'green'], gift: ['Mã quà tặng', 'star', 'green'], vip: ['VIP', 'trophy', 'amber'], checkin: ['Điểm danh', 'calendar', 'green'], tag: ['Đổi tag', 'tagi', 'blue'], learn: ['Nhắc học tập', 'book', 'amber'], learn_done: ['Hoàn thành bài học', 'book', 'green'],
     payments_settings: ['Cài đặt nạp tiền', 'bank', ''], wallet_assign: ['Cộng tiền tay', 'wallet', 'green'], wallet_adjust: ['Điều chỉnh số dư', 'wallet', 'blue'],
   };
 
@@ -350,7 +350,7 @@
     if (isWebAdmin()) {
       return {
         tab: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/logs', 'list', 'Nhật ký'], ['/more', 'grid', 'Thêm']],
-        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh'], ['/ads', 'megaphone', 'Quảng cáo'], ['/learn', 'book', 'Học tập'], ['/captcha', 'shield', 'Captcha vào nhóm'], ['/gates', 'lock', 'Điều kiện chat'], ['/tags', 'tagi', 'Tag thành viên'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/payments', 'bank', 'Nạp tiền & ân xá'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ['/checkin', 'calendar', 'Điểm danh'], ['/exchange', 'refresh', 'Đổi điểm'], ['/vip', 'trophy', 'Gói VIP'], ['/giftcode', 'star', 'Mã quà tặng'], ...payNav(), ['/account', 'user', 'Tài khoản']],
+        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh'], ['/ads', 'megaphone', 'Quảng cáo'], ['/learn', 'book', 'Học tập'], ['/antiraid', 'shield', 'Chống raid'], ['/captcha', 'shield', 'Captcha vào nhóm'], ['/gates', 'lock', 'Điều kiện chat'], ['/tags', 'tagi', 'Tag thành viên'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/payments', 'bank', 'Nạp tiền & ân xá'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ['/checkin', 'calendar', 'Điểm danh'], ['/exchange', 'refresh', 'Đổi điểm'], ['/vip', 'trophy', 'Gói VIP'], ['/giftcode', 'star', 'Mã quà tặng'], ...payNav(), ['/account', 'user', 'Tài khoản']],
       };
     }
     const ck = S.pay?.checkin ? [['/checkin', 'calendar', 'Điểm danh']] : [];
@@ -380,7 +380,7 @@
     const path = current();
     const direct = (p) => (p === '/' ? path === '/' : path === p || path.startsWith(p + '/') || (p === '/groups' && path.startsWith('/group/')) || (p === '/rules' && path === '/commands'));
     const inTabs = items.tab.some(([p]) => p !== '/more' && direct(p));
-    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments', '/learn', '/keyboard', '/gates', '/mylogs', '/checkin', '/tags', '/tagshop', '/exchange', '/giftcode', '/vip', '/captcha'].some((x) => path.startsWith(x)));
+    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments', '/learn', '/keyboard', '/gates', '/mylogs', '/checkin', '/tags', '/tagshop', '/exchange', '/giftcode', '/vip', '/captcha', '/antiraid'].some((x) => path.startsWith(x)));
     $('#tabbar').innerHTML = items.tab.map(([p, ic, t]) => `<a href="#${p}" class="${isActive(p) ? 'active' : ''}">${icon(ic)}<span>${t}</span></a>`).join('');
     $('#sidebar').innerHTML = `<div class="brand"><img src="assets/icon.svg" alt="">${esc(S.site)}</div>`
       + items.side.map(([p, ic, t]) => `<a href="#${p}" class="nav ${isActive(p) && !(p === '/more') ? 'active' : ''}">${icon(ic)}${t}</a>`).join('')
@@ -2783,6 +2783,7 @@
         <a class="list-item" href="#/rules">${icon('terminal')}<div class="grow">Lệnh tự tạo & lệnh mặc định</div><span class="chev">${icon('chevron')}</span></a>
         ${isWebAdmin() ? `<a class="list-item" href="#/ads">${icon('megaphone')}<div class="grow">Quảng cáo</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/learn">${icon('book')}<div class="grow">Học tập bắt buộc</div><span class="chev">${icon('chevron')}</span></a>
+        <a class="list-item" href="#/antiraid">${icon('shield')}<div class="grow">Chống raid & duyệt thành viên</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/captcha">${icon('shield')}<div class="grow">Captcha khi vào nhóm</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/gates">${icon('lock')}<div class="grow">Điều kiện nhắn tin giữa các nhóm</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/tags">${icon('tagi')}<div class="grow">Tag thành viên</div><span class="chev">${icon('chevron')}</span></a>` : ''}
@@ -4303,6 +4304,71 @@
       },
     };
   }, { webAdmin: true, title: 'Captcha vào nhóm', back: '/more' });
+
+  // ================= Chống raid + duyệt yêu cầu tham gia =================
+  route('/antiraid', async () => {
+    const d = await api('antiraid');
+    const c = d.config;
+    let sel = [...c.groups];
+    const left = (t) => { const m = Math.max(0, Math.ceil((t - Date.now() / 1000) / 60)); return m >= 60 ? Math.floor(m / 60) + ' giờ ' + (m % 60) + ' phút' : m + ' phút'; };
+    const gcard = (g) => `<div class="card card-pad stack raid-card ${g.locked ? 'locked' : ''}" style="gap:8px">
+      <div class="row">${avatar(g.title, g.id, 'sq')}<div class="grow" style="min-width:0"><b class="ellipsis">${esc(g.title)}</b>
+        <div class="xs muted">${num(g.joins_hour)} lượt vào / xin vào trong 1 giờ${g.bot_admin ? '' : ' · <span style="color:var(--danger)">bot chưa là admin</span>'}</div></div>
+        ${g.locked ? '<span class="badge red">🛡 Đang khoá</span>' : '<span class="badge green">Bình thường</span>'}</div>
+      ${g.locked ? `<div class="alert err" style="margin:0">${icon('lock')}<div class="xs">Còn <b>${left(g.until)}</b> (đến ${fmtDate(g.until, true)}) · ${esc(g.why || '')}</div></div>` : ''}
+      <div class="row wrap" style="gap:6px">${g.locked ? `<button class="btn sm soft" data-unlock="${g.id}">${icon('check', 'sm')}Mở khoá ngay</button>` : `<button class="btn sm soft-danger" data-lock="${g.id}">${icon('lock', 'sm')}Khoá ngay</button>`}
+        ${g.pending ? `<span class="badge amber" style="align-self:center">${num(g.pending)} yêu cầu chờ duyệt</span>
+          <button class="btn sm" data-all="${g.id}" data-ap="1">Duyệt tất cả</button><button class="btn sm ghost" data-all="${g.id}" data-ap="0">Từ chối tất cả</button>` : ''}</div>
+    </div>`;
+    return {
+      title: 'Chống raid',
+      html: `
+      <div class="alert info" style="margin-bottom:12px">${icon('shield')}<div class="xs">Bật <b>"Phê duyệt thành viên mới"</b> trong nhóm Telegram (Quản lý nhóm → Loại nhóm / Thành viên), cho bot quyền <b>Thêm thành viên</b> + <b>Cấm thành viên</b>. Bình thường bot <b>tự duyệt</b> ngay; khi có <b>${c.threshold} người trong ${c.window} giây</b> bot <b>ngừng tự duyệt</b> và khoá ${c.lock_minutes} phút để chặn đẩy bot / tài khoản ảo.${d.decided ? ` Đã tự duyệt ${num(d.decided)} người trong 24 giờ.` : ''}</div></div>
+      <div class="section-title"><h2>Trạng thái các nhóm</h2></div>
+      <div class="stack">${d.groups.map(gcard).join('') || empty('users', 'Chưa có nhóm')}</div>
+      ${d.requests.length ? `<div class="section-title"><h2>Yêu cầu tham gia đang chờ</h2><span class="xs muted">${d.requests.length}</span></div>
+        <div class="list">${d.requests.map((r) => `<div class="list-item" style="align-items:flex-start">${avatar(r.name, r.tg_user_id)}
+          <div class="grow" style="min-width:0"><b class="ellipsis">${esc(r.name || r.tg_user_id)}</b> ${r.username ? `<span class="xs muted">@${esc(r.username)}</span>` : '<span class="badge">không username</span>'}
+            <div class="xs muted">${esc(r.group)} · <span class="mono">${esc(r.tg_user_id)}</span> · ${ago(r.created_at)}</div>${r.bio ? `<div class="xs" style="margin-top:2px">“${esc(r.bio)}”</div>` : ''}
+            <div class="row" style="gap:6px;margin-top:6px"><button class="btn sm primary" data-dec="${r.id}" data-ap="1">${icon('check', 'sm')}Duyệt</button><button class="btn sm soft-danger" data-dec="${r.id}" data-ap="0">${icon('x', 'sm')}Từ chối</button></div></div></div>`).join('')}</div>` : ''}
+      <div class="section-title"><h2>⚙️ Cài đặt</h2></div>
+      <form class="stack" id="fraid">
+        <div class="card">${sw('enabled', c.enabled, 'Bật chống raid')}${sw('auto_approve', c.auto_approve, 'Bot tự duyệt yêu cầu tham gia khi bình thường', 'Tắt = mọi yêu cầu chờ admin duyệt (trên web / Telegram)')}</div>
+        <div class="card card-pad stack">
+          <div class="field"><span class="lbl">Ngưỡng phát hiện raid</span><div class="row" style="gap:8px"><input class="input" name="threshold" inputmode="numeric" value="${c.threshold}" style="width:80px"><span class="small nowrap">người trong</span><input class="input" name="window" inputmode="numeric" value="${c.window}" style="width:90px"><span class="small">giây</span></div></div>
+          <label class="field"><span class="lbl">Khoá trong (phút)</span><input class="input" name="lock_minutes" inputmode="numeric" value="${c.lock_minutes}"></label>
+          <label class="field"><span class="lbl">Yêu cầu tham gia khi đang khoá</span><select class="input" name="request_action"><option value="hold" ${c.request_action === 'hold' ? 'selected' : ''}>Giữ lại chờ admin duyệt</option><option value="decline" ${c.request_action === 'decline' ? 'selected' : ''}>Tự từ chối</option></select></label>
+          <label class="field"><span class="lbl">Người vào thẳng (qua link / username) khi đang khoá</span><select class="input" name="join_action">${Object.entries(d.actions).map(([k, l]) => `<option value="${k}" ${c.join_action === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+          <div class="field"><span class="lbl">Áp dụng cho nhóm <span class="xs muted">(không chọn = tất cả)</span></span><div class="chips" style="flex-wrap:wrap">${d.groups.map((g) => `<button type="button" class="chip ${sel.includes(g.id) ? 'active' : ''}" data-rg="${g.id}">${esc(g.title)}</button>`).join('')}</div></div>
+        </div>
+        <div class="card">${sw('punish_trigger', c.punish_trigger, 'Xử lý cả những người vừa vào kích hoạt raid')}${sw('revoke_link', c.revoke_link, 'Đổi link mời chính khi khoá', 'Link mời cũ (đang bị phát tán) hết hiệu lực')}${sw('lock_chat', c.lock_chat, 'Khoá chat cả nhóm khi khoá', 'Chỉ admin nhắn được, hết hạn tự mở lại quyền cũ')}${sw('notify_group', c.notify_group, 'Báo trong nhóm')}${sw('notify_admins', c.notify_admins, 'Nhắn riêng cho admin web (đã liên kết Telegram)')}</div>
+        <div class="card card-pad"><label class="field"><span class="lbl">Nội dung báo trong nhóm</span><textarea class="input" name="group_text" rows="3">${esc(c.group_text)}</textarea>
+          <div class="hint">Biến: <code>{count}</code> <code>{window}</code> <code>{minutes}</code> <code>{until}</code> <code>{group}</code></div></label></div>
+        <button class="btn primary block">Lưu cài đặt chống raid</button>
+      </form>`,
+      mount: (root) => {
+        root.addEventListener('click', async (e) => {
+          let b;
+          if ((b = e.target.closest('[data-rg]'))) { const id = +b.dataset.rg; sel = sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id]; b.classList.toggle('active'); return; }
+          if ((b = e.target.closest('[data-lock]'))) {
+            if (!(await confirmBox('Khoá nhóm?', `Khoá chống raid ${c.lock_minutes} phút: ngừng tự duyệt, xử lý người vào thẳng${c.lock_chat ? ', khoá chat cả nhóm' : ''}.`, { danger: true, ok: 'Khoá ngay' }))) return;
+            return withBtn(b, async () => { try { await api('antiraid/lock', { group_id: +b.dataset.lock, minutes: c.lock_minutes }); toast('Đã khoá'); render(); } catch (err) { toast(err.message, 'err'); } });
+          }
+          if ((b = e.target.closest('[data-unlock]'))) return withBtn(b, async () => { try { await api('antiraid/lock', { group_id: +b.dataset.unlock, minutes: 0 }); toast('Đã mở khoá'); render(); } catch (err) { toast(err.message, 'err'); } });
+          if ((b = e.target.closest('[data-dec]'))) return withBtn(b, async () => { try { await api('antiraid/decide', { id: +b.dataset.dec, approve: b.dataset.ap === '1' }); b.closest('.list-item').remove(); toast(b.dataset.ap === '1' ? 'Đã duyệt' : 'Đã từ chối'); } catch (err) { toast(err.message, 'err'); } });
+          if ((b = e.target.closest('[data-all]'))) {
+            const ap = b.dataset.ap === '1';
+            if (!(await confirmBox(ap ? 'Duyệt tất cả?' : 'Từ chối tất cả?', 'Áp dụng cho mọi yêu cầu đang chờ của nhóm này.', { danger: !ap, ok: ap ? 'Duyệt tất cả' : 'Từ chối tất cả' }))) return;
+            return withBtn(b, async () => { try { const r = await api('antiraid/decide-all', { group_id: +b.dataset.all, approve: ap }); toast(`Đã xử lý ${r.done} yêu cầu${r.failed ? ' · lỗi ' + r.failed : ''}`); render(); } catch (err) { toast(err.message, 'err'); } });
+          }
+        });
+        $('#fraid', root).onsubmit = (e) => {
+          e.preventDefault();
+          withBtn(e.target.querySelector('button.primary'), async () => { try { await api('antiraid/save', { config: { ...formData(e.target), groups: sel } }); toast('Đã lưu'); render(); } catch (err) { toast(err.message, 'err'); } });
+        };
+      },
+    };
+  }, { webAdmin: true, title: 'Chống raid', back: '/more' });
 
   route('/me', viewMe, { title: 'Điểm của tôi', back: '/more' });
 
