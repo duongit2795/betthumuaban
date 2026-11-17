@@ -121,7 +121,7 @@
     settings: ['Cài đặt', 'settings', ''], bot_added: ['Thêm bot vào nhóm', 'bot', 'green'], bot_removed: ['Bot rời nhóm', 'bot', 'red'],
     bot_add: ['Thêm bot', 'bot', 'blue'], bot_delete: ['Xoá bot', 'bot', 'red'], bot_on: ['Bật bot', 'power', 'green'], bot_off: ['Tắt bot', 'power', ''],
     rule: ['Lệnh tự tạo', 'terminal', 'blue'], ad_post: ['Quảng cáo', 'megaphone', 'blue'], username: ['Nhắc đặt username', 'user', 'amber'], login: ['Đăng nhập', 'key', 'green'], update: ['Cập nhật hệ thống', 'download', 'blue'], system: ['Hệ thống', 'settings', ''], pin: ['Ghim tin', 'pin', 'blue'], unpin: ['Bỏ ghim', 'pin', ''],
-    gate: ['Chưa đủ điều kiện chat', 'lock', 'amber'], exchange: ['Đổi điểm', 'refresh', 'green'], gift: ['Mã quà tặng', 'star', 'green'], vip: ['VIP', 'trophy', 'amber'], checkin: ['Điểm danh', 'calendar', 'green'], tag: ['Đổi tag', 'tagi', 'blue'], learn: ['Nhắc học tập', 'book', 'amber'], learn_done: ['Hoàn thành bài học', 'book', 'green'],
+    gate: ['Chưa đủ điều kiện chat', 'lock', 'amber'], captcha: ['Captcha', 'shield', 'blue'], captcha_ok: ['Qua captcha', 'shield', 'green'], captcha_fail: ['Không qua captcha', 'shield', 'red'], exchange: ['Đổi điểm', 'refresh', 'green'], gift: ['Mã quà tặng', 'star', 'green'], vip: ['VIP', 'trophy', 'amber'], checkin: ['Điểm danh', 'calendar', 'green'], tag: ['Đổi tag', 'tagi', 'blue'], learn: ['Nhắc học tập', 'book', 'amber'], learn_done: ['Hoàn thành bài học', 'book', 'green'],
     payments_settings: ['Cài đặt nạp tiền', 'bank', ''], wallet_assign: ['Cộng tiền tay', 'wallet', 'green'], wallet_adjust: ['Điều chỉnh số dư', 'wallet', 'blue'],
   };
 
@@ -350,7 +350,7 @@
     if (isWebAdmin()) {
       return {
         tab: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/logs', 'list', 'Nhật ký'], ['/more', 'grid', 'Thêm']],
-        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh'], ['/ads', 'megaphone', 'Quảng cáo'], ['/learn', 'book', 'Học tập'], ['/gates', 'lock', 'Điều kiện chat'], ['/tags', 'tagi', 'Tag thành viên'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/payments', 'bank', 'Nạp tiền & ân xá'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ['/checkin', 'calendar', 'Điểm danh'], ['/exchange', 'refresh', 'Đổi điểm'], ['/vip', 'trophy', 'Gói VIP'], ['/giftcode', 'star', 'Mã quà tặng'], ...payNav(), ['/account', 'user', 'Tài khoản']],
+        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh'], ['/ads', 'megaphone', 'Quảng cáo'], ['/learn', 'book', 'Học tập'], ['/captcha', 'shield', 'Captcha vào nhóm'], ['/gates', 'lock', 'Điều kiện chat'], ['/tags', 'tagi', 'Tag thành viên'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/payments', 'bank', 'Nạp tiền & ân xá'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ['/checkin', 'calendar', 'Điểm danh'], ['/exchange', 'refresh', 'Đổi điểm'], ['/vip', 'trophy', 'Gói VIP'], ['/giftcode', 'star', 'Mã quà tặng'], ...payNav(), ['/account', 'user', 'Tài khoản']],
       };
     }
     const ck = S.pay?.checkin ? [['/checkin', 'calendar', 'Điểm danh']] : [];
@@ -380,7 +380,7 @@
     const path = current();
     const direct = (p) => (p === '/' ? path === '/' : path === p || path.startsWith(p + '/') || (p === '/groups' && path.startsWith('/group/')) || (p === '/rules' && path === '/commands'));
     const inTabs = items.tab.some(([p]) => p !== '/more' && direct(p));
-    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments', '/learn', '/keyboard', '/gates', '/mylogs', '/checkin', '/tags', '/tagshop', '/exchange', '/giftcode', '/vip'].some((x) => path.startsWith(x)));
+    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments', '/learn', '/keyboard', '/gates', '/mylogs', '/checkin', '/tags', '/tagshop', '/exchange', '/giftcode', '/vip', '/captcha'].some((x) => path.startsWith(x)));
     $('#tabbar').innerHTML = items.tab.map(([p, ic, t]) => `<a href="#${p}" class="${isActive(p) ? 'active' : ''}">${icon(ic)}<span>${t}</span></a>`).join('');
     $('#sidebar').innerHTML = `<div class="brand"><img src="assets/icon.svg" alt="">${esc(S.site)}</div>`
       + items.side.map(([p, ic, t]) => `<a href="#${p}" class="nav ${isActive(p) && !(p === '/more') ? 'active' : ''}">${icon(ic)}${t}</a>`).join('')
@@ -2783,6 +2783,7 @@
         <a class="list-item" href="#/rules">${icon('terminal')}<div class="grow">Lệnh tự tạo & lệnh mặc định</div><span class="chev">${icon('chevron')}</span></a>
         ${isWebAdmin() ? `<a class="list-item" href="#/ads">${icon('megaphone')}<div class="grow">Quảng cáo</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/learn">${icon('book')}<div class="grow">Học tập bắt buộc</div><span class="chev">${icon('chevron')}</span></a>
+        <a class="list-item" href="#/captcha">${icon('shield')}<div class="grow">Captcha khi vào nhóm</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/gates">${icon('lock')}<div class="grow">Điều kiện nhắn tin giữa các nhóm</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/tags">${icon('tagi')}<div class="grow">Tag thành viên</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         ${isWebAdmin() ? `<a class="list-item" href="#/users">${icon('key')}<div class="grow">Tài khoản web & phân quyền</div><span class="chev">${icon('chevron')}</span></a>
@@ -4065,7 +4066,10 @@
 
   // ================= Mã quà tặng =================
   function giftSheet(c, a, onSaved) {
-    const v = c || { code: '', type: 'money', amount: 10000, group_id: a.groups[0]?.id, max_uses: 100, expires_at: null, enabled: 1, note: '' };
+    const v = c ? { ...c } : { code: '', type: 'money', amount: 10000, group_id: a.groups[0]?.id, max_uses: 100, expires_at: null, enabled: 1, note: '' };
+    const cd = { group_id: a.groups[0]?.id, member: false, min_points: 0, min_messages: 0, min_days: 0, min_deposit: 0, vip_only: false, learned: false, ...(c?.conditions || {}) };
+    if (!cd.group_id) cd.group_id = a.groups[0]?.id;
+    const hasCond = () => cd.member || cd.min_points || cd.min_messages || cd.min_days || cd.min_deposit || cd.vip_only || cd.learned;
     const draw = () => `<div class="sheet-head"><h2>${c ? 'Sửa mã ' + esc(c.code) : 'Tạo mã quà tặng'}</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
       <form class="stack" id="fgift">
         <label class="field"><span class="lbl">Mã <span class="xs muted">(để trống = tạo ngẫu nhiên)</span></span><input class="input mono" name="code" value="${esc(v.code)}" placeholder="VD: TET2027" maxlength="32" style="text-transform:uppercase"></label>
@@ -4077,12 +4081,32 @@
           <label class="field"><span class="lbl">Hết hạn (tuỳ chọn)</span><input class="input" type="date" name="expires" value="${v.expires_at ? new Date(v.expires_at * 1000).toISOString().slice(0, 10) : ''}"></label>
         </div>
         <label class="field"><span class="lbl">Ghi chú (chỉ admin thấy)</span><input class="input" name="note" value="${esc(v.note || '')}" placeholder="VD: Sự kiện Tết"></label>
+        <details class="card card-pad" style="box-shadow:none" ${hasCond() ? 'open' : ''}><summary style="cursor:pointer;font-weight:600">🔐 Điều kiện sử dụng mã ${hasCond() ? '<span class="badge blue">đang bật</span>' : '<span class="xs muted">(không bắt buộc)</span>'}</summary>
+          <div class="stack" style="margin-top:12px">
+            <label class="field"><span class="lbl">Nhóm dùng để xét điều kiện</span><select class="input" name="c_group_id">${a.groups.map((g) => `<option value="${g.id}" ${g.id === Number(cd.group_id) ? 'selected' : ''}>${esc(g.title)}</option>`).join('')}</select></label>
+            <label class="row small" style="gap:8px"><input type="checkbox" name="c_member" ${cd.member ? 'checked' : ''}> Phải đang là thành viên nhóm này</label>
+            <div class="grid grid-2">
+              <label class="field"><span class="lbl">Điểm tối thiểu ở nhóm</span><input class="input" name="c_min_points" inputmode="numeric" value="${cd.min_points || ''}" placeholder="0 = không"></label>
+              <label class="field"><span class="lbl">Số tin nhắn tối thiểu</span><input class="input" name="c_min_messages" inputmode="numeric" value="${cd.min_messages || ''}" placeholder="0 = không"></label>
+              <label class="field"><span class="lbl">Vào nhóm ít nhất (ngày)</span><input class="input" name="c_min_days" inputmode="numeric" value="${cd.min_days || ''}" placeholder="0 = không"></label>
+              <label class="field"><span class="lbl">Đã nạp ví ít nhất (đ)</span><input class="input" name="c_min_deposit" inputmode="numeric" value="${cd.min_deposit || ''}" placeholder="0 = không"></label>
+            </div>
+            <label class="row small" style="gap:8px"><input type="checkbox" name="c_vip_only" ${cd.vip_only ? 'checked' : ''}> Chỉ thành viên VIP</label>
+            <label class="row small" style="gap:8px"><input type="checkbox" name="c_learned" ${cd.learned ? 'checked' : ''}> Phải hoàn thành Học tập bắt buộc</label>
+            <div class="xs muted">Điểm / tin nhắn / số ngày tự hiểu là phải ở trong nhóm đã chọn.</div>
+          </div></details>
         <div class="card" style="box-shadow:none">${sw('enabled', v.enabled, 'Bật mã này')}</div>
         <div class="grid ${c ? 'grid-2' : ''}">${c ? `<button type="button" class="btn soft-danger" data-gdel>${icon('trash', 'sm')}Xoá</button>` : ''}<button class="btn primary">${icon('check', 'sm')}Lưu mã</button></div>
       </form>`;
     sheet('<div id="giftbox"></div>', (el, close) => {
       const box = $('#giftbox', el);
-      const keep = () => { const f = $('#fgift', el); if (f) Object.assign(v, formData(f)); };
+      const keep = () => {
+        const f = $('#fgift', el);
+        if (!f) return;
+        const x = formData(f);
+        Object.keys(x).filter((k) => k.startsWith('c_')).forEach((k) => { cd[k.slice(2)] = typeof x[k] === 'boolean' ? x[k] : Number(String(x[k]).replace(/\D/g, '')) || 0; delete x[k]; });
+        Object.assign(v, x);
+      };
       box.innerHTML = draw();
       el.addEventListener('click', async (e) => {
         const t = e.target.closest('[data-gt]');
@@ -4092,7 +4116,7 @@
       el.addEventListener('submit', (e) => {
         e.preventDefault(); keep();
         withBtn(e.target.querySelector('button.primary'), async () => {
-          try { const r = await api('gift/save', { code: { ...v, id: c?.id, group_id: Number(v.group_id) || null } }); close(); toast('Đã lưu mã ' + r.code.code); navigator.clipboard?.writeText(r.code.code).catch(() => {}); onSaved(); }
+          try { const r = await api('gift/save', { code: { ...v, id: c?.id, group_id: Number(v.group_id) || null, conditions: cd } }); close(); toast('Đã lưu mã ' + r.code.code); navigator.clipboard?.writeText(r.code.code).catch(() => {}); onSaved(); }
           catch (err) { toast(err.message, 'err'); }
         });
       });
@@ -4115,7 +4139,8 @@
         <div class="list">${a.codes.length ? a.codes.map((c) => `<button type="button" class="list-item" data-gedit="${c.id}" style="align-items:flex-start"><span class="log-ico ${c.enabled ? 'blue' : ''}">🎁</span>
           <div class="grow" style="min-width:0;text-align:left"><div class="row wrap" style="gap:6px"><b class="mono">${esc(c.code)}</b>${c.enabled ? '' : '<span class="badge">Tắt</span>'}${c.expires_at && c.expires_at < Date.now() / 1000 ? '<span class="badge red">Hết hạn</span>' : ''}${c.max_uses && c.uses >= c.max_uses ? '<span class="badge amber">Hết lượt</span>' : ''}</div>
           <div class="small">${reward(c.type, c.amount)}${c.group_title ? ' · ' + esc(c.group_title) : ''}</div>
-          <div class="xs muted">Đã dùng ${num(c.uses)}${c.max_uses ? '/' + num(c.max_uses) : ''}${c.expires_at ? ' · hết hạn ' + fmtDate(c.expires_at) : ''}${c.note ? ' · ' + esc(c.note) : ''}</div></div>
+          <div class="xs muted">Đã dùng ${num(c.uses)}${c.max_uses ? '/' + num(c.max_uses) : ''}${c.expires_at ? ' · hết hạn ' + fmtDate(c.expires_at) : ''}${c.note ? ' · ' + esc(c.note) : ''}</div>
+          ${c.cond_text?.length ? `<div class="xs" style="margin-top:2px;color:var(--primary)">🔐 ${c.cond_text.map(esc).join(' · ')}</div>` : ''}</div>
           <span class="btn icon sm ghost" data-copy="${esc(c.code)}" aria-label="Sao chép">${icon('copy', 'sm')}</span></button>`).join('') : empty('star', 'Chưa có mã nào. Bấm <b>+ Tạo mã</b>.')}</div>
         ${a.recent.length ? `<div class="section-title"><h2>Lượt dùng gần đây</h2></div><div class="list">${a.recent.map((r) => `<div class="list-item"><div class="grow small"><b>${esc(String(r.who))}</b> dùng <span class="mono">${esc(r.code)}</span></div><span class="xs muted">${ago(r.created_at)}</span></div>`).join('')}</div>` : ''}` : ''}`,
       mount: (root) => {
@@ -4217,6 +4242,67 @@
       },
     };
   }, { title: 'Gói VIP' });
+
+  // ================= Captcha khi vào nhóm =================
+  route('/captcha', async () => {
+    const d = await api('captcha');
+    const c = d.config;
+    let sel = [...c.groups], mode = c.mode;
+    const preview = () => {
+      const q = mode === 'math' ? '🧮 Kết quả của <b>7 + 5</b> là bao nhiêu?' : mode === 'emoji' ? '👉 Hãy bấm vào <b>con mèo</b>' : '';
+      const btns = mode === 'math' ? ['10', '12', '9', '15'] : mode === 'emoji' ? ['🍎', '🐱', '🚗', '⭐', '🌙', '🔑'] : [$('#fcap [name=button]')?.value || c.button];
+      const txt = ($('#fcap [name=text]')?.value || c.text).replace('{mention}', '<u>Lan</u>').replace('{name}', 'Lan').replace('{group}', 'Nhóm').replace('{seconds}', $('#fcap [name=timeout]')?.value || c.timeout).replace('{question}', q);
+      const rows = []; for (let i = 0; i < btns.length; i += (mode === 'emoji' ? 3 : 4)) rows.push(btns.slice(i, i + (mode === 'emoji' ? 3 : 4)));
+      return `<div class="tgpost"><div class="tgpost-cap">${previewText(txt)}</div></div>${rows.map((r) => `<div class="tgpost-btns">${r.map((b) => `<span class="tgpost-btn ${mode === 'button' ? 'st-success' : ''}">${esc(b)}</span>`).join('')}</div>`).join('')}`;
+    };
+    return {
+      title: 'Captcha vào nhóm',
+      html: `
+      <div class="alert info" style="margin-bottom:12px">${icon('shield')}<div class="xs">Người mới vào nhóm bị <b>tạm cấm chat</b> và phải xác minh trong thời gian quy định. Đúng → được chat ngay (khôi phục quyền mặc định của nhóm) và nhận lời chào. Sai / hết giờ → xử lý theo cài đặt. Bot cần quyền <b>Cấm thành viên</b> và <b>Xoá tin nhắn</b>.</div></div>
+      <div class="grid grid-2" style="margin-bottom:12px;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px">
+        ${[['Đã hỏi', d.stats.asked, ''], ['Qua', d.stats.passed, 'var(--success)'], ['Bị loại', d.stats.failed, 'var(--danger)'], ['Đang chờ', d.stats.pending, 'var(--primary)']].map(([l, v, col]) => `<div class="card stat" style="padding:10px;text-align:center"><div class="value" style="margin:0;font-size:20px;${col ? 'color:' + col : ''}">${num(v)}</div><div class="sub">${l}</div></div>`).join('')}
+      </div>
+      <div class="xs muted" style="margin:-6px 0 12px">Số liệu 7 ngày gần nhất.</div>
+      <div class="kb-layout">
+      <form class="stack" id="fcap">
+        <div class="card">${sw('enabled', c.enabled, 'Bật captcha khi vào nhóm')}</div>
+        <div class="card card-pad stack">
+          <div class="field"><span class="lbl">Kiểu xác minh</span><div class="segmented">${Object.entries({ button: '✅ Bấm nút', math: '🧮 Phép tính', emoji: '😀 Emoji' }).map(([k, l]) => `<button type="button" data-cm="${k}" class="${mode === k ? 'active' : ''}" title="${esc(d.modes[k])}">${l}</button>`).join('')}</div></div>
+          <div class="grid grid-2">
+            <label class="field"><span class="lbl">Thời gian (giây)</span><input class="input" name="timeout" inputmode="numeric" value="${c.timeout}"></label>
+            <label class="field"><span class="lbl">Số lần chọn sai tối đa</span><input class="input" name="attempts" inputmode="numeric" value="${c.attempts}"></label>
+          </div>
+          <label class="field"><span class="lbl">Không xác minh được thì</span><select class="input" name="fail_action">${Object.entries(d.fail).map(([k, l]) => `<option value="${k}" ${c.fail_action === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+          <div class="field"><span class="lbl">Áp dụng cho nhóm <span class="xs muted">(không chọn = tất cả)</span></span><div class="chips" style="flex-wrap:wrap">${d.groups.map((g) => `<button type="button" class="chip ${sel.includes(g.id) ? 'active' : ''}" data-cg="${g.id}">${esc(g.title)}${g.bot_admin ? '' : ' ⚠️'}</button>`).join('')}</div>
+            ${d.groups.some((g) => !g.bot_admin) ? '<div class="hint">⚠️ = bot chưa là quản trị viên ở nhóm đó, captcha sẽ không hoạt động.</div>' : ''}</div>
+        </div>
+        <div class="card">${sw('skip_admin_added', c.skip_admin_added, 'Bỏ qua người do admin thêm vào')}${sw('skip_verified', c.skip_verified, 'Không hỏi lại người đã xác minh trước đây')}${sw('skip_vip', c.skip_vip, 'Bỏ qua thành viên VIP')}${sw('delete_join', c.delete_join, 'Xoá tin "đã tham gia nhóm"')}${sw('notify_fail', c.notify_fail, 'Báo vào nhóm khi đuổi / cấm người không xác minh')}</div>
+        <div class="card card-pad stack">
+          <label class="field"><span class="lbl">Nội dung tin xác minh</span><textarea class="input" name="text" rows="4">${esc(c.text)}</textarea>
+            <div class="hint">Biến: <code>{mention}</code> <code>{name}</code> <code>{group}</code> <code>{seconds}</code> <code>{question}</code> (câu hỏi phép tính / emoji)</div></label>
+          <label class="field" data-btnfield style="${mode === 'button' ? '' : 'display:none'}"><span class="lbl">Chữ trên nút (kiểu bấm nút)</span><input class="input" name="button" value="${esc(c.button)}" maxlength="40"></label>
+        </div>
+        <button class="btn primary block">Lưu cài đặt captcha</button>
+      </form>
+      <div class="kb-side"><div class="pv-label">👁 Xem trước trong nhóm</div><div data-cpv class="ad-preview" style="padding:10px">${preview()}</div>
+        <div class="xs muted" style="margin-top:8px">Lời chào của nhóm (Cài đặt nhóm → Chào mừng) được gửi <b>sau khi</b> thành viên xác minh xong.</div></div>
+      </div>`,
+      mount: (root) => {
+        const pv = () => { $('[data-cpv]', root).innerHTML = preview(); };
+        root.addEventListener('input', pv);
+        root.addEventListener('click', (e) => {
+          const m = e.target.closest('[data-cm]');
+          if (m) { mode = m.dataset.cm; $$('[data-cm]', root).forEach((x) => x.classList.toggle('active', x === m)); $('[data-btnfield]', root).style.display = mode === 'button' ? '' : 'none'; pv(); return; }
+          const g = e.target.closest('[data-cg]');
+          if (g) { const id = +g.dataset.cg; sel = sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id]; g.classList.toggle('active'); }
+        });
+        $('#fcap', root).onsubmit = (e) => {
+          e.preventDefault();
+          withBtn(e.target.querySelector('button.primary'), async () => { try { await api('captcha/save', { config: { ...formData(e.target), mode, groups: sel } }); toast('Đã lưu'); render(); } catch (err) { toast(err.message, 'err'); } });
+        };
+      },
+    };
+  }, { webAdmin: true, title: 'Captcha vào nhóm', back: '/more' });
 
   route('/me', viewMe, { title: 'Điểm của tôi', back: '/more' });
 

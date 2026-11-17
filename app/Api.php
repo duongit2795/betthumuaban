@@ -143,6 +143,8 @@ class Api
             'exchange/do' => 'exchangeDo',
             'exchange/buy' => 'exchangeBuy',
             'exchange/save' => 'exchangeSave',
+            'captcha' => 'captcha',
+            'captcha/save' => 'captchaSave',
             'gift' => 'gift',
             'gift/redeem' => 'giftRedeem',
             'gift/save' => 'giftSave',
@@ -2388,7 +2390,7 @@ class Api
             'linked' => (bool)$u['tg_user_id'], 'cmd' => Commands::name('giftcode'), 'bot' => DB::val('SELECT username FROM tg_bots WHERE enabled = 1 ORDER BY id LIMIT 1')];
         if (Access::isWebAdmin($u)) {
             $out['admin'] = [
-                'codes' => array_map(function ($r) { $x = GiftCode::row($r); $x['group_title'] = $r['group_title']; return $x; },
+                'codes' => array_map(function ($r) { $x = GiftCode::row($r); $x['group_title'] = $r['group_title']; $x['cond_text'] = GiftCode::describe($x['conditions']); return $x; },
                     DB::all('SELECT c.*, g.title AS group_title FROM gift_codes c LEFT JOIN tg_groups g ON g.id = c.group_id ORDER BY c.id DESC LIMIT 200')),
                 'types' => GiftCode::TYPES,
                 'groups' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title']], DB::all('SELECT id, title FROM tg_groups WHERE active = 1 ORDER BY title')),
@@ -2471,5 +2473,26 @@ class Api
             DB::run('UPDATE vip_members SET until = ?, notified = 0 WHERE tg_user_id = ?', [$until, $tg]);
         }
         return ['until' => $until];
+    }
+
+    // ================= Captcha khi vào nhóm =================
+    private function captcha(): array
+    {
+        Auth::requireAdmin();
+        $since = now() - 7 * 86400;
+        $cnt = fn($a) => (int)DB::val('SELECT COUNT(*) FROM app_logs WHERE action = ? AND created_at >= ?', [$a, $since]);
+        return [
+            'config' => Captcha::config(), 'defaults' => Captcha::DEFAULTS, 'modes' => Captcha::MODES, 'fail' => Captcha::FAIL,
+            'groups' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title'], 'bot_admin' => (int)$g['bot_is_admin']], DB::all('SELECT id, title, bot_is_admin FROM tg_groups WHERE active = 1 ORDER BY title')),
+            'stats' => ['asked' => $cnt('captcha'), 'passed' => $cnt('captcha_ok'), 'failed' => $cnt('captcha_fail'), 'pending' => (int)DB::val('SELECT COUNT(*) FROM captcha_pending')],
+        ];
+    }
+
+    private function captchaSave(): array
+    {
+        $u = Auth::requireAdmin();
+        $c = Captcha::save((array)$this->in('config', []));
+        Repo::log(null, $u['username'], 'system', null, 'Captcha: ' . ($c['enabled'] ? 'bật · ' . Captcha::MODES[$c['mode']] . ' · ' . $c['timeout'] . 's' : 'tắt'));
+        return ['config' => $c];
     }
 }

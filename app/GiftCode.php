@@ -16,7 +16,69 @@ class GiftCode
             'group_id' => $r['group_id'] ? (int)$r['group_id'] : null,
             'max_uses' => (int)$r['max_uses'], 'uses' => (int)$r['uses'], 'expires_at' => $r['expires_at'] ? (int)$r['expires_at'] : null,
             'enabled' => (int)$r['enabled'], 'note' => $r['note'], 'created_at' => (int)$r['created_at'],
+            'conditions' => self::conds($r),
         ];
+    }
+
+    /** Điều kiện dùng mã (đã chuẩn hoá) */
+    public static function conds(array $r): array
+    {
+        $c = json_decode((string)($r['conditions'] ?? ''), true) ?: [];
+        return [
+            'group_id' => !empty($c['group_id']) ? (int)$c['group_id'] : null, // nhóm dùng để xét điều kiện
+            'member' => !empty($c['member']),                // phải đang ở nhóm đó
+            'min_points' => max(0, (int)($c['min_points'] ?? 0)),
+            'min_messages' => max(0, (int)($c['min_messages'] ?? 0)),
+            'min_days' => max(0, (int)($c['min_days'] ?? 0)), // vào nhóm ít nhất N ngày
+            'min_deposit' => max(0, (int)($c['min_deposit'] ?? 0)), // tổng đã nạp ví
+            'vip_only' => !empty($c['vip_only']),
+            'learned' => !empty($c['learned']),              // đã hoàn thành Học tập
+        ];
+    }
+
+    /** Mô tả điều kiện cho người dùng xem */
+    public static function describe(array $c): array
+    {
+        $g = $c['group_id'] ? Repo::group($c['group_id']) : null;
+        $gn = $g ? $g['title'] : 'nhóm';
+        $out = [];
+        if ($c['member']) $out[] = "Đang là thành viên $gn";
+        if ($c['min_points']) $out[] = 'Có ≥ ' . number_format($c['min_points'], 0, ',', '.') . " điểm ở $gn";
+        if ($c['min_messages']) $out[] = 'Đã nhắn ≥ ' . number_format($c['min_messages'], 0, ',', '.') . " tin ở $gn";
+        if ($c['min_days']) $out[] = "Vào $gn ≥ {$c['min_days']} ngày";
+        if ($c['min_deposit']) $out[] = 'Đã nạp ≥ ' . Wallet::money($c['min_deposit']) . ' vào ví';
+        if ($c['vip_only']) $out[] = 'Đang là VIP';
+        if ($c['learned']) $out[] = 'Đã hoàn thành bài học';
+        return $out;
+    }
+
+    /** Kiểm tra điều kiện, không đạt thì báo lỗi rõ ràng */
+    private static function checkConds(array $c, ?array $u, $tgUserId): void
+    {
+        $needGroup = $c['member'] || $c['min_points'] || $c['min_messages'] || $c['min_days'];
+        if (($needGroup || $c['vip_only'] || $c['learned']) && !$tgUserId) throw new HttpError('Mã này yêu cầu liên kết Telegram với tài khoản web');
+        if ($needGroup) {
+            $g = $c['group_id'] ? Repo::group($c['group_id']) : null;
+            if (!$g) throw new HttpError('Nhóm điều kiện của mã không còn tồn tại');
+            $m = Repo::member((int)$g['id'], $tgUserId);
+            $in = $m && in_array($m['status'], ['member', 'muted'], true);
+            if (!$in) throw new HttpError('Mã này dành cho thành viên nhóm ' . $g['title']);
+            if ($c['min_points'] && (int)$m['points'] < $c['min_points']) throw new HttpError('Cần ≥ ' . number_format($c['min_points'], 0, ',', '.') . ' điểm ở nhóm ' . $g['title'] . ' (bạn có ' . number_format((int)$m['points'], 0, ',', '.') . ')');
+            if ($c['min_messages'] && (int)$m['messages'] < $c['min_messages']) throw new HttpError('Cần đã nhắn ≥ ' . number_format($c['min_messages'], 0, ',', '.') . ' tin ở nhóm ' . $g['title'] . ' (bạn có ' . number_format((int)$m['messages'], 0, ',', '.') . ')');
+            if ($c['min_days']) {
+                $days = $m['joined_at'] ? intdiv(now() - (int)$m['joined_at'], 86400) : 0;
+                if ($days < $c['min_days']) throw new HttpError("Cần vào nhóm {$g['title']} ít nhất {$c['min_days']} ngày (bạn mới $days ngày)");
+            }
+        }
+        if ($c['min_deposit']) {
+            $dep = $u ? (int)DB::val("SELECT COALESCE(SUM(amount),0) FROM wallet_tx WHERE user_id = ? AND type = 'deposit'", [$u['id']]) : 0;
+            if ($dep < $c['min_deposit']) throw new HttpError('Mã này dành cho người đã nạp ≥ ' . Wallet::money($c['min_deposit']) . ' (bạn đã nạp ' . Wallet::money($dep) . ')');
+        }
+        if ($c['vip_only'] && !Vip::active($tgUserId)) throw new HttpError('Mã này chỉ dành cho thành viên VIP');
+        if ($c['learned']) {
+            $p = Learn::progress($tgUserId);
+            if (!$p || $p['status'] !== 'done') throw new HttpError('Mã này yêu cầu hoàn thành bài học trước');
+        }
     }
 
     public static function save(array $in): array
@@ -41,7 +103,12 @@ class GiftCode
             'max_uses' => max(0, (int)($in['max_uses'] ?? 1)),
             'expires_at' => $expires ?: null, 'enabled' => !array_key_exists('enabled', $in) || !empty($in['enabled']) ? 1 : 0,
             'note' => mb_substr(trim((string)($in['note'] ?? '')), 0, 190),
+            'conditions' => json_encode(self::conds(['conditions' => json_encode((array)($in['conditions'] ?? []))]), JSON_UNESCAPED_UNICODE),
         ];
+        $cd = self::conds($data);
+        if (($cd['member'] || $cd['min_points'] || $cd['min_messages'] || $cd['min_days']) && (!$cd['group_id'] || !Repo::group($cd['group_id']))) {
+            throw new HttpError('Điều kiện theo nhóm: chọn nhóm để xét');
+        }
         if ($id) DB::update('gift_codes', $data, 'id = ?', [$id]);
         else $id = DB::insert('gift_codes', $data + ['uses' => 0, 'created_at' => now()]);
         return self::row(DB::get('SELECT * FROM gift_codes WHERE id = ?', [$id]));
@@ -67,6 +134,7 @@ class GiftCode
         if ($g['type'] === 'money' && !$u) throw new HttpError('Mã thưởng tiền cần tài khoản web: đăng nhập web bằng Telegram trước');
         $who = $tgUserId ? (string)$tgUserId : 'u' . $u['id'];
         if (DB::get('SELECT id FROM gift_redemptions WHERE code_id = ? AND who = ?', [$g['id'], $who])) throw new HttpError('Bạn đã dùng mã này rồi');
+        self::checkConds(self::conds($g), $u, $tgUserId); // điều kiện dùng mã (không tính là nhập sai)
 
         // Giữ lượt trước (chống 2 người dùng lượt cuối cùng lúc), lỗi thì trả lại
         $cond = $g['max_uses'] > 0 ? ' AND uses < max_uses' : '';

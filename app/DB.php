@@ -6,7 +6,7 @@ class DB
 {
     private static ?PDO $pdo = null;
     private static string $driver = 'sqlite';
-    const SCHEMA_VERSION = 17;
+    const SCHEMA_VERSION = 18;
 
     public static function connect(?array $c = null): PDO
     {
@@ -378,6 +378,16 @@ class DB
                 created_at INT NOT NULL,
                 updated_at INT NOT NULL
             )",
+            "CREATE TABLE IF NOT EXISTS captcha_pending (
+                id $pk,
+                group_id INT NOT NULL,
+                tg_user_id $big NOT NULL,
+                answer VARCHAR(32) NOT NULL,
+                attempts INT NOT NULL DEFAULT 0,
+                message_id $big,
+                expires_at INT NOT NULL,
+                created_at INT NOT NULL
+            )",
             "CREATE TABLE IF NOT EXISTS bank_tx (
                 id $pk,
                 txid VARCHAR(64) NOT NULL UNIQUE,
@@ -403,6 +413,7 @@ class DB
             'idx_bank_status' => 'bank_tx (status, id)',
             'idx_learn_status' => 'learn_progress (status, updated_at)',
             'idx_checkin_day' => 'checkins (group_id, day)',
+            'idx_captcha_exp' => 'captcha_pending (expires_at)',
         ];
         foreach ($indexes as $name => $def) {
             try {
@@ -413,6 +424,9 @@ class DB
         // v6: nhật ký lưu chi tiết + bằng chứng vi phạm
         self::addColumn('app_logs', 'meta', 'TEXT');
         self::addColumn('app_logs', 'evidence', 'TEXT');
+        // v18: captcha khi vào nhóm, điều kiện dùng mã quà tặng
+        self::addColumn('tg_members', 'captcha_ok', 'INT NOT NULL DEFAULT 0');
+        self::addColumn('gift_codes', 'conditions', 'TEXT');
         // v17: đổi điểm (điểm đã đổi → điểm mở = tổng − đã đổi)
         self::addColumn('tg_members', 'points_spent', 'INT NOT NULL DEFAULT 0');
         // v16: mua tag bằng số dư ví (hạn dùng)
