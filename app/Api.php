@@ -139,6 +139,8 @@ class Api
             'tags' => 'tags',
             'tags/save' => 'tagsSave',
             'tags/apply' => 'tagsApply',
+            'tagshop' => 'tagShop',
+            'tagshop/buy' => 'tagShopBuy',
             'gates' => 'gates',
             'gates/save' => 'gateSave',
             'gates/delete' => 'gateDelete',
@@ -173,7 +175,7 @@ class Api
             'site_name' => $inst ? Settings::get('site_name') : 'Tele Manager',
             'allow_register' => $inst ? Settings::get('allow_register') === '1' : false,
             'tg_login' => $inst && TgLogin::enabled() ? ['bots' => TgLogin::bots(), 'cmd' => Commands::name('login')] : null,
-            'pay' => $inst ? ['wallet' => Wallet::config()['enabled'] && Wallet::config()['account_no'] !== '', 'amnesty' => Amnesty::config()['enabled'], 'checkin' => Checkin::config()['enabled']] : null,
+            'pay' => $inst ? ['wallet' => Wallet::config()['enabled'] && Wallet::config()['account_no'] !== '', 'amnesty' => Amnesty::config()['enabled'], 'checkin' => Checkin::config()['enabled'], 'tagshop' => MemberTag::config()['shop']] : null,
             'version' => APP_VERSION,
             'php' => PHP_VERSION,
             'checks' => $inst ? null : [
@@ -904,6 +906,7 @@ class Api
             'note' => $m['note'],
             'tag' => $m['tag'] ?? null,
             'tag_source' => $m['tag_source'] ?? null,
+            'tag_until' => !empty($m['tag_until']) ? (int)$m['tag_until'] : null,
             'joined_at' => $m['joined_at'] ? (int)$m['joined_at'] : null,
             'last_active' => $m['last_active'] ? (int)$m['last_active'] : null,
         ];
@@ -1757,7 +1760,7 @@ class Api
             'has_more' => count($rows) === 30,
             'stats' => [
                 'deposit' => (int)DB::val("SELECT COALESCE(SUM(amount),0) FROM wallet_tx WHERE user_id = ? AND type = 'deposit'", [$u['id']]),
-                'spent' => -(int)DB::val("SELECT COALESCE(SUM(amount),0) FROM wallet_tx WHERE user_id = ? AND type = 'amnesty'", [$u['id']]),
+                'spent' => -(int)DB::val("SELECT COALESCE(SUM(amount),0) FROM wallet_tx WHERE user_id = ? AND type IN ('amnesty','tag')", [$u['id']]),
             ],
         ];
     }
@@ -1903,6 +1906,7 @@ class Api
                 'balances' => (int)DB::val('SELECT COALESCE(SUM(balance),0) FROM app_users'),
                 'unmatched' => (int)DB::val("SELECT COUNT(*) FROM bank_tx WHERE status IN ('unmatched','below_min')"),
                 'amnesty_count' => (int)DB::val("SELECT COUNT(*) FROM wallet_tx WHERE type = 'amnesty'"),
+                'tag' => -$sum('tag'),
             ],
         ];
     }
@@ -2286,5 +2290,33 @@ class Api
             usleep(120000);
         }
         return ['done' => $done, 'skipped' => $skip, 'failed' => $fail, 'error' => $err];
+    }
+
+    // ================= Cửa hàng tag (thành viên) =================
+    private function tagShop(): array
+    {
+        $u = Auth::requireUser();
+        $c = MemberTag::config();
+        $groups = [];
+        if ($u['tg_user_id']) {
+            foreach (DB::all("SELECT m.tag, m.tag_source, m.tag_until, m.is_admin, g.id, g.title FROM tg_members m JOIN tg_groups g ON g.id = m.group_id WHERE g.active = 1 AND m.tg_user_id = ? AND m.status IN ('member','muted') ORDER BY g.title", [$u['tg_user_id']]) as $r) {
+                if (!MemberTag::shopApplies($c, (int)$r['id'])) continue;
+                $groups[] = ['id' => (int)$r['id'], 'title' => $r['title'], 'tag' => $r['tag'], 'source' => $r['tag_source'], 'until' => $r['tag_until'] ? (int)$r['tag_until'] : null, 'is_admin' => (bool)$r['is_admin']];
+            }
+        }
+        $mine = DB::all("SELECT * FROM wallet_tx WHERE user_id = ? AND type IN ('tag','tag_fail') ORDER BY id DESC LIMIT 10", [$u['id']]);
+        return [
+            'enabled' => $c['shop'], 'linked' => (bool)$u['tg_user_id'], 'balance' => Wallet::balance((int)$u['id']),
+            'items' => $c['shop_items'], 'custom' => $c['shop_custom'], 'custom_price' => $c['shop_custom_price'], 'days' => $c['shop_days'],
+            'banned' => array_values(array_filter(array_map('trim', preg_split('/[,\n]+/u', (string)$c['shop_banned'])))),
+            'groups' => $groups, 'wallet' => Wallet::config()['enabled'],
+            'history' => array_map([$this, 'txRow'], $mine),
+        ];
+    }
+
+    private function tagShopBuy(): array
+    {
+        $u = Auth::requireUser();
+        return MemberTag::buy($u, $this->int('group_id'), (string)$this->in('tag', ''), (bool)$this->in('custom'));
     }
 }

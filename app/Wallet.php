@@ -12,6 +12,8 @@ class Wallet
         'deposit' => 'Nạp tiền',
         'amnesty' => 'Ân xá',
         'amnesty_fail' => 'Ân xá lỗi (đã hoàn)',
+        'tag' => 'Mua tag',
+        'tag_fail' => 'Mua tag lỗi (đã hoàn)',
         'refund' => 'Hoàn tiền',
         'admin' => 'Admin điều chỉnh',
     ];
