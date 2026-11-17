@@ -99,6 +99,7 @@ class Checkin
         }
         DB::run('UPDATE tg_members SET points = points + ? WHERE id = ?', [$pts, $m['id']]);
         $total = (int)DB::val('SELECT points FROM tg_members WHERE id = ?', [$m['id']]);
+        MemberTag::auto($group, $m['tg_user_id']);
         Repo::log($groupId, Repo::name($m) . ($source === 'web' ? ' (web)' : ' (Telegram)'), 'checkin', $m, "+$pts điểm · chuỗi $streak ngày" . ($source === 'web' ? '' : ' · /diemdanh'),
             ['source' => $source === 'web' ? 'web' : 'telegram', 'amount' => $pts, 'before' => $total - $pts, 'after' => $total, 'streak' => $streak]);
         if ($source === 'web' && $c['notify'] && ($api = Repo::apiForGroup($group))) {

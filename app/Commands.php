@@ -30,6 +30,7 @@ class Commands
         'ban' => ['admin', 'ban', 'Cấm vĩnh viễn', 'Cấm thành viên khỏi nhóm, không vào lại được cho tới khi được gỡ cấm.', '/ban [lý do]', ['Reply tin rồi gõ /ban Lừa đảo', '/ban 123456789'], ''],
         'unban' => ['admin', 'unban', 'Gỡ cấm', 'Gỡ cấm để thành viên có thể vào lại nhóm.', '/unban ID', ['/unban 123456789', '/unban @lan99'], ''],
         'addpoints' => ['admin', 'addpoints', 'Cộng/trừ điểm', 'Cộng hoặc trừ điểm tương tác của thành viên. Số âm để trừ.', '/addpoints <số> [lý do]', ['/addpoints 10 Hỗ trợ nhiệt tình', '/addpoints -5'], ''],
+        'tag' => ['admin', 'tag', 'Đổi tag thành viên', 'Gắn tag (nhãn hiện cạnh tên, tối đa 16 ký tự, không emoji) cho thành viên. Để trống để xoá tag. Với admin do bot bổ nhiệm sẽ đổi danh hiệu admin.', '/tag [tên tag]', ['Reply tin rồi gõ /tag VIP', '/tag @lan99 Thành viên lâu năm', 'Reply tin rồi gõ /tag (xoá tag)'], 'Bot cần quyền "Quản lý tag" (Manage tags).'],
         'del' => ['admin', 'del', 'Xoá tin nhắn (reply)', 'Xoá tin nhắn được reply và cả tin lệnh.', '/del (reply)', ['Reply tin rồi gõ /del'], ''],
         'pin' => ['admin', 'pin', 'Ghim tin nhắn (reply)', 'Ghim tin nhắn được reply.', '/pin (reply)', ['Reply tin rồi gõ /pin'], ''],
         'unpin' => ['admin', 'unpin', 'Bỏ ghim tin nhắn', 'Bỏ ghim tin nhắn được reply.', '/unpin (reply)', ['Reply tin đang ghim rồi gõ /unpin'], ''],

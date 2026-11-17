@@ -87,6 +87,7 @@ class Api
             'member' => 'member',
             'member/action' => 'memberAction',
             'member/note' => 'memberNote',
+            'member/tag' => 'memberTag',
             'member/add' => 'memberAdd',
             'logs' => 'logs',
             'users' => 'users',
@@ -135,6 +136,9 @@ class Api
             'checkin' => 'checkin',
             'checkin/do' => 'checkinDo',
             'checkin/save' => 'checkinSave',
+            'tags' => 'tags',
+            'tags/save' => 'tagsSave',
+            'tags/apply' => 'tagsApply',
             'gates' => 'gates',
             'gates/save' => 'gateSave',
             'gates/delete' => 'gateDelete',
@@ -708,7 +712,7 @@ class Api
     }
 
     // ---- Chat nhóm ----
-    private const CHAT_SQL = 'SELECT c.*, mb.id AS member_id, mb.status, mb.is_admin, mb.warns, mb.points, mb.first_name AS m_first, mb.last_name AS m_last
+    private const CHAT_SQL = 'SELECT c.*, mb.id AS member_id, mb.status, mb.is_admin, mb.warns, mb.points, mb.tag AS m_tag, mb.first_name AS m_first, mb.last_name AS m_last
         FROM tg_messages c LEFT JOIN tg_members mb ON mb.group_id = c.group_id AND mb.tg_user_id = c.tg_user_id';
 
     private function chatRow(array $r): array
@@ -742,6 +746,7 @@ class Api
                 'is_admin' => (int)$r['is_admin'],
                 'warns' => (int)$r['warns'],
                 'points' => (int)$r['points'],
+                'tag' => $r['m_tag'] ?? null,
             ] : null,
         ];
     }
@@ -897,6 +902,8 @@ class Api
             'warns' => (int)$m['warns'],
             'muted_until' => $m['muted_until'] ? (int)$m['muted_until'] : null,
             'note' => $m['note'],
+            'tag' => $m['tag'] ?? null,
+            'tag_source' => $m['tag_source'] ?? null,
             'joined_at' => $m['joined_at'] ? (int)$m['joined_at'] : null,
             'last_active' => $m['last_active'] ? (int)$m['last_active'] : null,
         ];
@@ -2217,5 +2224,67 @@ class Api
         $c = Checkin::save((array)$this->in('config', []));
         Repo::log(null, $u['username'], 'system', null, 'Điểm danh: ' . ($c['enabled'] ? "bật · {$c['points']} điểm" : 'tắt'));
         return ['config' => $c];
+    }
+
+    // ================= Tag thành viên =================
+    /** Đổi tag 1 thành viên từ web (quyền xử lý thành viên) */
+    private function memberTag(): array
+    {
+        $m = DB::get('SELECT * FROM tg_members WHERE id = ?', [$this->int('id')]) ?: fail('Không tìm thấy thành viên', 404);
+        $g = Repo::group((int)$m['group_id']) ?: fail('Không tìm thấy nhóm', 404);
+        $u = $this->gate('moderate', $g);
+        $row = MemberTag::set($g, $m['tg_user_id'], (string)$this->in('tag', ''), ($u['display_name'] ?: $u['username']) . ' (Web)', 'manual', (bool)$this->in('notify', true));
+        return $this->memberRow($row);
+    }
+
+    private function tags(): array
+    {
+        Auth::requireAdmin();
+        $c = MemberTag::config();
+        $groups = DB::all('SELECT id, title FROM tg_groups WHERE active = 1 ORDER BY title');
+        return [
+            'config' => $c,
+            'defaults' => MemberTag::DEFAULTS,
+            'error' => Settings::get('member_tags_error') ?: null,
+            'groups' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title'],
+                'tagged' => (int)DB::val("SELECT COUNT(*) FROM tg_members WHERE group_id = ? AND tag IS NOT NULL AND tag <> ''", [$g['id']])], $groups),
+            'recent' => array_map(fn($r) => ['name' => Repo::name($r), 'tg_user_id' => (string)$r['tg_user_id'], 'tag' => $r['tag'], 'source' => $r['tag_source'], 'group' => $r['title'], 'points' => (int)$r['points']],
+                DB::all("SELECT m.*, g.title FROM tg_members m JOIN tg_groups g ON g.id = m.group_id WHERE g.active = 1 AND m.tag IS NOT NULL AND m.tag <> '' ORDER BY m.points DESC LIMIT 50")),
+            'cmd' => Commands::name('tag'),
+        ];
+    }
+
+    private function tagsSave(): array
+    {
+        $u = Auth::requireAdmin();
+        $c = MemberTag::save((array)$this->in('config', []));
+        Repo::log(null, $u['username'], 'system', null, 'Cài đặt tag thành viên' . ($c['auto'] ? ' · tự động ' . count($c['auto_levels']) . ' mốc' : ''));
+        return ['config' => $c];
+    }
+
+    /** Áp dụng tag theo điểm ngay cho thành viên hiện có (tối đa 150 người mỗi lần, tránh giới hạn Telegram) */
+    private function tagsApply(): array
+    {
+        Auth::requireAdmin();
+        $c = MemberTag::config();
+        if (!$c['auto'] || !$c['auto_levels']) fail('Bật "Tag tự động theo điểm" và thêm mốc điểm trước');
+        @set_time_limit(120);
+        session_write_close();
+        $min = (int)$c['auto_levels'][0]['min'];
+        $where = $c['auto_groups'] ? ' AND m.group_id IN (' . implode(',', array_map('intval', $c['auto_groups'])) . ')' : '';
+        $rows = DB::all("SELECT m.* FROM tg_members m JOIN tg_groups g ON g.id = m.group_id WHERE g.active = 1 AND m.is_bot = 0 AND m.status IN ('member','muted') AND m.points >= ?
+            AND (m.tag_source IS NULL OR m.tag_source <> 'manual' OR m.tag IS NULL OR m.tag = '')$where ORDER BY m.points DESC LIMIT 400", [$min]);
+        $done = 0; $skip = 0; $fail = 0; $err = null;
+        foreach ($rows as $m) {
+            $want = MemberTag::levelTag($c, (int)$m['points']);
+            if ($want === '' || $want === (string)$m['tag'] || ($m['is_admin'] && !$c['auto_admins'])) { $skip++; continue; }
+            if ($done + $fail >= 150) break;
+            try {
+                MemberTag::set(Repo::group((int)$m['group_id']), $m['tg_user_id'], $want, 'Bot (tag theo điểm)', 'auto', false, 'bot');
+                $done++;
+            } catch (HttpError $e) { $fail++; $err = $e->getMessage(); }
+            usleep(120000);
+        }
+        return ['done' => $done, 'skipped' => $skip, 'failed' => $fail, 'error' => $err];
     }
 }

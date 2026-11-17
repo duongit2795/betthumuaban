@@ -7,7 +7,7 @@ defined('APP') or exit;
 class Rules
 {
     const TRIGGERS = ['command', 'contains', 'exact', 'starts', 'regex', 'reaction'];
-    const ACTIONS = ['reply', 'send', 'delete', 'points', 'warn', 'mute', 'unmute', 'kick', 'ban', 'unban', 'pin'];
+    const ACTIONS = ['reply', 'send', 'delete', 'points', 'warn', 'mute', 'unmute', 'kick', 'ban', 'unban', 'pin', 'tag'];
     const MOD_ACTIONS = ['warn', 'mute', 'unmute', 'kick', 'ban', 'unban'];
 
     // ================= Lưu / kiểm tra dữ liệu =================
@@ -67,6 +67,10 @@ class Rules
                 if ($act['amount'] === 0) throw new HttpError('Số điểm phải khác 0');
             }
             if ($t === 'mute') $act['minutes'] = max(0, min(525600, (int)($a['minutes'] ?? 60)));
+            if ($t === 'tag') {
+                $act['tag'] = trim(mb_substr((string)($a['tag'] ?? ''), 0, 40));
+                if (!str_contains($act['tag'], '{')) $act['tag'] = MemberTag::clean($act['tag']); // có biến thì kiểm tra lúc chạy
+            }
             if (in_array($t, self::MOD_ACTIONS, true)) $act['reason'] = mb_substr((string)($a['reason'] ?? ''), 0, 200);
             $actions[] = $act;
         }
@@ -334,6 +338,11 @@ class Rules
                         if ($mid) $api->tryCall('deleteMessage', ['chat_id' => $chatId, 'message_id' => $mid]);
                         if (!$isTarget && empty($msg['_reaction'])) $deleted = true;
                         break;
+                    case 'tag':
+                        if (!$subject) break;
+                        $tag = trim(html_entity_decode(strip_tags(self::vars((string)($a['tag'] ?? ''), $group, $member, $target, $args, $r)), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+                        MemberTag::set($group, $subject['tg_user_id'], mb_substr($tag, 0, MemberTag::MAX), $actor, 'manual', true, 'rule');
+                        break;
                     case 'pin':
                         $mid = $isTarget ? ($targetMsg['message_id'] ?? null) : $msg['message_id'];
                         if ($mid) $api->tryCall('pinChatMessage', ['chat_id' => $chatId, 'message_id' => $mid, 'disable_notification' => true]);
@@ -346,6 +355,7 @@ class Rules
                         }
                         $cur = (int)DB::val('SELECT points FROM tg_members WHERE id = ?', [$subject['id']]);
                         DB::run('UPDATE tg_members SET points = ? WHERE id = ?', [max(0, $cur + (int)$a['amount']), $subject['id']]);
+                        MemberTag::auto($group, $subject['tg_user_id']);
                         Repo::log($gid, $actor, 'points', $subject, ($a['amount'] > 0 ? '+' : '') . $a['amount'],
                             ['source' => 'rule', 'amount' => (int)$a['amount'], 'before' => $cur, 'after' => max(0, $cur + (int)$a['amount']), 'actor_tg_id' => $member['tg_user_id']]);
                         break;
