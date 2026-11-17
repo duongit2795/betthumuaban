@@ -192,6 +192,7 @@ class Moderation
                 throw new HttpError('Hành động không hợp lệ');
         }
 
+        if (in_array($action, ['points', 'setpoints'], true)) MemberTag::auto($group, $tgUserId);
         if ($reason !== '') $meta['reason'] = $reason;
         $link = self::link($group, $evidence['message_id'] ?? null);
         if ($link) $meta['link'] = $link;

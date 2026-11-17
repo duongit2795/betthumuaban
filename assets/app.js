@@ -56,6 +56,7 @@
     up: '<path d="m18 15-6-6-6 6"/>',
     down: '<path d="m6 9 6 6 6-6"/>',
     terminal: '<path d="m4 17 6-6-6-6M12 19h8"/>',
+    tagi: '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
     book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/>',
     wallet: '<path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5"/><path d="M17 14h.01"/>',
     heart: '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z"/>',
@@ -120,7 +121,7 @@
     settings: ['Cài đặt', 'settings', ''], bot_added: ['Thêm bot vào nhóm', 'bot', 'green'], bot_removed: ['Bot rời nhóm', 'bot', 'red'],
     bot_add: ['Thêm bot', 'bot', 'blue'], bot_delete: ['Xoá bot', 'bot', 'red'], bot_on: ['Bật bot', 'power', 'green'], bot_off: ['Tắt bot', 'power', ''],
     rule: ['Lệnh tự tạo', 'terminal', 'blue'], ad_post: ['Quảng cáo', 'megaphone', 'blue'], username: ['Nhắc đặt username', 'user', 'amber'], login: ['Đăng nhập', 'key', 'green'], update: ['Cập nhật hệ thống', 'download', 'blue'], system: ['Hệ thống', 'settings', ''], pin: ['Ghim tin', 'pin', 'blue'], unpin: ['Bỏ ghim', 'pin', ''],
-    gate: ['Chưa đủ điều kiện chat', 'lock', 'amber'], checkin: ['Điểm danh', 'calendar', 'green'], learn: ['Nhắc học tập', 'book', 'amber'], learn_done: ['Hoàn thành bài học', 'book', 'green'],
+    gate: ['Chưa đủ điều kiện chat', 'lock', 'amber'], checkin: ['Điểm danh', 'calendar', 'green'], tag: ['Đổi tag', 'tagi', 'blue'], learn: ['Nhắc học tập', 'book', 'amber'], learn_done: ['Hoàn thành bài học', 'book', 'green'],
     payments_settings: ['Cài đặt nạp tiền', 'bank', ''], wallet_assign: ['Cộng tiền tay', 'wallet', 'green'], wallet_adjust: ['Điều chỉnh số dư', 'wallet', 'blue'],
   };
 
@@ -348,7 +349,7 @@
     if (isWebAdmin()) {
       return {
         tab: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/logs', 'list', 'Nhật ký'], ['/more', 'grid', 'Thêm']],
-        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh'], ['/ads', 'megaphone', 'Quảng cáo'], ['/learn', 'book', 'Học tập'], ['/gates', 'lock', 'Điều kiện chat'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/payments', 'bank', 'Nạp tiền & ân xá'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ['/checkin', 'calendar', 'Điểm danh'], ...payNav(), ['/account', 'user', 'Tài khoản']],
+        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh'], ['/ads', 'megaphone', 'Quảng cáo'], ['/learn', 'book', 'Học tập'], ['/gates', 'lock', 'Điều kiện chat'], ['/tags', 'tagi', 'Tag thành viên'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/payments', 'bank', 'Nạp tiền & ân xá'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ['/checkin', 'calendar', 'Điểm danh'], ...payNav(), ['/account', 'user', 'Tài khoản']],
       };
     }
     const ck = S.pay?.checkin ? [['/checkin', 'calendar', 'Điểm danh']] : [];
@@ -378,7 +379,7 @@
     const path = current();
     const direct = (p) => (p === '/' ? path === '/' : path === p || path.startsWith(p + '/') || (p === '/groups' && path.startsWith('/group/')) || (p === '/rules' && path === '/commands'));
     const inTabs = items.tab.some(([p]) => p !== '/more' && direct(p));
-    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments', '/learn', '/keyboard', '/gates', '/mylogs', '/checkin'].some((x) => path.startsWith(x)));
+    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments', '/learn', '/keyboard', '/gates', '/mylogs', '/checkin', '/tags'].some((x) => path.startsWith(x)));
     $('#tabbar').innerHTML = items.tab.map(([p, ic, t]) => `<a href="#${p}" class="${isActive(p) ? 'active' : ''}">${icon(ic)}<span>${t}</span></a>`).join('');
     $('#sidebar').innerHTML = `<div class="brand"><img src="assets/icon.svg" alt="">${esc(S.site)}</div>`
       + items.side.map(([p, ic, t]) => `<a href="#${p}" class="nav ${isActive(p) && !(p === '/more') ? 'active' : ''}">${icon(ic)}${t}</a>`).join('')
@@ -787,11 +788,12 @@
     return { body, mount };
   }
 
+  const tagBadge = (t, src) => t ? `<span class="badge tagb" title="Tag trong nhóm${src === 'auto' ? ' (tự động theo điểm)' : ''}">🏷 ${esc(t)}</span>` : '';
   function memberRowHtml(m) {
     const extra = [];
     if (m.warns) extra.push(`${icon('alert', 'sm')}${m.warns}`);
     return `<button class="list-item" data-member="${m.id}">${avatar(m.name, m.tg_user_id)}
-      <div class="grow"><div class="row" style="gap:6px"><span class="ellipsis" style="font-weight:600">${esc(m.name)}</span>${statusBadge(m)}</div>
+      <div class="grow"><div class="row" style="gap:6px"><span class="ellipsis" style="font-weight:600">${esc(m.name)}</span>${statusBadge(m)}${tagBadge(m.tag, m.tag_source)}</div>
       <div class="xs muted ellipsis">${m.username ? '@' + esc(m.username) + ' · ' : ''}${num(m.messages)} tin · ${ago(m.last_active)}</div></div>
       <div style="text-align:right"><div class="points">${num(m.points)}</div><div class="xs muted">${m.warns ? `<span style="color:var(--warning)">⚠ ${m.warns}</span>` : 'điểm'}</div></div></button>`;
   }
@@ -849,7 +851,7 @@
       <div class="row" style="margin-bottom:14px">${avatar(m.name, m.tg_user_id, 'lg')}
         <div class="grow"><h2 class="ellipsis">${esc(m.name)}</h2>
         <div class="small muted">${m.username ? `<a href="https://t.me/${esc(m.username)}" target="_blank" rel="noopener">@${esc(m.username)}</a> · ` : ''}<span class="mono" data-copy="${m.tg_user_id}" style="cursor:pointer">${m.tg_user_id}</span></div>
-        <div class="row wrap" style="gap:6px;margin-top:4px">${statusBadge(m)}${m.is_bot ? '<span class="badge">Bot</span>' : ''}${d.web_user ? `<span class="badge blue">${icon('link', 'sm')}${esc(d.web_user.username)}</span>` : ''}</div></div>
+        <div class="row wrap" style="gap:6px;margin-top:4px">${statusBadge(m)}${tagBadge(m.tag, m.tag_source)}${m.is_bot ? '<span class="badge">Bot</span>' : ''}${d.web_user ? `<span class="badge blue">${icon('link', 'sm')}${esc(d.web_user.username)}</span>` : ''}</div></div>
         <button class="btn icon ghost" data-close>${icon('x')}</button></div>
       <div class="grid grid-3x" style="gap:8px;margin-bottom:14px">
         <div class="card stat" style="padding:10px"><div class="label xs">Điểm</div><div class="value" style="font-size:20px;margin-top:2px">${num(m.points)}</div><div class="sub">Hạng #${d.rank}</div></div>
@@ -869,6 +871,7 @@
           pts ? act('points', 'star', 'Điểm') : '',
           pts ? act('setpoints', 'edit', 'Đặt điểm') : '',
           mod ? act('note', 'note', 'Ghi chú') : '',
+          mod && !m.is_bot && m.status !== 'banned' && m.status !== 'left' ? act('tag', 'tagi', 'Đổi tag', 'blue') : '',
         ].filter(Boolean);
         return list.length ? `<div class="actions" style="margin-bottom:14px">${list.join('')}</div>`
           : `<div class="alert info" style="margin-bottom:14px">${icon('lock')}<div class="small">${protect ? 'Không thể xử lý quản trị viên của nhóm.' : 'Bạn chỉ có quyền xem.'}</div></div>`;
@@ -890,8 +893,38 @@
         const a = b.dataset.a;
         const refresh = () => { close(); onChange?.(); openMember(id, onChange); };
         if (a === 'note') return noteForm(m, refresh);
+        if (a === 'tag') return tagForm(m, refresh);
         actionForm(a, m, d, refresh);
       });
+    });
+  }
+
+  function tagForm(m, done) {
+    const presets = ['VIP', 'Thành viên mới', 'Hỗ trợ', 'Uy tín', 'Top Fan', 'Đối tác'];
+    sheet(`<div class="sheet-head"><h2>🏷 Tag của ${esc(m.name)}</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
+      <form class="stack" id="ftag">
+        <label class="field"><span class="lbl">Tag <span class="xs muted" id="tagn">${(m.tag || '').length}/16</span></span>
+          <input class="input" name="tag" value="${esc(m.tag || '')}" maxlength="16" placeholder="VD: VIP" autocomplete="off">
+          <div class="hint">Hiện cạnh tên trong nhóm. Tối đa 16 ký tự, <b>không dùng emoji</b>. Để trống = xoá tag.${m.is_admin ? ' Người này là admin: bot sẽ đổi <b>danh hiệu admin</b> (chỉ được với admin do bot bổ nhiệm).' : ''}</div></label>
+        <div class="chips" style="flex-wrap:wrap">${presets.map((t) => `<button type="button" class="chip" data-tp="${esc(t)}">${esc(t)}</button>`).join('')}</div>
+        ${m.tag_source === 'auto' ? `<div class="xs muted">Tag hiện tại do <b>tag tự động theo điểm</b> gắn. Đặt tay sẽ giữ nguyên, không bị tự động đổi nữa.</div>` : ''}
+        <div class="card" style="box-shadow:none">${sw('notify', false, 'Báo vào nhóm', 'Theo nội dung ở trang Tag thành viên')}</div>
+        <div class="grid ${m.tag ? 'grid-2' : ''}">${m.tag ? `<button type="button" class="btn soft-danger" data-tclear>${icon('trash', 'sm')}Xoá tag</button>` : ''}<button class="btn primary">${icon('check', 'sm')}Lưu tag</button></div>
+      </form>`, (el, close) => {
+      const f = $('#ftag', el);
+      const n = () => { $('#tagn', el).textContent = `${f.tag.value.length}/16`; };
+      f.tag.addEventListener('input', n);
+      const save = (tag, btn) => withBtn(btn, async () => {
+        try { const r = await api('member/tag', { id: m.id, tag, notify: f.notify.checked }); close(); toast(r.tag ? `Đã gắn tag "${r.tag}"` : 'Đã xoá tag'); done(); }
+        catch (err) { toast(err.message, 'err'); }
+      });
+      el.addEventListener('click', (e) => {
+        const t = e.target.closest('[data-tp]');
+        if (t) { f.tag.value = t.dataset.tp; n(); }
+        const c = e.target.closest('[data-tclear]');
+        if (c) save('', c);
+      });
+      f.onsubmit = (e) => { e.preventDefault(); save(f.tag.value, f.querySelector('button.primary')); };
     });
   }
 
@@ -1115,6 +1148,7 @@
         const badges = [
           m.is_bot ? '<span class="badge blue" style="font-size:10px;padding:0 6px">BOT</span>' : '',
           mb?.is_admin ? '<span class="badge blue" style="font-size:10px;padding:0 6px">Admin</span>' : '',
+          mb?.tag ? `<span class="badge tagb" style="font-size:10px;padding:0 6px">${esc(mb.tag)}</span>` : '',
           mb?.status === 'muted' ? '<span class="badge amber" style="font-size:10px;padding:0 6px">Cấm chat</span>' : '',
           mb?.status === 'banned' ? '<span class="badge red" style="font-size:10px;padding:0 6px">Bị cấm</span>' : '',
           mb?.warns ? `<span class="badge amber" style="font-size:10px;padding:0 6px">⚠ ${mb.warns}/${S2.warnLimit}</span>` : '',
@@ -1453,6 +1487,7 @@
     points: ['⭐ Cộng / trừ điểm', true],
     delete: ['🗑 Xoá tin nhắn', true],
     pin: ['📌 Ghim tin nhắn', true],
+    tag: ['🏷 Đặt tag', true],
     warn: ['⚠️ Cảnh cáo', true],
     mute: ['🔇 Cấm chat', true],
     unmute: ['🔊 Bỏ cấm chat', true],
@@ -2015,6 +2050,7 @@
         <div class="pv"><div class="pv-label">👁 Xem trước (giá trị mẫu)</div><div class="pv-body" data-pv="${i}">${a.text ? previewText(a.text) : '<span class="muted">Nội dung sẽ hiện ở đây…</span>'}</div></div>`;
       if (a.type === 'points') f += `<div class="row" style="margin-top:10px"><input class="input" type="number" data-af="${i}" data-k="amount" value="${a.amount ?? 1}" style="text-align:center;font-weight:700"><span class="small muted nowrap">điểm (âm = trừ)</span></div>`;
       if (a.type === 'mute') f += `<div class="row" style="margin-top:10px"><input class="input" type="number" min="0" data-af="${i}" data-k="minutes" value="${a.minutes ?? 60}"><span class="small muted nowrap">phút (0 = vĩnh viễn)</span></div>`;
+      if (a.type === 'tag') f += `<input class="input" data-af="${i}" data-k="tag" value="${esc(a.tag || '')}" maxlength="40" placeholder="Tag, VD: Top Fan (để trống = xoá tag)" style="margin-top:10px"><div class="xs muted" style="margin-top:4px">Tối đa 16 ký tự, không emoji. Dùng được biến, VD <code>Hạng {rank}</code>.</div>`;
       if (['warn', 'mute', 'kick', 'ban'].includes(a.type)) f += `<input class="input" data-af="${i}" data-k="reason" value="${esc(a.reason || '')}" placeholder="Lý do (tuỳ chọn)" style="margin-top:10px">`;
       return `<div class="card card-pad" style="box-shadow:none;margin-bottom:10px;background:var(--surface-2)">
         <div class="row"><span class="badge blue">${i + 1}</span><select class="input" data-at="${i}" style="height:38px;flex:1">${Object.entries(RACT).map(([k, v]) => `<option value="${k}" ${k === a.type ? 'selected' : ''}>${v[0]}</option>`).join('')}</select>
@@ -2746,7 +2782,8 @@
         <a class="list-item" href="#/rules">${icon('terminal')}<div class="grow">Lệnh tự tạo & lệnh mặc định</div><span class="chev">${icon('chevron')}</span></a>
         ${isWebAdmin() ? `<a class="list-item" href="#/ads">${icon('megaphone')}<div class="grow">Quảng cáo</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/learn">${icon('book')}<div class="grow">Học tập bắt buộc</div><span class="chev">${icon('chevron')}</span></a>
-        <a class="list-item" href="#/gates">${icon('lock')}<div class="grow">Điều kiện nhắn tin giữa các nhóm</div><span class="chev">${icon('chevron')}</span></a>` : ''}
+        <a class="list-item" href="#/gates">${icon('lock')}<div class="grow">Điều kiện nhắn tin giữa các nhóm</div><span class="chev">${icon('chevron')}</span></a>
+        <a class="list-item" href="#/tags">${icon('tagi')}<div class="grow">Tag thành viên</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         ${isWebAdmin() ? `<a class="list-item" href="#/users">${icon('key')}<div class="grow">Tài khoản web & phân quyền</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/payments">${icon('bank')}<div class="grow">Nạp tiền & ân xá</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/system">${icon('download')}<div class="grow">Hệ thống & cập nhật</div><span class="chev">${icon('chevron')}</span></a>` : ''}
@@ -3773,6 +3810,76 @@
       },
     };
   }, { title: 'Điểm danh' });
+
+  // ================= Tag thành viên (cài đặt chung) =================
+  route('/tags', async () => {
+    const d = await api('tags');
+    const c = d.config;
+    const st = { levels: c.auto_levels.map((l) => ({ ...l })), groups: [...c.auto_groups] };
+    const lvRow = (l, i) => `<div class="row tag-lv" style="gap:8px">
+      <div class="row" style="gap:6px;flex:none"><span class="small muted">≥</span><input class="input" data-lv="${i}" data-k="min" inputmode="numeric" value="${l.min ?? ''}" placeholder="100" style="width:90px"><span class="small muted">điểm</span></div>
+      <input class="input grow" data-lv="${i}" data-k="tag" value="${esc(l.tag || '')}" maxlength="16" placeholder="Tag, VD: Tích cực">
+      <button type="button" class="btn icon sm ghost" data-lvdel="${i}" aria-label="Xoá mốc">${icon('trash', 'sm')}</button></div>`;
+    return {
+      title: 'Tag thành viên',
+      html: `
+      <div class="alert info" style="margin-bottom:12px">${icon('tagi')}<div class="xs"><b>Tag</b> là nhãn hiện cạnh tên thành viên trong nhóm (tối đa 16 ký tự, không emoji). Đổi tag ở <b>Nhóm → Thành viên → Đổi tag</b>, lệnh <b>/${esc(d.cmd)}</b> (admin reply tin rồi gõ <code>/${esc(d.cmd)} VIP</code>), hành động <b>🏷 Đặt tag</b> trong Lệnh tự tạo, hoặc tự động theo điểm bên dưới.<br>⚠️ Bot phải là quản trị viên có quyền <b>"Quản lý tag" (Manage tags)</b>.</div></div>
+      ${d.error ? `<div class="alert err" style="margin-bottom:12px">${icon('alert')}<div class="xs">Lỗi gần nhất: ${esc(d.error)}</div></div>` : ''}
+      <form class="stack" id="ftags">
+        <div class="card card-pad stack">
+          <h3>🤖 Tag tự động theo điểm</h3>
+          <div class="card" style="box-shadow:none">${sw('auto', c.auto, 'Bật tag tự động', 'Thành viên lên mốc điểm thì bot tự đổi tag. Không ghi đè tag admin đã đặt tay.')}
+            ${sw('auto_notify', c.auto_notify, 'Báo vào nhóm khi lên mốc')}${sw('auto_admins', c.auto_admins, 'Đổi cả danh hiệu admin', 'Chỉ được với admin do bot bổ nhiệm')}</div>
+          <div class="field"><span class="lbl">Các mốc điểm</span><div class="stack" style="gap:8px" data-lvs>${st.levels.map(lvRow).join('')}</div>
+            <button type="button" class="btn soft sm block" data-lvadd style="margin-top:8px">${icon('plus', 'sm')}Thêm mốc</button>
+            <div class="hint">VD ≥ 100 điểm → "Tích cực", ≥ 500 → "VIP", ≥ 2000 → "Huyền thoại". Thành viên nhận tag của mốc cao nhất đã đạt.</div></div>
+          <div class="field"><span class="lbl">Áp dụng cho nhóm <span class="xs muted">(không chọn = tất cả)</span></span><div class="chips" style="flex-wrap:wrap">${d.groups.map((g) => `<button type="button" class="chip ${st.groups.includes(g.id) ? 'active' : ''}" data-tg="${g.id}">${esc(g.title)}${g.tagged ? ` · ${g.tagged}` : ''}</button>`).join('')}</div></div>
+          <label class="field"><span class="lbl">Nội dung báo khi lên mốc</span><textarea class="input" name="auto_text" rows="2">${esc(c.auto_text)}</textarea></label>
+        </div>
+        <div class="card card-pad stack">
+          <h3>📣 Khi admin đổi tag</h3>
+          <div class="card" style="box-shadow:none">${sw('notify', c.notify, 'Báo vào nhóm khi đổi tag trên web / lệnh tự tạo')}</div>
+          <label class="field"><span class="lbl">Nội dung báo</span><textarea class="input" name="notify_text" rows="2">${esc(c.notify_text)}</textarea>
+            <div class="hint">Biến: <code>{mention}</code> <code>{name}</code> <code>{tag}</code> <code>{points}</code> <code>{group}</code></div></label>
+          <label class="field"><span class="lbl">Tự xoá tin báo sau (giây, 0 = không)</span><input class="input" name="notify_autodel" inputmode="numeric" value="${c.notify_autodel}"></label>
+        </div>
+        <button class="btn primary block">Lưu cài đặt tag</button>
+        <button type="button" class="btn block" data-tapply>${icon('refresh', 'sm')}Áp dụng tag theo điểm cho thành viên hiện có</button>
+      </form>
+      <div class="section-title"><h2>Thành viên đang có tag</h2></div>
+      <div class="list">${d.recent.length ? d.recent.map((r) => `<div class="list-item">${avatar(r.name, r.tg_user_id)}<div class="grow" style="min-width:0"><div class="row wrap" style="gap:6px"><b class="ellipsis">${esc(r.name)}</b><span class="badge tagb">🏷 ${esc(r.tag)}</span>${r.source === 'auto' ? '<span class="badge">tự động</span>' : ''}</div><div class="xs muted">${esc(r.group)} · ${num(r.points)} điểm</div></div></div>`).join('') : empty('tagi', 'Chưa có ai được gắn tag')}</div>`,
+      mount: (root) => {
+        const lvs = $('[data-lvs]', root);
+        const draw = () => { lvs.innerHTML = st.levels.map(lvRow).join(''); };
+        root.addEventListener('input', (e) => { const x = e.target.closest('[data-lv]'); if (x) st.levels[+x.dataset.lv][x.dataset.k] = x.value; });
+        root.addEventListener('click', (e) => {
+          let b;
+          if (e.target.closest('[data-lvadd]')) { const last = st.levels[st.levels.length - 1]; st.levels.push({ min: last ? Number(last.min || 0) * 5 || 100 : 100, tag: '' }); draw(); return; }
+          if ((b = e.target.closest('[data-lvdel]'))) { st.levels.splice(+b.dataset.lvdel, 1); draw(); return; }
+          if ((b = e.target.closest('[data-tg]'))) { const id = +b.dataset.tg; st.groups = st.groups.includes(id) ? st.groups.filter((x) => x !== id) : [...st.groups, id]; b.classList.toggle('active'); return; }
+          if ((b = e.target.closest('[data-tapply]'))) {
+            return withBtn(b, async () => {
+              try {
+                const r = await api('tags/apply', {});
+                toast(`Đã gắn tag cho ${r.done} người${r.failed ? ` · lỗi ${r.failed}` : ''}${r.skipped ? ` · bỏ qua ${r.skipped}` : ''}`, r.failed && !r.done ? 'err' : 'ok');
+                if (r.error) toast(r.error, 'err');
+                render();
+              } catch (err) { toast(err.message, 'err'); }
+            });
+          }
+        });
+        $('#ftags', root).onsubmit = (e) => {
+          e.preventDefault();
+          withBtn(e.target.querySelector('button.primary'), async () => {
+            try {
+              await api('tags/save', { config: { ...formData(e.target), auto_groups: st.groups, auto_levels: st.levels.filter((l) => String(l.tag).trim() || String(l.min).trim()).map((l) => ({ min: Number(l.min) || 0, tag: l.tag })) } });
+              toast('Đã lưu'); render();
+            } catch (err) { toast(err.message, 'err'); }
+          });
+        };
+      },
+    };
+  }, { webAdmin: true, title: 'Tag thành viên', back: '/more' });
 
   route('/me', viewMe, { title: 'Điểm của tôi', back: '/more' });
 

@@ -78,6 +78,9 @@ class BotHandler
             DB::run('UPDATE tg_members SET status = ? WHERE id = ?', [$map[$st], $m['id']]);
         }
         DB::run('UPDATE tg_members SET is_admin = ? WHERE id = ?', [in_array($st, ['administrator', 'creator'], true) ? 1 : 0, $m['id']]);
+        $nm = $cm['new_chat_member'];
+        if (in_array($st, ['member', 'restricted'], true) && array_key_exists('tag', $nm)) MemberTag::seen((int)$group['id'], $user['id'], $nm['tag']);
+        elseif ($st === 'administrator' && array_key_exists('custom_title', $nm)) MemberTag::seen((int)$group['id'], $user['id'], $nm['custom_title']);
         if (in_array($st, ['administrator', 'creator'], true) || in_array($cm['old_chat_member']['status'] ?? '', ['administrator', 'creator'], true)) {
             DB::run('UPDATE tg_groups SET admins_at = 0 WHERE id = ?', [$group['id']]);
         }
@@ -150,6 +153,7 @@ class BotHandler
         if ($isLinkedChannel) return;
 
         $member = Repo::upsertMember($gid, $from);
+        if (empty($msg['sender_chat']) && !$edited) MemberTag::seen($gid, $from['id'], $msg['sender_tag'] ?? null, true); // tag hiện tại trên Telegram
         $isAdmin = $anonAdmin || $this->isAdmin($group, (int)$from['id']);
         $text = (string)($msg['text'] ?? $msg['caption'] ?? '');
 
@@ -222,6 +226,7 @@ class BotHandler
             if ($member['status'] === 'left') $upd['status'] = 'member';
             DB::update('tg_members', $upd, 'id = ?', [$member['id']]);
             Repo::stat($gid, 'messages');
+            if (isset($upd['points'])) MemberTag::auto($group, $from['id']); // lên mốc điểm → đổi tag
         }
 
         if ($isCommand && $s['commands_enabled'] && !($flags & Rules::HANDLED)) {
@@ -361,7 +366,7 @@ class BotHandler
                     $custom = Rules::helpLines($gid, $isAdmin);
                     if ($custom) $t .= "\n\n✨ <b>Lệnh riêng của nhóm</b>\n" . implode("\n", $custom);
                     if ($isAdmin) {
-                        $adm = array_filter(array_map($line, ['warn', 'unwarn', 'resetwarn', 'mute', 'unmute', 'kick', 'ban', 'unban', 'addpoints', 'del', 'pin', 'unpin', 'setrules', 'reload']));
+                        $adm = array_filter(array_map($line, ['warn', 'unwarn', 'resetwarn', 'mute', 'unmute', 'kick', 'ban', 'unban', 'addpoints', 'tag', 'del', 'pin', 'unpin', 'setrules', 'reload']));
                         if ($adm) $t .= "\n\n🛡 <b>Lệnh quản trị</b> (reply tin nhắn hoặc @username/ID)\n" . implode("\n", $adm);
                     }
                     $this->reply($msg, $t);
@@ -433,10 +438,19 @@ class BotHandler
 
         [$target, $rest] = $this->resolveTarget($group, $msg, $args);
         if (!$target) {
-            $this->reply($msg, 'Hãy reply tin nhắn của thành viên hoặc nhập @username / ID.');
+            $this->reply($msg, $cmd === 'tag' ? 'Cú pháp: reply tin của thành viên rồi gõ ' . $c('tag') . ' Tên tag (để trống = xoá tag), hoặc ' . $c('tag') . ' @username Tên tag' : 'Hãy reply tin nhắn của thành viên hoặc nhập @username / ID.');
             return;
         }
         if ($target['tg_user_id'] == $this->botTgId) return;
+        if ($cmd === 'tag') {
+            try {
+                $t = MemberTag::set($group, $target['tg_user_id'], $rest, $actor, 'manual', false, 'telegram');
+                $this->reply($msg, $t['tag'] ? '🏷 Đã gắn tag <b>' . tg_esc($t['tag']) . '</b> cho ' . Repo::mention($t) : '🏷 Đã xoá tag của ' . Repo::mention($t));
+            } catch (HttpError $e) {
+                $this->reply($msg, '❌ ' . tg_esc($e->getMessage()));
+            }
+            return;
+        }
         if (in_array($cmd, ['ban', 'kick', 'mute', 'warn'], true) && $this->isAdmin($group, (int)$target['tg_user_id'])) {
             $this->reply($msg, '⛔ Không thể xử lý quản trị viên.');
             return;
