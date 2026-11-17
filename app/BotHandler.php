@@ -159,7 +159,9 @@ class BotHandler
 
         // Bộ lọc vi phạm
         if (!($isAdmin && $s['admins_exempt']) && empty($from['is_bot'])) {
-            $violation = $this->checkViolation($msg, $s, $text);
+            $vs = $s;
+            if ($s['anti_link'] && Vip::perk('perk_links', $from['id'], $gid)) $vs['anti_link'] = false; // VIP được gửi link
+            $violation = $this->checkViolation($msg, $vs, $text);
             if ($violation) {
                 $this->del($chat['id'], $msg['message_id']);
                 ChatLog::markDeleted($chat['id'], $msg['message_id'], $violation);
@@ -220,7 +222,7 @@ class BotHandler
             if ($s['points_enabled'] && !$isCommand && empty($from['is_bot'])
                 && (mb_strlen(trim($text)) >= $s['points_min_length'] || $hasMedia)
                 && $t - (int)$member['last_point_at'] >= $s['points_cooldown']) {
-                $upd['points'] = (int)$member['points'] + (int)$s['points_per_message'];
+                $upd['points'] = (int)$member['points'] + (int)$s['points_per_message'] * Vip::multiplier($from['id'], $gid);
                 $upd['last_point_at'] = $t;
             }
             if ($member['status'] === 'left') $upd['status'] = 'member';
@@ -570,6 +572,19 @@ class BotHandler
             DB::run('UPDATE app_users SET tg_user_id = NULL WHERE tg_user_id = ? AND id <> ?', [$from['id'], $u['id']]);
             DB::run('UPDATE app_users SET tg_user_id = ?, link_code = NULL WHERE id = ?', [$from['id'], $u['id']]);
             $this->reply($msg, '✅ Đã liên kết Telegram với tài khoản web <b>' . tg_esc($u['username']) . '</b>. Bây giờ bạn có thể xem điểm của mình trên web.');
+            return;
+        }
+        if ($key === 'giftcode') {
+            if ($arg === '') { $this->reply($msg, '🎁 Cú pháp: ' . $c('giftcode') . ' MÃ  (VD ' . $c('giftcode') . ' TET2027)'); return; }
+            $u = DB::get('SELECT * FROM app_users WHERE tg_user_id = ? AND disabled = 0', [$from['id']]);
+            $type = DB::val('SELECT type FROM gift_codes WHERE code = ?', [strtoupper(preg_replace('/[^A-Za-z0-9_-]/', '', $arg))]);
+            if (!$u && $type === 'money') $u = TgLogin::createUser((int)$from['id'], trim(($from['first_name'] ?? '') . ' ' . ($from['last_name'] ?? '')), (string)($from['username'] ?? ''));
+            try {
+                $r = GiftCode::redeem($u, $from['id'], $arg);
+                $this->reply($msg, "🎁 <b>Nhận quà thành công!</b>\nMã <code>{$r['code']}</code>: " . tg_esc($r['text']), $this->webButton('💳 Mở web', $r['type'] === 'money' ? '/wallet' : ($r['type'] === 'vip' ? '/vip' : '/')));
+            } catch (HttpError $e) {
+                $this->reply($msg, '❌ ' . tg_esc($e->getMessage()));
+            }
             return;
         }
         if ($key === 'balance') {

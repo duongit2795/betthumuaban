@@ -159,6 +159,7 @@ class Learn
         $p = self::progress($user['id']);
         if ($p && $p['status'] === 'done') return false;
         if ($c['scope'] === 'new' && !$p) return false;         // thành viên cũ không phải học
+        if (Vip::perk('perk_learn', $user['id'], (int)$group['id'])) return false; // VIP miễn học
         if (!DB::val('SELECT COUNT(*) FROM learn_questions WHERE enabled = 1')) return false; // chưa có câu hỏi → không chặn
 
         $gid = (int)$group['id'];

@@ -36,6 +36,8 @@ DB::run('DELETE FROM app_logs WHERE created_at < ?', [now() - 180 * 86400]);
 foreach (glob(DATA_DIR . '/throttle_*.json') ?: [] as $f) if (filemtime($f) < now() - 3600) @unlink($f);
 // Dọn dữ liệu chống lặp lệnh cảm xúc cũ hơn 30 ngày
 DB::run('DELETE FROM tg_reaction_hits WHERE created_at < ?', [now() - 30 * 86400]);
+// VIP hết hạn: gỡ tag VIP, nhắn báo
+try { Vip::expire(); } catch (Throwable $e) {}
 // Gỡ tag đã mua hết hạn
 try { MemberTag::expire(); } catch (Throwable $e) {}
 // Nạp tiền tự động: đọc lịch sử giao dịch ngân hàng, cộng tiền vào ví

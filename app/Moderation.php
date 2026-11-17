@@ -183,7 +183,7 @@ class Moderation
                 break;
             case 'setpoints':
                 $n = max(0, (int)($o['amount'] ?? 0));
-                DB::run('UPDATE tg_members SET points = ? WHERE id = ?', [$n, $m['id']]);
+                DB::run('UPDATE tg_members SET points = ?, points_spent = 0 WHERE id = ?', [$n, $m['id']]);
                 $meta += ['before' => (int)$m['points'], 'after' => $n];
                 $short = "{$m['points']} → $n";
                 $notify = false;

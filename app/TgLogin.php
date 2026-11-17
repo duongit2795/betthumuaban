@@ -85,7 +85,7 @@ class TgLogin
         return ['status' => 'done', 'user' => Auth::publicUser($u), 'created' => !empty($u['_new'])];
     }
 
-    private static function createUser(int $tgId, string $name, string $tgUsername): array
+    public static function createUser(int $tgId, string $name, string $tgUsername): array
     {
         $base = strtolower(preg_replace('/[^a-zA-Z0-9_.]/', '', $tgUsername)) ?: 'tg' . $tgId;
         $base = substr(strlen($base) < 3 ? 'tg' . $tgId : $base, 0, 28);

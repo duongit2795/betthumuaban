@@ -121,7 +121,7 @@
     settings: ['Cài đặt', 'settings', ''], bot_added: ['Thêm bot vào nhóm', 'bot', 'green'], bot_removed: ['Bot rời nhóm', 'bot', 'red'],
     bot_add: ['Thêm bot', 'bot', 'blue'], bot_delete: ['Xoá bot', 'bot', 'red'], bot_on: ['Bật bot', 'power', 'green'], bot_off: ['Tắt bot', 'power', ''],
     rule: ['Lệnh tự tạo', 'terminal', 'blue'], ad_post: ['Quảng cáo', 'megaphone', 'blue'], username: ['Nhắc đặt username', 'user', 'amber'], login: ['Đăng nhập', 'key', 'green'], update: ['Cập nhật hệ thống', 'download', 'blue'], system: ['Hệ thống', 'settings', ''], pin: ['Ghim tin', 'pin', 'blue'], unpin: ['Bỏ ghim', 'pin', ''],
-    gate: ['Chưa đủ điều kiện chat', 'lock', 'amber'], checkin: ['Điểm danh', 'calendar', 'green'], tag: ['Đổi tag', 'tagi', 'blue'], learn: ['Nhắc học tập', 'book', 'amber'], learn_done: ['Hoàn thành bài học', 'book', 'green'],
+    gate: ['Chưa đủ điều kiện chat', 'lock', 'amber'], exchange: ['Đổi điểm', 'refresh', 'green'], gift: ['Mã quà tặng', 'star', 'green'], vip: ['VIP', 'trophy', 'amber'], checkin: ['Điểm danh', 'calendar', 'green'], tag: ['Đổi tag', 'tagi', 'blue'], learn: ['Nhắc học tập', 'book', 'amber'], learn_done: ['Hoàn thành bài học', 'book', 'green'],
     payments_settings: ['Cài đặt nạp tiền', 'bank', ''], wallet_assign: ['Cộng tiền tay', 'wallet', 'green'], wallet_adjust: ['Điều chỉnh số dư', 'wallet', 'blue'],
   };
 
@@ -339,7 +339,7 @@
   }
 
   const payNav = () => [...(S.pay?.wallet ? [['/wallet', 'wallet', 'Ví']] : []), ...(S.pay?.amnesty ? [['/amnesty', 'heart', 'Ân xá']] : [])];
-  const shopNav = () => (S.pay?.tagshop ? [['/tagshop', 'tagi', 'Mua tag']] : []);
+  const shopNav = () => [...(S.pay?.tagshop ? [['/tagshop', 'tagi', 'Mua tag']] : []), ...(S.pay?.exchange ? [['/exchange', 'refresh', 'Đổi điểm']] : []), ...(S.pay?.vip ? [['/vip', 'trophy', 'Gói VIP']] : []), ['/giftcode', 'star', 'Mã quà tặng']];
   function navItems() {
     if (!isWebAdmin() && isManager()) {
       return {
@@ -350,7 +350,7 @@
     if (isWebAdmin()) {
       return {
         tab: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/logs', 'list', 'Nhật ký'], ['/more', 'grid', 'Thêm']],
-        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh'], ['/ads', 'megaphone', 'Quảng cáo'], ['/learn', 'book', 'Học tập'], ['/gates', 'lock', 'Điều kiện chat'], ['/tags', 'tagi', 'Tag thành viên'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/payments', 'bank', 'Nạp tiền & ân xá'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ['/checkin', 'calendar', 'Điểm danh'], ...payNav(), ['/account', 'user', 'Tài khoản']],
+        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh'], ['/ads', 'megaphone', 'Quảng cáo'], ['/learn', 'book', 'Học tập'], ['/gates', 'lock', 'Điều kiện chat'], ['/tags', 'tagi', 'Tag thành viên'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/payments', 'bank', 'Nạp tiền & ân xá'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ['/checkin', 'calendar', 'Điểm danh'], ['/exchange', 'refresh', 'Đổi điểm'], ['/vip', 'trophy', 'Gói VIP'], ['/giftcode', 'star', 'Mã quà tặng'], ...payNav(), ['/account', 'user', 'Tài khoản']],
       };
     }
     const ck = S.pay?.checkin ? [['/checkin', 'calendar', 'Điểm danh']] : [];
@@ -380,7 +380,7 @@
     const path = current();
     const direct = (p) => (p === '/' ? path === '/' : path === p || path.startsWith(p + '/') || (p === '/groups' && path.startsWith('/group/')) || (p === '/rules' && path === '/commands'));
     const inTabs = items.tab.some(([p]) => p !== '/more' && direct(p));
-    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments', '/learn', '/keyboard', '/gates', '/mylogs', '/checkin', '/tags', '/tagshop'].some((x) => path.startsWith(x)));
+    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments', '/learn', '/keyboard', '/gates', '/mylogs', '/checkin', '/tags', '/tagshop', '/exchange', '/giftcode', '/vip'].some((x) => path.startsWith(x)));
     $('#tabbar').innerHTML = items.tab.map(([p, ic, t]) => `<a href="#${p}" class="${isActive(p) ? 'active' : ''}">${icon(ic)}<span>${t}</span></a>`).join('');
     $('#sidebar').innerHTML = `<div class="brand"><img src="assets/icon.svg" alt="">${esc(S.site)}</div>`
       + items.side.map(([p, ic, t]) => `<a href="#${p}" class="nav ${isActive(p) && !(p === '/more') ? 'active' : ''}">${icon(ic)}${t}</a>`).join('')
@@ -855,7 +855,7 @@
         <div class="row wrap" style="gap:6px;margin-top:4px">${statusBadge(m)}${tagBadge(m.tag, m.tag_source)}${m.is_bot ? '<span class="badge">Bot</span>' : ''}${d.web_user ? `<span class="badge blue">${icon('link', 'sm')}${esc(d.web_user.username)}</span>` : ''}</div></div>
         <button class="btn icon ghost" data-close>${icon('x')}</button></div>
       <div class="grid grid-3x" style="gap:8px;margin-bottom:14px">
-        <div class="card stat" style="padding:10px"><div class="label xs">Điểm</div><div class="value" style="font-size:20px;margin-top:2px">${num(m.points)}</div><div class="sub">Hạng #${d.rank}</div></div>
+        <div class="card stat" style="padding:10px"><div class="label xs">Điểm</div><div class="value" style="font-size:20px;margin-top:2px">${num(m.points)}</div><div class="sub">Hạng #${d.rank}${m.points_open !== undefined && m.points_open !== m.points ? ` · 🔓 ${num(m.points_open)}` : ''}</div></div>
         <div class="card stat" style="padding:10px"><div class="label xs">Tin nhắn</div><div class="value" style="font-size:20px;margin-top:2px">${num(m.messages)}</div></div>
         <div class="card stat" style="padding:10px"><div class="label xs">Cảnh cáo</div><div class="value" style="font-size:20px;margin-top:2px;${m.warns ? 'color:var(--warning)' : ''}">${m.warns}/${d.warn_limit}</div></div>
       </div>
@@ -2793,6 +2793,9 @@
         <a class="list-item" href="#/me">${icon('star')}<div class="grow">Điểm của tôi</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/mylogs">${icon('list')}<div class="grow">Nhật ký của tôi</div><span class="chev">${icon('chevron')}</span></a>
         ${S.pay?.tagshop || isWebAdmin() ? `<a class="list-item" href="#/tagshop">${icon('tagi')}<div class="grow">Mua tag bằng số dư ví</div><span class="chev">${icon('chevron')}</span></a>` : ''}
+        ${S.pay?.exchange || isWebAdmin() ? `<a class="list-item" href="#/exchange">${icon('refresh')}<div class="grow">Đổi điểm lấy tiền</div><span class="chev">${icon('chevron')}</span></a>` : ''}
+        ${S.pay?.vip || isWebAdmin() ? `<a class="list-item" href="#/vip">${icon('trophy')}<div class="grow">Gói VIP</div><span class="chev">${icon('chevron')}</span></a>` : ''}
+        <a class="list-item" href="#/giftcode">${icon('star')}<div class="grow">Mã quà tặng${isWebAdmin() ? ' (tạo & quản lý mã)' : ''}</div><span class="chev">${icon('chevron')}</span></a>
         ${S.pay?.checkin || isWebAdmin() ? `<a class="list-item" href="#/checkin">${icon('calendar')}<div class="grow">Điểm danh hằng ngày</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         ${!isWebAdmin() ? `<a class="list-item" href="#/rank">${icon('trophy')}<div class="grow">Xếp hạng</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         <a class="list-item" href="#/account">${icon('user')}<div class="grow">Tài khoản & liên kết Telegram</div><span class="chev">${icon('chevron')}</span></a>
@@ -3072,7 +3075,7 @@
   // ================= Ví & nạp tiền =================
   const money = (v) => num(v) + 'đ';
   const qrSrc = (w, amount) => w.account_no ? `https://img.vietqr.io/image/${encodeURIComponent(w.bank)}-${encodeURIComponent(w.account_no)}-compact2.png?` + new URLSearchParams({ ...(amount > 0 ? { amount } : {}), addInfo: w.code, ...(w.account_name ? { accountName: w.account_name } : {}) }) : '';
-  const TX_ICON = { deposit: ['plus', 'green'], amnesty: ['heart', 'amber'], amnesty_fail: ['x', ''], tag: ['tagi', 'blue'], tag_fail: ['x', ''], refund: ['refresh', 'blue'], admin: ['key', ''] };
+  const TX_ICON = { deposit: ['plus', 'green'], amnesty: ['heart', 'amber'], amnesty_fail: ['x', ''], tag: ['tagi', 'blue'], tag_fail: ['x', ''], exchange: ['refresh', 'green'], buy_points: ['star', 'blue'], gift: ['star', 'green'], vip: ['trophy', 'amber'], refund: ['refresh', 'blue'], admin: ['key', ''] };
   const txItem = (t) => { const [ic, c] = TX_ICON[t.type] || ['info', '']; return `<div class="list-item"><span class="log-ico ${c}">${icon(ic, 'sm')}</span>
     <div class="grow" style="min-width:0"><div class="ellipsis" style="font-weight:600">${esc(t.note || t.type_label)}</div><div class="xs muted">${esc(t.type_label)} · ${fmtDate(t.created_at, true)}</div></div>
     <div style="text-align:right" class="nowrap"><div class="tx-amt ${t.amount > 0 ? 'in' : 'out'}">${t.amount > 0 ? '+' : '−'}${money(Math.abs(t.amount))}</div><div class="xs muted">Dư ${money(t.balance_after)}</div></div></div>`; };
@@ -3087,7 +3090,7 @@
         <div class="muted small">${icon('wallet', 'sm')} Số dư ví</div>
         <div class="big" data-bal>${money(w.balance)}</div>
         <div class="row wrap small" style="gap:14px;margin-top:6px"><span>Đã nạp ${money(w.stats.deposit)}</span><span>Đã dùng ${money(w.stats.spent)}</span></div>
-        <div class="row wrap" style="gap:8px;margin-top:12px">${S.pay?.amnesty ? `<a class="btn sm" href="#/amnesty" style="background:rgba(255,255,255,.18);color:#fff;border-color:transparent">${icon('heart', 'sm')}Ân xá thành viên</a>` : ''}${S.pay?.tagshop ? `<a class="btn sm" href="#/tagshop" style="background:rgba(255,255,255,.18);color:#fff;border-color:transparent">${icon('tagi', 'sm')}Mua tag</a>` : ''}</div>
+        <div class="row wrap" style="gap:8px;margin-top:12px">${S.pay?.amnesty ? `<a class="btn sm" href="#/amnesty" style="background:rgba(255,255,255,.18);color:#fff;border-color:transparent">${icon('heart', 'sm')}Ân xá thành viên</a>` : ''}${S.pay?.tagshop ? `<a class="btn sm" href="#/tagshop" style="background:rgba(255,255,255,.18);color:#fff;border-color:transparent">${icon('tagi', 'sm')}Mua tag</a>` : ''}${S.pay?.exchange ? `<a class="btn sm" href="#/exchange" style="background:rgba(255,255,255,.18);color:#fff;border-color:transparent">${icon('refresh', 'sm')}Đổi điểm</a>` : ''}${S.pay?.vip ? `<a class="btn sm" href="#/vip" style="background:rgba(255,255,255,.18);color:#fff;border-color:transparent">👑 VIP</a>` : ''}<a class="btn sm" href="#/giftcode" style="background:rgba(255,255,255,.18);color:#fff;border-color:transparent">🎁 Nhập mã</a></div>
       </div>
       ${!w.enabled ? `<div class="alert info" style="margin-top:12px">${icon('info')}<div class="small">Admin chưa bật nạp tiền. Liên hệ admin để được cộng tiền vào ví.</div></div>` : `
       <div class="section-title"><h2>Nạp tiền</h2>${w.auto ? `<span class="badge green">${icon('zap', 'sm')}Tự động</span>` : '<span class="badge">Admin duyệt tay</span>'}</div>
@@ -3989,6 +3992,232 @@
     };
   }, { title: 'Mua tag' });
 
+  // ================= Đổi điểm ↔ tiền =================
+  route('/exchange', async () => {
+    const d = await api('exchange');
+    const ad = d.admin;
+    const rate = (p) => Math.floor(p / d.rate_points) * d.rate_money;
+    const card = (g) => `<div class="card card-pad stack ex-card" data-exg="${g.id}">
+      <div class="row">${avatar(g.title, g.id, 'sq')}<div class="grow" style="min-width:0"><b class="ellipsis">${esc(g.title)}</b></div></div>
+      <div class="grid grid-2" style="gap:8px">
+        <div class="ex-box lock"><div class="xs">🔒 Điểm khoá</div><b>${num(g.total)}</b><div class="xs muted">tổng đã kiếm</div></div>
+        <div class="ex-box open"><div class="xs">🔓 Điểm mở</div><b>${num(g.open)}</b><div class="xs muted">≈ ${money(rate(g.open))}</div></div>
+      </div>
+      ${g.spent ? `<div class="xs muted">Đã đổi ${num(g.spent)} điểm</div>` : ''}
+      <form class="row ex-form" style="gap:8px" data-exf="${g.id}"><input class="input grow" name="points" inputmode="numeric" placeholder="Số điểm mở muốn đổi" value="${g.open >= d.min_points ? Math.floor(g.open / d.rate_points) * d.rate_points : ''}">
+        <button class="btn primary nowrap">Đổi</button></form>
+      <div class="xs muted" data-exprev="${g.id}">${g.open >= d.min_points ? `Nhận ${money(rate(Math.floor(g.open / d.rate_points) * d.rate_points))}` : `Cần tối thiểu ${num(d.min_points)} điểm mở`}</div>
+      ${d.buy ? `<details class="xs"><summary class="muted" style="cursor:pointer">🛒 Mua thêm điểm bằng tiền ví (${money(d.buy_money)} = ${num(d.buy_points)} điểm)</summary>
+        <form class="row" style="gap:8px;margin-top:8px" data-exb="${g.id}"><input class="input grow" name="money" inputmode="numeric" placeholder="Số tiền, VD 10000"><button class="btn soft nowrap">Mua</button></form></details>` : ''}
+    </div>`;
+    return {
+      title: 'Đổi điểm',
+      html: `
+      <div class="hero ex-hero"><div class="row between" style="align-items:flex-start"><div><div class="muted small">💱 Đổi điểm lấy tiền</div><div class="big" style="font-size:26px">${num(d.rate_points)} điểm = ${money(d.rate_money)}</div>
+        <div class="muted xs">Ví: <b>${money(d.balance)}</b>${d.daily_max ? ` · hôm nay đã đổi ${money(d.today)} / ${money(d.daily_max)}` : ''}</div></div>
+        <a class="btn sm" href="#/wallet" style="background:rgba(255,255,255,.18);color:#fff;border-color:transparent">${icon('wallet', 'sm')}Ví</a></div>
+        <div class="muted xs" style="margin-top:8px">🔒 <b>Điểm khoá</b> = tổng điểm đã kiếm (giữ nguyên, dùng xếp hạng). 🔓 <b>Điểm mở</b> = phần còn lại sau khi đổi, dùng để đổi ra tiền.</div></div>
+      ${!d.enabled ? `<div class="alert info" style="margin-top:12px">${icon('info')}<div class="small">Tính năng đổi điểm đang tắt.${ad ? ' Bật ở phần cài đặt bên dưới.' : ''}</div></div>` : ''}
+      ${d.enabled && !d.linked ? `<div class="card" style="margin-top:12px">${empty('link', 'Liên kết Telegram ở trang <a href="#/account">Tài khoản</a> để đổi điểm.')}</div>` : ''}
+      ${d.enabled && d.linked ? `<div class="section-title"><h2>Điểm của bạn</h2></div>${d.groups.length ? `<div class="stack">${d.groups.map(card).join('')}</div>` : `<div class="card">${empty('users', 'Bạn chưa ở trong nhóm nào áp dụng đổi điểm.')}</div>`}` : ''}
+      ${d.history.length ? `<div class="section-title"><h2>Lịch sử</h2></div><div class="list">${d.history.map(txItem).join('')}</div>` : ''}
+      ${ad ? `<div class="section-title"><h2>⚙️ Cài đặt (admin)</h2><span class="xs muted">Đã trả ${money(ad.paid)} · hôm nay ${money(ad.paid_today)}</span></div>
+      <form class="stack" id="fex">
+        <div class="card">${sw('enabled', ad.config.enabled, 'Bật đổi điểm lấy tiền')}${sw('buy', ad.config.buy, 'Cho mua điểm bằng tiền ví')}</div>
+        <div class="card card-pad stack">
+          <div class="field"><span class="lbl">Tỉ giá đổi</span><div class="row" style="gap:8px"><input class="input" name="rate_points" inputmode="numeric" value="${ad.config.rate_points}"><span class="small nowrap">điểm =</span><input class="input" name="rate_money" inputmode="numeric" value="${ad.config.rate_money}"><span class="small">đ</span></div></div>
+          <div class="grid grid-2">
+            <label class="field"><span class="lbl">Đổi tối thiểu (điểm)</span><input class="input" name="min_points" inputmode="numeric" value="${ad.config.min_points}"></label>
+            <label class="field"><span class="lbl">Tối đa / người / ngày (đ, 0 = không giới hạn)</span><input class="input" name="daily_max" inputmode="numeric" value="${ad.config.daily_max}"></label>
+          </div>
+          <div class="field"><span class="lbl">Giá mua điểm</span><div class="row" style="gap:8px"><input class="input" name="buy_money" inputmode="numeric" value="${ad.config.buy_money}"><span class="small nowrap">đ =</span><input class="input" name="buy_points" inputmode="numeric" value="${ad.config.buy_points}"><span class="small">điểm</span></div>
+            <div class="hint">Nên đặt giá mua cao hơn giá đổi để tránh mua rồi đổi lại kiếm lời.</div></div>
+          <div class="field"><span class="lbl">Nhóm áp dụng <span class="xs muted">(không chọn = tất cả)</span></span><div class="chips" style="flex-wrap:wrap">${ad.all_groups.map((g) => `<button type="button" class="chip ${ad.config.groups.includes(g.id) ? 'active' : ''}" data-exgrp="${g.id}">${esc(g.title)}</button>`).join('')}</div></div>
+        </div>
+        <button class="btn primary block">Lưu cài đặt đổi điểm</button>
+      </form>` : ''}`,
+      mount: (root) => {
+        let sel = ad ? [...ad.config.groups] : [];
+        root.addEventListener('input', (e) => {
+          const f = e.target.closest('[data-exf]');
+          if (f) { const p = Math.floor((parseInt(f.points.value.replace(/\D/g, ''), 10) || 0) / d.rate_points) * d.rate_points; $(`[data-exprev="${f.dataset.exf}"]`, root).textContent = p >= d.min_points ? `Đổi ${num(p)} điểm → nhận ${money(rate(p))}` : `Tối thiểu ${num(d.min_points)} điểm`; }
+        });
+        root.addEventListener('click', (e) => { const b = e.target.closest('[data-exgrp]'); if (b) { const id = +b.dataset.exgrp; sel = sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id]; b.classList.toggle('active'); } });
+        root.addEventListener('submit', async (e) => {
+          const f = e.target;
+          if (f.dataset.exf) {
+            e.preventDefault();
+            const points = parseInt(f.points.value.replace(/\D/g, ''), 10) || 0;
+            if (!(await confirmBox('Đổi điểm?', `Đổi <b>${num(Math.floor(points / d.rate_points) * d.rate_points)}</b> điểm mở lấy <b>${money(rate(points))}</b> vào ví?<br><span class="xs muted">Tổng điểm đã kiếm (điểm khoá) giữ nguyên.</span>`, { ok: 'Đổi điểm' }))) return;
+            try { const r = await api('exchange/do', { group_id: +f.dataset.exf, points }); toast(`Đã đổi ${num(r.points)} điểm → +${money(r.money)}`); render(); } catch (err) { toast(err.message, 'err'); }
+          } else if (f.dataset.exb) {
+            e.preventDefault();
+            const m = parseInt(f.money.value.replace(/\D/g, ''), 10) || 0;
+            try { const r = await api('exchange/buy', { group_id: +f.dataset.exb, money: m }); toast(`Đã mua ${num(r.points)} điểm`); render(); } catch (err) { toast(err.message, 'err'); }
+          } else if (f.id === 'fex') {
+            e.preventDefault();
+            withBtn(f.querySelector('button.primary'), async () => { try { await api('exchange/save', { config: { ...formData(f), groups: sel } }); toast('Đã lưu'); await boot(); render(); } catch (err) { toast(err.message, 'err'); } });
+          }
+        });
+      },
+    };
+  }, { title: 'Đổi điểm' });
+
+  // ================= Mã quà tặng =================
+  function giftSheet(c, a, onSaved) {
+    const v = c || { code: '', type: 'money', amount: 10000, group_id: a.groups[0]?.id, max_uses: 100, expires_at: null, enabled: 1, note: '' };
+    const draw = () => `<div class="sheet-head"><h2>${c ? 'Sửa mã ' + esc(c.code) : 'Tạo mã quà tặng'}</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
+      <form class="stack" id="fgift">
+        <label class="field"><span class="lbl">Mã <span class="xs muted">(để trống = tạo ngẫu nhiên)</span></span><input class="input mono" name="code" value="${esc(v.code)}" placeholder="VD: TET2027" maxlength="32" style="text-transform:uppercase"></label>
+        <div class="field"><span class="lbl">Phần thưởng</span><div class="segmented">${Object.entries(a.types).map(([k, l]) => `<button type="button" data-gt="${k}" class="${v.type === k ? 'active' : ''}">${esc(l)}</button>`).join('')}</div></div>
+        <label class="field"><span class="lbl">${v.type === 'money' ? 'Số tiền (đ)' : v.type === 'vip' ? 'Số ngày VIP' : 'Số điểm'}</span><input class="input" name="amount" inputmode="numeric" value="${v.amount}"></label>
+        ${v.type === 'points' ? `<label class="field"><span class="lbl">Cộng điểm ở nhóm</span><select class="input" name="group_id">${a.groups.map((g) => `<option value="${g.id}" ${g.id === v.group_id ? 'selected' : ''}>${esc(g.title)}</option>`).join('')}</select></label>` : ''}
+        <div class="grid grid-2">
+          <label class="field"><span class="lbl">Số lượt dùng (0 = không giới hạn)</span><input class="input" name="max_uses" inputmode="numeric" value="${v.max_uses}"></label>
+          <label class="field"><span class="lbl">Hết hạn (tuỳ chọn)</span><input class="input" type="date" name="expires" value="${v.expires_at ? new Date(v.expires_at * 1000).toISOString().slice(0, 10) : ''}"></label>
+        </div>
+        <label class="field"><span class="lbl">Ghi chú (chỉ admin thấy)</span><input class="input" name="note" value="${esc(v.note || '')}" placeholder="VD: Sự kiện Tết"></label>
+        <div class="card" style="box-shadow:none">${sw('enabled', v.enabled, 'Bật mã này')}</div>
+        <div class="grid ${c ? 'grid-2' : ''}">${c ? `<button type="button" class="btn soft-danger" data-gdel>${icon('trash', 'sm')}Xoá</button>` : ''}<button class="btn primary">${icon('check', 'sm')}Lưu mã</button></div>
+      </form>`;
+    sheet('<div id="giftbox"></div>', (el, close) => {
+      const box = $('#giftbox', el);
+      const keep = () => { const f = $('#fgift', el); if (f) Object.assign(v, formData(f)); };
+      box.innerHTML = draw();
+      el.addEventListener('click', async (e) => {
+        const t = e.target.closest('[data-gt]');
+        if (t) { keep(); v.type = t.dataset.gt; v.amount = v.type === 'money' ? 10000 : v.type === 'vip' ? 7 : 500; box.innerHTML = draw(); }
+        if (e.target.closest('[data-gdel]') && (await confirmBox('Xoá mã?', `Xoá mã <b>${esc(c.code)}</b>?`, { danger: true, ok: 'Xoá' }))) { await api('gift/delete', { id: c.id }); close(); toast('Đã xoá'); onSaved(); }
+      });
+      el.addEventListener('submit', (e) => {
+        e.preventDefault(); keep();
+        withBtn(e.target.querySelector('button.primary'), async () => {
+          try { const r = await api('gift/save', { code: { ...v, id: c?.id, group_id: Number(v.group_id) || null } }); close(); toast('Đã lưu mã ' + r.code.code); navigator.clipboard?.writeText(r.code.code).catch(() => {}); onSaved(); }
+          catch (err) { toast(err.message, 'err'); }
+        });
+      });
+    });
+  }
+
+  route('/giftcode', async () => {
+    const d = await api('gift');
+    const a = d.admin;
+    const reward = (t, n) => (t === 'money' ? money(n) : t === 'vip' ? `${n} ngày VIP` : `${num(n)} điểm`);
+    return {
+      title: 'Mã quà tặng',
+      actions: a ? `<button class="btn primary sm" data-gnew>${icon('plus', 'sm')}Tạo mã</button>` : '',
+      html: `
+      <div class="hero gift-hero"><div class="muted small">🎁 Mã quà tặng</div><div style="font-size:20px;font-weight:700;margin-top:4px">Nhập mã để nhận tiền ví, điểm hoặc VIP</div>
+        <div class="muted xs" style="margin-top:4px">Hoặc gửi <b>/${esc(d.cmd)} MÃ</b> cho bot${d.bot ? ' @' + esc(d.bot) : ''}.</div></div>
+      <form class="card card-pad row" id="fredeem" style="gap:8px;margin-top:12px"><input class="input grow mono" name="code" placeholder="Nhập mã quà tặng" style="text-transform:uppercase;font-size:18px" autocomplete="off"><button class="btn primary nowrap">🎁 Nhận</button></form>
+      ${d.mine.length ? `<div class="section-title"><h2>Mã bạn đã dùng</h2></div><div class="list">${d.mine.map((r) => `<div class="list-item"><span class="log-ico green">🎁</span><div class="grow"><b class="mono">${esc(r.code)}</b><div class="xs muted">${ago(r.created_at)}</div></div><b class="small">${reward(r.type, r.amount)}</b></div>`).join('')}</div>` : ''}
+      ${a ? `<div class="section-title"><h2>⚙️ Quản lý mã (admin)</h2><span class="xs muted">${a.codes.length} mã</span></div>
+        <div class="list">${a.codes.length ? a.codes.map((c) => `<button type="button" class="list-item" data-gedit="${c.id}" style="align-items:flex-start"><span class="log-ico ${c.enabled ? 'blue' : ''}">🎁</span>
+          <div class="grow" style="min-width:0;text-align:left"><div class="row wrap" style="gap:6px"><b class="mono">${esc(c.code)}</b>${c.enabled ? '' : '<span class="badge">Tắt</span>'}${c.expires_at && c.expires_at < Date.now() / 1000 ? '<span class="badge red">Hết hạn</span>' : ''}${c.max_uses && c.uses >= c.max_uses ? '<span class="badge amber">Hết lượt</span>' : ''}</div>
+          <div class="small">${reward(c.type, c.amount)}${c.group_title ? ' · ' + esc(c.group_title) : ''}</div>
+          <div class="xs muted">Đã dùng ${num(c.uses)}${c.max_uses ? '/' + num(c.max_uses) : ''}${c.expires_at ? ' · hết hạn ' + fmtDate(c.expires_at) : ''}${c.note ? ' · ' + esc(c.note) : ''}</div></div>
+          <span class="btn icon sm ghost" data-copy="${esc(c.code)}" aria-label="Sao chép">${icon('copy', 'sm')}</span></button>`).join('') : empty('star', 'Chưa có mã nào. Bấm <b>+ Tạo mã</b>.')}</div>
+        ${a.recent.length ? `<div class="section-title"><h2>Lượt dùng gần đây</h2></div><div class="list">${a.recent.map((r) => `<div class="list-item"><div class="grow small"><b>${esc(String(r.who))}</b> dùng <span class="mono">${esc(r.code)}</span></div><span class="xs muted">${ago(r.created_at)}</span></div>`).join('')}</div>` : ''}` : ''}`,
+      mount: (root) => {
+        $('[data-gnew]')?.addEventListener('click', () => giftSheet(null, a, () => render()));
+        root.addEventListener('click', (e) => {
+          if (e.target.closest('[data-copy]')) return;
+          const b = e.target.closest('[data-gedit]');
+          if (b) giftSheet(a.codes.find((c) => c.id === +b.dataset.gedit), a, () => render());
+        });
+        $('#fredeem', root).onsubmit = (e) => {
+          e.preventDefault();
+          withBtn(e.target.querySelector('button'), async () => {
+            try {
+              const r = await api('gift/redeem', { code: e.target.code.value });
+              sheet(`<div class="center" style="padding:10px 0"><div style="font-size:56px">🎁</div><h2>Nhận quà thành công!</h2><p class="text-2">Mã <b class="mono">${esc(r.code)}</b>: <b>${esc(r.text)}</b></p></div><button class="btn primary block" data-close>Tuyệt vời</button>`, null, () => render());
+            } catch (err) { toast(err.message, 'err'); }
+          });
+        };
+      },
+    };
+  }, { title: 'Mã quà tặng' });
+
+  // ================= Gói VIP =================
+  route('/vip', async () => {
+    const d = await api('vip');
+    const a = d.admin;
+    const perks = [d.perks.tag ? `🏷 Tag <b>${esc(d.perks.tag)}</b> cạnh tên trong nhóm` : '', d.perks.multiplier > 1 ? `⚡ Nhân <b>x${d.perks.multiplier}</b> điểm tin nhắn & điểm danh` : '',
+      d.perks.gates ? '🔓 Miễn điều kiện nhắn tin giữa các nhóm' : '', d.perks.learn ? '📚 Miễn học tập bắt buộc' : '', d.perks.links ? '🔗 Được gửi link trong nhóm' : ''].filter(Boolean);
+    const st = a ? { plans: a.config.plans.map((p) => ({ ...p })), groups: [...a.config.groups] } : null;
+    const planRow = (p, i) => `<div class="row tag-lv" style="gap:8px"><input class="input" data-pl="${i}" data-k="days" inputmode="numeric" value="${p.days ?? ''}" placeholder="Số ngày" style="width:100px"><span class="small muted">ngày</span>
+      <input class="input grow" data-pl="${i}" data-k="price" inputmode="numeric" value="${p.price ?? ''}" placeholder="Giá (đ)"><button type="button" class="btn icon sm ghost" data-pldel="${i}" aria-label="Xoá">${icon('trash', 'sm')}</button></div>`;
+    return {
+      title: 'Gói VIP',
+      html: `
+      <div class="hero vip-hero"><div class="muted small">👑 Gói VIP</div>
+        ${d.active ? `<div class="big" style="font-size:26px">Bạn đang là VIP</div><div class="muted small">Hết hạn ${fmtDate(d.until, true)} · còn ${Math.ceil((d.until - Date.now() / 1000) / 86400)} ngày</div>`
+          : `<div style="font-size:22px;font-weight:700;margin-top:4px">Nâng cấp VIP</div><div class="muted small">${d.until ? 'Đã hết hạn ' + fmtDate(d.until) : 'Nhận đặc quyền trong mọi nhóm'}</div>`}
+        <div class="muted xs" style="margin-top:6px">Ví: <b>${money(d.balance)}</b></div></div>
+      ${!d.enabled ? `<div class="alert info" style="margin-top:12px">${icon('info')}<div class="small">Gói VIP đang tắt.${a ? ' Bật ở phần cài đặt bên dưới.' : ''}</div></div>` : ''}
+      ${d.enabled ? `<div class="section-title"><h2>Quyền lợi VIP</h2></div><div class="card card-pad stack" style="gap:8px">${perks.map((p) => `<div class="small">${p}</div>`).join('') || '<div class="small muted">Chưa có quyền lợi nào</div>'}</div>
+        <div class="section-title"><h2>${d.active ? 'Gia hạn' : 'Chọn gói'}</h2></div>
+        ${!d.linked ? `<div class="card">${empty('link', 'Liên kết Telegram ở trang <a href="#/account">Tài khoản</a> để mua VIP.')}</div>`
+          : `<div class="shop-grid">${d.plans.map((p, i) => `<button class="shop-item vip-plan" data-plan="${i}"><span style="font-size:22px">👑</span><b style="font-size:16px">${p.days} ngày</b><span class="small">${money(p.price)}</span><span class="xs muted">≈ ${money(Math.round(p.price / p.days))}/ngày</span></button>`).join('')}</div>
+            <div class="xs muted" style="margin-top:8px">${d.active ? 'Gia hạn sẽ cộng nối tiếp vào hạn hiện tại.' : ''} Có mã quà tặng VIP? Nhập ở <a href="#/giftcode">Mã quà tặng</a>.</div>`}` : ''}
+      ${a ? `<div class="section-title"><h2>⚙️ Cài đặt (admin)</h2><span class="xs muted">Doanh thu ${money(a.revenue)}</span></div>
+      <form class="stack" id="fvip">
+        <div class="card">${sw('enabled', a.config.enabled, 'Bật gói VIP')}${sw('perk_gates', a.config.perk_gates, 'Miễn điều kiện nhắn tin')}${sw('perk_learn', a.config.perk_learn, 'Miễn học tập bắt buộc')}${sw('perk_links', a.config.perk_links, 'Được gửi link (bỏ qua chặn link)')}${sw('notify', a.config.notify, 'Báo vào nhóm khi có VIP mới')}</div>
+        <div class="card card-pad stack">
+          <div class="field"><span class="lbl">Các gói</span><div class="stack" style="gap:8px" data-pls>${st.plans.map(planRow).join('')}</div><button type="button" class="btn soft sm block" data-pladd style="margin-top:8px">${icon('plus', 'sm')}Thêm gói</button></div>
+          <div class="grid grid-2">
+            <label class="field"><span class="lbl">Tag VIP (để trống = không gắn)</span><input class="input" name="tag" value="${esc(a.config.tag)}" maxlength="16"></label>
+            <label class="field"><span class="lbl">Nhân điểm (1 = không)</span><input class="input" name="multiplier" inputmode="numeric" value="${a.config.multiplier}"></label>
+          </div>
+          <div class="field"><span class="lbl">Nhóm áp dụng <span class="xs muted">(không chọn = tất cả)</span></span><div class="chips" style="flex-wrap:wrap">${a.groups.map((g) => `<button type="button" class="chip ${st.groups.includes(g.id) ? 'active' : ''}" data-vg="${g.id}">${esc(g.title)}</button>`).join('')}</div></div>
+          <label class="field"><span class="lbl">Nội dung báo vào nhóm</span><textarea class="input" name="notify_text" rows="2">${esc(a.config.notify_text)}</textarea><div class="hint">Biến: <code>{mention}</code> <code>{name}</code> <code>{until}</code> <code>{days}</code></div></label>
+        </div>
+        <button class="btn primary block">Lưu cài đặt VIP</button>
+      </form>
+      <form class="card card-pad stack" id="fvipgrant" style="margin-top:12px"><div class="small" style="font-weight:600">🎁 Tặng / trừ ngày VIP</div>
+        <div class="row" style="gap:8px"><input class="input grow" name="who" placeholder="ID Telegram hoặc @username" required><input class="input" name="days" inputmode="numeric" placeholder="Số ngày" style="width:110px" required></div>
+        <div class="xs muted">Số âm để rút ngắn hạn VIP.</div><button class="btn sm primary">Áp dụng</button></form>
+      <div class="section-title"><h2>Thành viên VIP</h2></div>
+      <div class="list">${a.members.length ? a.members.map((m) => `<div class="list-item">${avatar(m.name, m.tg_user_id)}<div class="grow" style="min-width:0"><b class="ellipsis">${esc(m.name)}</b><div class="xs muted mono">${esc(m.tg_user_id)}</div></div><span class="badge ${m.active ? 'amber' : ''}">${m.active ? '👑 đến ' + fmtDate(m.until) : 'hết hạn'}</span></div>`).join('') : empty('star', 'Chưa có VIP nào')}</div>` : ''}`,
+      mount: (root) => {
+        root.addEventListener('click', (e) => {
+          let b;
+          if ((b = e.target.closest('[data-plan]'))) {
+            const p = d.plans[+b.dataset.plan];
+            const after = d.balance - p.price;
+            sheet(`<div class="sheet-head"><h2>👑 ${d.active ? 'Gia hạn' : 'Mua'} VIP ${p.days} ngày</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
+              <dl class="kv" style="margin:0 0 16px"><dt>Giá</dt><dd><b>${money(p.price)}</b></dd><dt>Số dư hiện tại</dt><dd>${money(d.balance)}</dd><dt>Số dư sau</dt><dd style="color:${after < 0 ? 'var(--danger)' : 'var(--success)'}"><b>${after < 0 ? 'Không đủ' : money(after)}</b></dd></dl>
+              ${after < 0 ? `<a class="btn primary block" href="#/wallet">${icon('plus', 'sm')}Nạp thêm ${money(-after)}</a>` : `<div class="grid grid-2"><button class="btn" data-close>Huỷ</button><button class="btn primary" data-vbuy>Mua ngay</button></div>`}`,
+            (el, close) => {
+              $('[data-vbuy]', el)?.addEventListener('click', (ev) => withBtn(ev.currentTarget, async () => {
+                try { const r = await api('vip/buy', { plan: +b.dataset.plan }); close(); toast(`Bạn là VIP đến ${fmtDate(r.until)} 👑`); render(); } catch (err) { toast(err.message, 'err'); }
+              }));
+            });
+            return;
+          }
+          if (!st) return;
+          if (e.target.closest('[data-pladd]')) { st.plans.push({ days: 30, price: 100000 }); $('[data-pls]', root).innerHTML = st.plans.map(planRow).join(''); return; }
+          if ((b = e.target.closest('[data-pldel]'))) { st.plans.splice(+b.dataset.pldel, 1); $('[data-pls]', root).innerHTML = st.plans.map(planRow).join(''); return; }
+          if ((b = e.target.closest('[data-vg]'))) { const id = +b.dataset.vg; st.groups = st.groups.includes(id) ? st.groups.filter((x) => x !== id) : [...st.groups, id]; b.classList.toggle('active'); }
+        });
+        root.addEventListener('input', (e) => { const x = e.target.closest('[data-pl]'); if (x && st) st.plans[+x.dataset.pl][x.dataset.k] = x.value; });
+        $('#fvip', root)?.addEventListener('submit', (e) => {
+          e.preventDefault();
+          withBtn(e.target.querySelector('button.primary'), async () => {
+            try { await api('vip/save', { config: { ...formData(e.target), groups: st.groups, plans: st.plans.map((p) => ({ days: Number(p.days) || 0, price: Number(String(p.price).replace(/\D/g, '')) || 0 })) } }); toast('Đã lưu'); await boot(); render(); }
+            catch (err) { toast(err.message, 'err'); }
+          });
+        });
+        $('#fvipgrant', root)?.addEventListener('submit', (e) => {
+          e.preventDefault();
+          withBtn(e.target.querySelector('button'), async () => {
+            try { const r = await api('vip/grant', { who: e.target.who.value, days: parseInt(e.target.days.value, 10) || 0 }); toast(`VIP đến ${fmtDate(r.until)}`); render(); } catch (err) { toast(err.message, 'err'); }
+          });
+        });
+      },
+    };
+  }, { title: 'Gói VIP' });
+
   route('/me', viewMe, { title: 'Điểm của tôi', back: '/more' });
 
   route('/rank', async () => {
@@ -4046,6 +4275,9 @@
       <div class="list" style="margin-top:14px">
         <a class="list-item" href="#/mylogs">${icon('list')}<div class="grow">Nhật ký của tôi</div><span class="chev">${icon('chevron')}</span></a>
         ${S.pay?.tagshop ? `<a class="list-item" href="#/tagshop">${icon('tagi')}<div class="grow">Mua tag bằng số dư ví</div><span class="chev">${icon('chevron')}</span></a>` : ''}
+        ${S.pay?.exchange ? `<a class="list-item" href="#/exchange">${icon('refresh')}<div class="grow">Đổi điểm lấy tiền</div><span class="chev">${icon('chevron')}</span></a>` : ''}
+        ${S.pay?.vip ? `<a class="list-item" href="#/vip">${icon('trophy')}<div class="grow">Gói VIP</div><span class="chev">${icon('chevron')}</span></a>` : ''}
+        <a class="list-item" href="#/giftcode">${icon('star')}<div class="grow">Nhập mã quà tặng</div><span class="chev">${icon('chevron')}</span></a>
         <button class="list-item" data-theme-toggle>${icon('moon')}<div class="grow">Giao diện sáng / tối</div></button>
         <button class="list-item" data-logout style="color:var(--danger)">${icon('logout')}<div class="grow">Đăng xuất</div></button>
       </div>`,
