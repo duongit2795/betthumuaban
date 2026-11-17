@@ -26,6 +26,11 @@ class Captcha
         'notify_fail' => false,     // báo khi bị đuổi
         'text' => "👋 Chào {mention}! Để chống spam, hãy xác minh bạn là người thật trong <b>{seconds} giây</b>.\n{question}",
         'button' => '✅ Tôi không phải robot',
+        // Xác minh qua bot (không gửi câu hỏi trong nhóm)
+        'where' => 'bot',           // bot = trong chat riêng với bot, group = ngay trong nhóm
+        'group_text_bot' => "👋 Chào {tag}! Để chat trong nhóm, hãy bấm nút bên dưới và xác minh với bot trong <b>{seconds} giây</b>.",
+        'bot_button' => '🤖 Xác minh qua bot',
+        'dm_text' => "🔐 <b>Xác minh để chat trong nhóm {group}</b>\nCòn <b>{seconds} giây</b>.\n\n{question}",
     ];
 
     public static function config(): array
@@ -45,6 +50,10 @@ class Captcha
         if (isset($in['attempts'])) $c['attempts'] = max(1, min(5, (int)$in['attempts']));
         if (isset($in['text'])) { $t = trim(mb_substr((string)$in['text'], 0, 1500)); $c['text'] = $t !== '' ? $t : self::DEFAULTS['text']; }
         if (isset($in['button'])) { $t = trim(mb_substr((string)$in['button'], 0, 40)); $c['button'] = $t !== '' ? $t : self::DEFAULTS['button']; }
+        if (isset($in['where']) && in_array($in['where'], ['bot', 'group'], true)) $c['where'] = $in['where'];
+        foreach (['group_text_bot' => 1500, 'dm_text' => 1500, 'bot_button' => 40] as $k => $max) {
+            if (isset($in[$k])) { $t = trim(mb_substr((string)$in[$k], 0, $max)); $c[$k] = $t !== '' ? $t : self::DEFAULTS[$k]; }
+        }
         Settings::set('captcha', json_encode($c, JSON_UNESCAPED_UNICODE));
         return $c;
     }
@@ -52,6 +61,20 @@ class Captcha
     public static function applies(array $c, array $group): bool
     {
         return $c['enabled'] && (!$c['groups'] || in_array((int)$group['id'], $c['groups'], true));
+    }
+
+    /** Tag người dùng: @username nếu có, không thì nhắc tên (vẫn gửi thông báo cho họ) */
+    public static function tag(array $m): string
+    {
+        return !empty($m['username']) ? '@' . tg_esc($m['username']) : Repo::mention($m);
+    }
+
+    /** Bàn phím câu hỏi */
+    private static function keyboard(array $c, int $id, array $opts): array
+    {
+        if ($c['mode'] === 'button') return [[['text' => $c['button'], 'callback_data' => "cap:$id:ok", 'style' => 'success']]];
+        $btns = array_map(fn($o) => ['text' => $o, 'callback_data' => "cap:$id:" . (string)$o], $opts);
+        return array_chunk($btns, $c['mode'] === 'emoji' ? 3 : 4);
     }
 
     /** Tạo câu hỏi: [nội dung, đáp án đúng, danh sách lựa chọn] */
@@ -102,17 +125,41 @@ class Captcha
         [$q, $ans, $opts] = self::challenge($c['mode']);
         $id = DB::insert('captcha_pending', ['group_id' => $gid, 'tg_user_id' => $user['id'], 'answer' => $ans, 'attempts' => 0, 'message_id' => null,
             'expires_at' => now() + $c['timeout'], 'created_at' => now()]);
-        if ($c['mode'] === 'button') {
-            $kb = [[['text' => $c['button'], 'callback_data' => "cap:$id:ok", 'style' => 'success']]];
+        $vars = ['{mention}' => Repo::mention($m), '{tag}' => self::tag($m), '{name}' => tg_esc(Repo::name($m)), '{group}' => tg_esc($group['title']),
+            '{seconds}' => (string)$c['timeout'], '{question}' => $q];
+        $botName = (string)DB::val('SELECT username FROM tg_bots WHERE id = ?', [$botId]);
+        if ($c['where'] === 'bot' && $botName !== '') {
+            // Trong nhóm chỉ tag + nút mở bot; câu hỏi gửi trong chat riêng
+            $kb = [[['text' => $c['bot_button'], 'url' => 'https://t.me/' . $botName . '?start=cap_' . $id, 'style' => 'primary']]];
+            $sent = $api->trySend($group['chat_id'], trim(strtr($c['group_text_bot'], $vars)), ['reply_markup' => ['inline_keyboard' => $kb]]);
         } else {
-            $btns = array_map(fn($o) => ['text' => $o, 'callback_data' => "cap:$id:" . (string)$o], $opts);
-            $kb = array_chunk($btns, $c['mode'] === 'emoji' ? 3 : 4);
+            $sent = $api->trySend($group['chat_id'], trim(strtr($c['text'], $vars)), ['reply_markup' => ['inline_keyboard' => self::keyboard($c, $id, $opts)]]);
         }
-        $text = strtr($c['text'], ['{mention}' => Repo::mention($m), '{name}' => tg_esc(Repo::name($m)), '{group}' => tg_esc($group['title']),
-            '{seconds}' => (string)$c['timeout'], '{question}' => $q]);
-        $sent = $api->trySend($group['chat_id'], trim($text), ['reply_markup' => ['inline_keyboard' => $kb]]);
         if (!empty($sent['message_id'])) DB::run('UPDATE captcha_pending SET message_id = ? WHERE id = ?', [$sent['message_id'], $id]);
-        Repo::log($gid, 'Bot', 'captcha', $m, 'Yêu cầu xác minh (' . self::MODES[$c['mode']] . ', ' . $c['timeout'] . ' giây)', ['source' => 'bot']);
+        Repo::log($gid, 'Bot', 'captcha', $m, 'Yêu cầu xác minh (' . self::MODES[$c['mode']] . ($c['where'] === 'bot' ? ' qua bot' : ' trong nhóm') . ', ' . $c['timeout'] . ' giây)', ['source' => 'bot']);
+        return true;
+    }
+
+    /**
+     * Người dùng bấm nút "Xác minh qua bot" → /start cap_ID trong chat riêng: gửi câu hỏi.
+     * Trả về true nếu đã xử lý.
+     */
+    public static function privateStart(Telegram $api, array $msg, string $payload): bool
+    {
+        if (!preg_match('/^cap_(\d+)$/', $payload, $mm)) return false;
+        $chat = $msg['chat']['id'];
+        $p = DB::get('SELECT * FROM captcha_pending WHERE id = ?', [(int)$mm[1]]);
+        if (!$p) { $api->trySend($chat, '⌛ Yêu cầu xác minh đã hết hạn hoặc bạn đã xác minh rồi.'); return true; }
+        if ((string)$msg['from']['id'] !== (string)$p['tg_user_id']) { $api->trySend($chat, '⛔ Liên kết xác minh này dành cho người khác.'); return true; }
+        $group = Repo::group((int)$p['group_id']);
+        if (!$group) return true;
+        $c = self::config();
+        [$q, $ans, $opts] = self::challenge($c['mode']); // câu hỏi mới mỗi lần mở
+        DB::run('UPDATE captcha_pending SET answer = ? WHERE id = ?', [$ans, $p['id']]);
+        $left = max(5, (int)$p['expires_at'] - now());
+        $text = strtr($c['dm_text'], ['{group}' => tg_esc($group['title']), '{seconds}' => (string)$left, '{name}' => tg_esc(trim(($msg['from']['first_name'] ?? '') . ' ' . ($msg['from']['last_name'] ?? ''))),
+            '{question}' => $c['mode'] === 'button' ? '👇 Bấm nút bên dưới để xác nhận bạn là người thật.' : $q]);
+        $api->trySend($chat, trim($text), ['reply_markup' => ['inline_keyboard' => self::keyboard($c, (int)$p['id'], $opts)]]);
         return true;
     }
 
@@ -129,14 +176,21 @@ class Captcha
         if ((string)$cb['from']['id'] !== (string)$p['tg_user_id']) { $answer('Nút này dành cho thành viên mới vào nhóm', true); return ['other', null, null]; }
         $group = Repo::group((int)$p['group_id']);
         $c = self::config();
+        $inDm = ($cb['message']['chat']['type'] ?? '') === 'private';
+        $edit = function (string $t) use ($api, $cb, $inDm) {
+            if ($inDm) $api->tryCall('editMessageText', ['chat_id' => $cb['message']['chat']['id'], 'message_id' => $cb['message']['message_id'], 'text' => $t, 'parse_mode' => 'HTML']);
+        };
         if ($mm[2] === $p['answer']) {
             self::pass($api, $group, $p);
             $answer('Xác minh thành công! Chào mừng bạn 🎉');
+            $link = !empty($group['username']) ? "\n👉 Quay lại nhóm: https://t.me/{$group['username']}" : "\n👉 Quay lại nhóm và bắt đầu trò chuyện nhé!";
+            $edit('✅ <b>Xác minh thành công!</b> Bạn đã có thể chat trong nhóm <b>' . tg_esc($group['title']) . '</b>.' . $link);
             return ['pass', $group, Repo::member((int)$p['group_id'], $p['tg_user_id'])];
         }
         $att = (int)$p['attempts'] + 1;
         if ($att >= (int)$c['attempts']) {
             $answer('Sai rồi. Bạn đã hết lượt thử.', true);
+            $edit('❌ Bạn đã chọn sai quá số lần cho phép, không thể xác minh cho nhóm <b>' . tg_esc($group['title']) . '</b>.');
             self::fail($api, $group, $p, 'Chọn sai ' . $att . ' lần');
             return ['fail', $group, null];
         }

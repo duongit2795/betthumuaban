@@ -584,6 +584,9 @@ class BotHandler
         elseif ($key === null && preg_match('~^[A-Za-z0-9]{6}$~', $text) && Commands::names('login')) $loginCode = $text;
         if ($loginCode !== null && TgLogin::onCode($this->api, $msg, $loginCode)) return;
 
+        // Captcha xác minh qua bot: /start cap_ID
+        if ($payload !== null && str_starts_with($payload, 'cap_') && Captcha::privateStart($this->api, $msg, $payload)) return;
+
         // Học tập: nút "Học tập", /start learn, lệnh học tập, hoặc câu trả lời khi đang học
         if (Learn::onPrivate($this->api, $msg, $key, $payload)) return;
         if ($key === 'login') {
