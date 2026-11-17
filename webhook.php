@@ -30,6 +30,7 @@ try {
     DelQueue::finishRequest();
     // Captcha: xử lý người hết giờ xác minh
     Captcha::sweep(5);
+    AntiRaid::sweep();
     // Kiểm tra bản cập nhật mới (theo chu kỳ cài đặt) và báo cho admin qua Telegram
     UpdateNotifier::maybeCheck();
 } catch (Throwable $e) {

@@ -665,3 +665,6 @@ tg-spoiler, .tg-spoiler { background: color-mix(in srgb, var(--text) 18%, transp
 @media (max-width: 899px) { .kb-layout { grid-template-columns: minmax(0, 1fr); } }
 .kb-layout > * { min-width: 0; }
 .segmented button { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* Chống raid */
+.raid-card.locked { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); }
