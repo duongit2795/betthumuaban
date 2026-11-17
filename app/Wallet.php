@@ -14,6 +14,10 @@ class Wallet
         'amnesty_fail' => 'Ân xá lỗi (đã hoàn)',
         'tag' => 'Mua tag',
         'tag_fail' => 'Mua tag lỗi (đã hoàn)',
+        'exchange' => 'Đổi điểm',
+        'buy_points' => 'Mua điểm',
+        'gift' => 'Mã quà tặng',
+        'vip' => 'Mua VIP',
         'refund' => 'Hoàn tiền',
         'admin' => 'Admin điều chỉnh',
     ];

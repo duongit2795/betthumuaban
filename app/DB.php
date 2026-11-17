@@ -6,7 +6,7 @@ class DB
 {
     private static ?PDO $pdo = null;
     private static string $driver = 'sqlite';
-    const SCHEMA_VERSION = 16;
+    const SCHEMA_VERSION = 17;
 
     public static function connect(?array $c = null): PDO
     {
@@ -349,6 +349,35 @@ class DB
                 created_at INT NOT NULL,
                 UNIQUE (tg_user_id, group_id, day)
             )",
+            "CREATE TABLE IF NOT EXISTS gift_codes (
+                id $pk,
+                code VARCHAR(32) NOT NULL UNIQUE,
+                type VARCHAR(16) NOT NULL,
+                amount INT NOT NULL DEFAULT 0,
+                group_id INT,
+                max_uses INT NOT NULL DEFAULT 1,
+                uses INT NOT NULL DEFAULT 0,
+                expires_at INT,
+                enabled INT NOT NULL DEFAULT 1,
+                note $str,
+                created_at INT NOT NULL
+            )",
+            "CREATE TABLE IF NOT EXISTS gift_redemptions (
+                id $pk,
+                code_id INT NOT NULL,
+                who VARCHAR(32) NOT NULL,
+                user_id INT,
+                tg_user_id $big,
+                created_at INT NOT NULL,
+                UNIQUE (code_id, who)
+            )",
+            "CREATE TABLE IF NOT EXISTS vip_members (
+                tg_user_id $big NOT NULL PRIMARY KEY,
+                until INT NOT NULL,
+                notified INT NOT NULL DEFAULT 0,
+                created_at INT NOT NULL,
+                updated_at INT NOT NULL
+            )",
             "CREATE TABLE IF NOT EXISTS bank_tx (
                 id $pk,
                 txid VARCHAR(64) NOT NULL UNIQUE,
@@ -384,6 +413,8 @@ class DB
         // v6: nhật ký lưu chi tiết + bằng chứng vi phạm
         self::addColumn('app_logs', 'meta', 'TEXT');
         self::addColumn('app_logs', 'evidence', 'TEXT');
+        // v17: đổi điểm (điểm đã đổi → điểm mở = tổng − đã đổi)
+        self::addColumn('tg_members', 'points_spent', 'INT NOT NULL DEFAULT 0');
         // v16: mua tag bằng số dư ví (hạn dùng)
         self::addColumn('tg_members', 'tag_until', 'INT');
         // v15: tag thành viên

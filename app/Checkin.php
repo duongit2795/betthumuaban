@@ -91,7 +91,7 @@ class Checkin
         $st = self::streak($m['tg_user_id'], $groupId);
         if ($st['today']) throw new HttpError('Hôm nay bạn đã điểm danh nhóm này rồi, quay lại vào ngày mai nhé!', 409);
         $streak = $st['streak'] + 1;
-        $pts = self::reward($c, $streak);
+        $pts = self::reward($c, $streak) * Vip::multiplier($m['tg_user_id'], $groupId);
         try {
             DB::insert('checkins', ['tg_user_id' => $m['tg_user_id'], 'group_id' => $groupId, 'day' => date('Y-m-d'), 'points' => $pts, 'streak' => $streak, 'created_at' => now()]);
         } catch (PDOException $e) {

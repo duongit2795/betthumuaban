@@ -139,6 +139,18 @@ class Api
             'tags' => 'tags',
             'tags/save' => 'tagsSave',
             'tags/apply' => 'tagsApply',
+            'exchange' => 'exchange',
+            'exchange/do' => 'exchangeDo',
+            'exchange/buy' => 'exchangeBuy',
+            'exchange/save' => 'exchangeSave',
+            'gift' => 'gift',
+            'gift/redeem' => 'giftRedeem',
+            'gift/save' => 'giftSave',
+            'gift/delete' => 'giftDelete',
+            'vip' => 'vip',
+            'vip/buy' => 'vipBuy',
+            'vip/save' => 'vipSave',
+            'vip/grant' => 'vipGrant',
             'tagshop' => 'tagShop',
             'tagshop/buy' => 'tagShopBuy',
             'gates' => 'gates',
@@ -175,7 +187,7 @@ class Api
             'site_name' => $inst ? Settings::get('site_name') : 'Tele Manager',
             'allow_register' => $inst ? Settings::get('allow_register') === '1' : false,
             'tg_login' => $inst && TgLogin::enabled() ? ['bots' => TgLogin::bots(), 'cmd' => Commands::name('login')] : null,
-            'pay' => $inst ? ['wallet' => Wallet::config()['enabled'] && Wallet::config()['account_no'] !== '', 'amnesty' => Amnesty::config()['enabled'], 'checkin' => Checkin::config()['enabled'], 'tagshop' => MemberTag::config()['shop']] : null,
+            'pay' => $inst ? ['wallet' => Wallet::config()['enabled'] && Wallet::config()['account_no'] !== '', 'amnesty' => Amnesty::config()['enabled'], 'checkin' => Checkin::config()['enabled'], 'tagshop' => MemberTag::config()['shop'], 'exchange' => Exchange::config()['enabled'], 'vip' => Vip::config()['enabled']] : null,
             'version' => APP_VERSION,
             'php' => PHP_VERSION,
             'checks' => $inst ? null : [
@@ -708,7 +720,7 @@ class Api
     {
         $g = $this->loadGroup();
         $u = $this->gate('danger', $g);
-        DB::run('UPDATE tg_members SET points = 0 WHERE group_id = ?', [$g['id']]);
+        DB::run('UPDATE tg_members SET points = 0, points_spent = 0 WHERE group_id = ?', [$g['id']]);
         Repo::log((int)$g['id'], $u['username'], 'reset_points', null, 'Đặt lại điểm toàn nhóm');
         return [];
     }
@@ -907,6 +919,7 @@ class Api
             'tag' => $m['tag'] ?? null,
             'tag_source' => $m['tag_source'] ?? null,
             'tag_until' => !empty($m['tag_until']) ? (int)$m['tag_until'] : null,
+            'points_open' => Exchange::open($m),
             'joined_at' => $m['joined_at'] ? (int)$m['joined_at'] : null,
             'last_active' => $m['last_active'] ? (int)$m['last_active'] : null,
         ];
@@ -2318,5 +2331,145 @@ class Api
     {
         $u = Auth::requireUser();
         return MemberTag::buy($u, $this->int('group_id'), (string)$this->in('tag', ''), (bool)$this->in('custom'));
+    }
+
+    // ================= Đổi điểm ↔ tiền =================
+    private function exchange(): array
+    {
+        $u = Auth::requireUser();
+        $c = Exchange::config();
+        $groups = [];
+        if ($u['tg_user_id']) {
+            foreach (DB::all("SELECT m.*, g.title FROM tg_members m JOIN tg_groups g ON g.id = m.group_id WHERE g.active = 1 AND m.tg_user_id = ? AND m.status IN ('member','muted') ORDER BY g.title", [$u['tg_user_id']]) as $m) {
+                if (!Exchange::applies($c, (int)$m['group_id'])) continue;
+                $groups[] = ['id' => (int)$m['group_id'], 'title' => $m['title'], 'total' => (int)$m['points'], 'open' => Exchange::open($m), 'spent' => (int)$m['points_spent']];
+            }
+        }
+        $out = ['enabled' => $c['enabled'], 'linked' => (bool)$u['tg_user_id'], 'balance' => Wallet::balance((int)$u['id']),
+            'rate_points' => $c['rate_points'], 'rate_money' => $c['rate_money'], 'min_points' => $c['min_points'], 'daily_max' => $c['daily_max'],
+            'buy' => $c['buy'], 'buy_money' => $c['buy_money'], 'buy_points' => $c['buy_points'],
+            'today' => (int)DB::val("SELECT COALESCE(SUM(amount),0) FROM wallet_tx WHERE user_id = ? AND type = 'exchange' AND created_at >= ?", [$u['id'], strtotime('today')]),
+            'groups' => $groups,
+            'history' => array_map([$this, 'txRow'], DB::all("SELECT * FROM wallet_tx WHERE user_id = ? AND type IN ('exchange','buy_points') ORDER BY id DESC LIMIT 10", [$u['id']]))];
+        if (Access::isWebAdmin($u)) {
+            $out['admin'] = ['config' => $c, 'all_groups' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title']], DB::all('SELECT id, title FROM tg_groups WHERE active = 1 ORDER BY title')),
+                'paid' => (int)DB::val("SELECT COALESCE(SUM(amount),0) FROM wallet_tx WHERE type = 'exchange'"), 'paid_today' => (int)DB::val("SELECT COALESCE(SUM(amount),0) FROM wallet_tx WHERE type = 'exchange' AND created_at >= ?", [strtotime('today')])];
+        }
+        return $out;
+    }
+
+    private function exchangeDo(): array
+    {
+        $u = Auth::requireUser();
+        return Exchange::toMoney($u, $this->int('group_id'), $this->int('points'));
+    }
+
+    private function exchangeBuy(): array
+    {
+        $u = Auth::requireUser();
+        return Exchange::buyPoints($u, $this->int('group_id'), $this->int('money'));
+    }
+
+    private function exchangeSave(): array
+    {
+        $u = Auth::requireAdmin();
+        $c = Exchange::save((array)$this->in('config', []));
+        Repo::log(null, $u['username'], 'system', null, 'Đổi điểm: ' . ($c['enabled'] ? "bật · {$c['rate_points']} điểm = " . Wallet::money($c['rate_money']) : 'tắt'));
+        return ['config' => $c];
+    }
+
+    // ================= Mã quà tặng =================
+    private function gift(): array
+    {
+        $u = Auth::requireUser();
+        $who = $u['tg_user_id'] ? (string)$u['tg_user_id'] : 'u' . $u['id'];
+        $out = ['mine' => array_map(fn($r) => ['code' => $r['code'], 'type' => $r['type'], 'amount' => (int)$r['amount'], 'created_at' => (int)$r['created_at']],
+            DB::all('SELECT r.created_at, c.code, c.type, c.amount FROM gift_redemptions r JOIN gift_codes c ON c.id = r.code_id WHERE r.who = ? ORDER BY r.id DESC LIMIT 20', [$who])),
+            'linked' => (bool)$u['tg_user_id'], 'cmd' => Commands::name('giftcode'), 'bot' => DB::val('SELECT username FROM tg_bots WHERE enabled = 1 ORDER BY id LIMIT 1')];
+        if (Access::isWebAdmin($u)) {
+            $out['admin'] = [
+                'codes' => array_map(function ($r) { $x = GiftCode::row($r); $x['group_title'] = $r['group_title']; return $x; },
+                    DB::all('SELECT c.*, g.title AS group_title FROM gift_codes c LEFT JOIN tg_groups g ON g.id = c.group_id ORDER BY c.id DESC LIMIT 200')),
+                'types' => GiftCode::TYPES,
+                'groups' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title']], DB::all('SELECT id, title FROM tg_groups WHERE active = 1 ORDER BY title')),
+                'recent' => array_map(fn($r) => ['code' => $r['code'], 'who' => $r['display_name'] ?: ($r['tg_user_id'] ?: $r['who']), 'created_at' => (int)$r['created_at']],
+                    DB::all('SELECT r.*, c.code, u.display_name FROM gift_redemptions r JOIN gift_codes c ON c.id = r.code_id LEFT JOIN app_users u ON u.id = r.user_id ORDER BY r.id DESC LIMIT 30')),
+            ];
+        }
+        return $out;
+    }
+
+    private function giftRedeem(): array
+    {
+        $u = Auth::requireUser();
+        $r = GiftCode::redeem($u, $u['tg_user_id'] ?: null, (string)$this->in('code', ''));
+        return $r + ['balance' => Wallet::balance((int)$u['id'])];
+    }
+
+    private function giftSave(): array
+    {
+        $u = Auth::requireAdmin();
+        $r = GiftCode::save((array)$this->in('code', []));
+        Repo::log(null, $u['username'], 'system', null, "Lưu mã quà tặng {$r['code']}");
+        return ['code' => $r];
+    }
+
+    private function giftDelete(): array
+    {
+        Auth::requireAdmin();
+        DB::run('DELETE FROM gift_codes WHERE id = ?', [$this->int('id')]);
+        DB::run('DELETE FROM gift_redemptions WHERE code_id = ?', [$this->int('id')]);
+        return [];
+    }
+
+    // ================= Gói VIP =================
+    private function vip(): array
+    {
+        $u = Auth::requireUser();
+        $c = Vip::config();
+        $until = Vip::until($u['tg_user_id']);
+        $out = ['enabled' => $c['enabled'], 'linked' => (bool)$u['tg_user_id'], 'balance' => Wallet::balance((int)$u['id']), 'until' => $until, 'active' => $until && $until > now(),
+            'plans' => $c['plans'], 'perks' => ['tag' => $c['tag'], 'gates' => $c['perk_gates'], 'learn' => $c['perk_learn'], 'links' => $c['perk_links'], 'multiplier' => $c['multiplier']]];
+        if (Access::isWebAdmin($u)) {
+            $out['admin'] = ['config' => $c, 'groups' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title']], DB::all('SELECT id, title FROM tg_groups WHERE active = 1 ORDER BY title')),
+                'members' => array_map(function ($v) {
+                    $m = DB::get('SELECT first_name, last_name, username FROM tg_members WHERE tg_user_id = ? ORDER BY last_active DESC', [$v['tg_user_id']]);
+                    return ['tg_user_id' => (string)$v['tg_user_id'], 'name' => $m ? Repo::name($m + ['tg_user_id' => $v['tg_user_id']]) : (string)$v['tg_user_id'], 'until' => (int)$v['until'], 'active' => (int)$v['until'] > now()];
+                }, DB::all('SELECT * FROM vip_members ORDER BY until DESC LIMIT 100')),
+                'revenue' => -(int)DB::val("SELECT COALESCE(SUM(amount),0) FROM wallet_tx WHERE type = 'vip'")];
+        }
+        return $out;
+    }
+
+    private function vipBuy(): array
+    {
+        $u = Auth::requireUser();
+        return Vip::buy($u, $this->int('plan'));
+    }
+
+    private function vipSave(): array
+    {
+        $u = Auth::requireAdmin();
+        $c = Vip::save((array)$this->in('config', []));
+        Repo::log(null, $u['username'], 'system', null, 'Gói VIP: ' . ($c['enabled'] ? 'bật · ' . count($c['plans']) . ' gói' : 'tắt'));
+        return ['config' => $c];
+    }
+
+    /** Admin tặng / trừ ngày VIP theo ID Telegram (số âm để rút ngắn) */
+    private function vipGrant(): array
+    {
+        $u = Auth::requireAdmin();
+        $tg = ltrim(trim((string)$this->in('who', '')), '@');
+        if (!preg_match('/^\d{3,15}$/', $tg)) $tg = (string)DB::val('SELECT tg_user_id FROM tg_members WHERE LOWER(username) = LOWER(?) ORDER BY last_active DESC', [$tg]);
+        if (!$tg) fail('Không tìm thấy thành viên (nhập ID hoặc @username)', 404);
+        $days = $this->int('days');
+        if ($days === 0) fail('Nhập số ngày');
+        if ($days > 0) $until = Vip::extend($tg, $days, 'admin ' . $u['username'] . ' tặng');
+        else {
+            $cur = Vip::until($tg) ?? now();
+            $until = max(now() - 1, $cur + $days * 86400);
+            DB::run('UPDATE vip_members SET until = ?, notified = 0 WHERE tg_user_id = ?', [$until, $tg]);
+        }
+        return ['until' => $until];
     }
 }

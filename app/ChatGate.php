@@ -102,6 +102,7 @@ class ChatGate
     {
         if (!empty($user['is_bot'])) return false;
         $gid = (int)$group['id'];
+        if (Vip::perk('perk_gates', $user['id'], $gid)) return false; // VIP miễn điều kiện nhắn tin
         foreach (self::all() as $rule) {
             if (empty($rule['enabled']) || (int)$rule['group_id'] !== $gid) continue;
             if ($isAdmin && !empty($rule['exempt_admins'])) continue;
