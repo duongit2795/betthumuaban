@@ -4248,8 +4248,19 @@
   route('/captcha', async () => {
     const d = await api('captcha');
     const c = d.config;
-    let sel = [...c.groups], mode = c.mode;
+    let sel = [...c.groups], mode = c.mode, where = c.where || 'bot';
+    const val = (n, d) => $(`#fcap [name=${n}]`)?.value || d;
     const preview = () => {
+      if (where === 'bot') {
+        const q = mode === 'math' ? '🧮 Kết quả của <b>7 + 5</b> là bao nhiêu?' : mode === 'emoji' ? '👉 Hãy bấm vào <b>con mèo</b>' : '👇 Bấm nút bên dưới để xác nhận bạn là người thật.';
+        const btns = mode === 'math' ? ['10', '12', '9', '15'] : mode === 'emoji' ? ['🍎', '🐱', '🚗', '⭐', '🌙', '🔑'] : [val('button', c.button)];
+        const per = mode === 'emoji' ? 3 : 4, rows = [];
+        for (let i = 0; i < btns.length; i += per) rows.push(btns.slice(i, i + per));
+        const g = val('group_text_bot', c.group_text_bot).replace('{tag}', '<u>@lan99</u>').replace('{mention}', '<u>Lan</u>').replace('{name}', 'Lan').replace('{group}', 'Nhóm').replace('{seconds}', val('timeout', c.timeout));
+        const dm = val('dm_text', c.dm_text).replace('{group}', 'Nhóm').replace('{name}', 'Lan').replace('{seconds}', val('timeout', c.timeout)).replace('{question}', q);
+        return `<div class="xs muted" style="margin-bottom:4px">💬 Trong nhóm</div><div class="tgpost"><div class="tgpost-cap">${previewText(g)}</div></div><div class="tgpost-btns"><span class="tgpost-btn st-primary">${esc(val('bot_button', c.bot_button))}<i>↗</i></span></div>
+          <div class="xs muted" style="margin:12px 0 4px">🤖 Trong chat riêng với bot</div><div class="tgpost"><div class="tgpost-cap">${previewText(dm)}</div></div>${rows.map((r) => `<div class="tgpost-btns">${r.map((b) => `<span class="tgpost-btn ${mode === 'button' ? 'st-success' : ''}">${esc(b)}</span>`).join('')}</div>`).join('')}`;
+      }
       const q = mode === 'math' ? '🧮 Kết quả của <b>7 + 5</b> là bao nhiêu?' : mode === 'emoji' ? '👉 Hãy bấm vào <b>con mèo</b>' : '';
       const btns = mode === 'math' ? ['10', '12', '9', '15'] : mode === 'emoji' ? ['🍎', '🐱', '🚗', '⭐', '🌙', '🔑'] : [$('#fcap [name=button]')?.value || c.button];
       const txt = ($('#fcap [name=text]')?.value || c.text).replace('{mention}', '<u>Lan</u>').replace('{name}', 'Lan').replace('{group}', 'Nhóm').replace('{seconds}', $('#fcap [name=timeout]')?.value || c.timeout).replace('{question}', q);
@@ -4268,6 +4279,8 @@
       <form class="stack" id="fcap">
         <div class="card">${sw('enabled', c.enabled, 'Bật captcha khi vào nhóm')}</div>
         <div class="card card-pad stack">
+          <div class="field"><span class="lbl">Xác minh ở đâu</span><div class="segmented"><button type="button" data-cw="bot" class="${where === 'bot' ? 'active' : ''}">🤖 Qua bot (khuyên dùng)</button><button type="button" data-cw="group" class="${where === 'group' ? 'active' : ''}">💬 Trong nhóm</button></div>
+            <div class="hint" data-cwhint>${where === 'bot' ? 'Trong nhóm chỉ tag @username người mới kèm nút mở bot; câu hỏi gửi trong chat riêng, nhóm không bị rối.' : 'Câu hỏi và nút trả lời gửi thẳng trong nhóm.'}</div></div>
           <div class="field"><span class="lbl">Kiểu xác minh</span><div class="segmented">${Object.entries({ button: '✅ Bấm nút', math: '🧮 Phép tính', emoji: '😀 Emoji' }).map(([k, l]) => `<button type="button" data-cm="${k}" class="${mode === k ? 'active' : ''}" title="${esc(d.modes[k])}">${l}</button>`).join('')}</div></div>
           <div class="grid grid-2">
             <label class="field"><span class="lbl">Thời gian (giây)</span><input class="input" name="timeout" inputmode="numeric" value="${c.timeout}"></label>
@@ -4279,9 +4292,16 @@
         </div>
         <div class="card">${sw('skip_admin_added', c.skip_admin_added, 'Bỏ qua người do admin thêm vào')}${sw('skip_verified', c.skip_verified, 'Không hỏi lại người đã xác minh trước đây')}${sw('skip_vip', c.skip_vip, 'Bỏ qua thành viên VIP')}${sw('delete_join', c.delete_join, 'Xoá tin "đã tham gia nhóm"')}${sw('notify_fail', c.notify_fail, 'Báo vào nhóm khi đuổi / cấm người không xác minh')}</div>
         <div class="card card-pad stack">
-          <label class="field"><span class="lbl">Nội dung tin xác minh</span><textarea class="input" name="text" rows="4">${esc(c.text)}</textarea>
-            <div class="hint">Biến: <code>{mention}</code> <code>{name}</code> <code>{group}</code> <code>{seconds}</code> <code>{question}</code> (câu hỏi phép tính / emoji)</div></label>
-          <label class="field" data-btnfield style="${mode === 'button' ? '' : 'display:none'}"><span class="lbl">Chữ trên nút (kiểu bấm nút)</span><input class="input" name="button" value="${esc(c.button)}" maxlength="40"></label>
+          <div data-wbot style="${where === 'bot' ? '' : 'display:none'}" class="stack">
+            <label class="field"><span class="lbl">Tin tag trong nhóm</span><textarea class="input" name="group_text_bot" rows="3">${esc(c.group_text_bot)}</textarea>
+              <div class="hint">Biến: <code>{tag}</code> (@username, chưa có thì tag tên) <code>{mention}</code> <code>{name}</code> <code>{group}</code> <code>{seconds}</code></div></label>
+            <label class="field"><span class="lbl">Chữ trên nút mở bot</span><input class="input" name="bot_button" value="${esc(c.bot_button)}" maxlength="40"></label>
+            <label class="field"><span class="lbl">Tin câu hỏi trong bot</span><textarea class="input" name="dm_text" rows="3">${esc(c.dm_text)}</textarea>
+              <div class="hint">Biến: <code>{group}</code> <code>{name}</code> <code>{seconds}</code> (thời gian còn lại) <code>{question}</code></div></label>
+          </div>
+          <label class="field" data-wgroup style="${where === 'group' ? '' : 'display:none'}"><span class="lbl">Nội dung tin xác minh (trong nhóm)</span><textarea class="input" name="text" rows="4">${esc(c.text)}</textarea>
+            <div class="hint">Biến: <code>{mention}</code> <code>{tag}</code> <code>{name}</code> <code>{group}</code> <code>{seconds}</code> <code>{question}</code> (câu hỏi phép tính / emoji)</div></label>
+          <label class="field" data-btnfield style="${mode === 'button' ? '' : 'display:none'}"><span class="lbl">Chữ trên nút xác nhận (kiểu bấm nút)</span><input class="input" name="button" value="${esc(c.button)}" maxlength="40"></label>
         </div>
         <button class="btn primary block">Lưu cài đặt captcha</button>
       </form>
@@ -4292,6 +4312,13 @@
         const pv = () => { $('[data-cpv]', root).innerHTML = preview(); };
         root.addEventListener('input', pv);
         root.addEventListener('click', (e) => {
+          const w = e.target.closest('[data-cw]');
+          if (w) {
+            where = w.dataset.cw; $$('[data-cw]', root).forEach((x) => x.classList.toggle('active', x === w));
+            $('[data-wbot]', root).style.display = where === 'bot' ? '' : 'none'; $('[data-wgroup]', root).style.display = where === 'group' ? '' : 'none';
+            $('[data-cwhint]', root).textContent = where === 'bot' ? 'Trong nhóm chỉ tag @username người mới kèm nút mở bot; câu hỏi gửi trong chat riêng, nhóm không bị rối.' : 'Câu hỏi và nút trả lời gửi thẳng trong nhóm.';
+            pv(); return;
+          }
           const m = e.target.closest('[data-cm]');
           if (m) { mode = m.dataset.cm; $$('[data-cm]', root).forEach((x) => x.classList.toggle('active', x === m)); $('[data-btnfield]', root).style.display = mode === 'button' ? '' : 'none'; pv(); return; }
           const g = e.target.closest('[data-cg]');
@@ -4299,7 +4326,7 @@
         });
         $('#fcap', root).onsubmit = (e) => {
           e.preventDefault();
-          withBtn(e.target.querySelector('button.primary'), async () => { try { await api('captcha/save', { config: { ...formData(e.target), mode, groups: sel } }); toast('Đã lưu'); render(); } catch (err) { toast(err.message, 'err'); } });
+          withBtn(e.target.querySelector('button.primary'), async () => { try { await api('captcha/save', { config: { ...formData(e.target), mode, where, groups: sel } }); toast('Đã lưu'); render(); } catch (err) { toast(err.message, 'err'); } });
         };
       },
     };
