@@ -76,6 +76,7 @@ Web PHP (chạy tốt trên **aaPanel**) để quản lý nhóm Telegram bằng 
 | Lệnh | Ai dùng | Tác dụng |
 |---|---|---|
 | `/help` `/rules` `/me` `/top` `/info` `/id` | Mọi người | Trợ giúp, nội quy, điểm của tôi, xếp hạng, thông tin, ID |
+| `@admin` hoặc `/admin [nội dung]` | Mọi người | Gọi admin: bot tag @ tất cả quản trị viên (bỏ qua bot, admin ẩn danh); reply tin vi phạm rồi gọi để admin thấy ngay tin đó; 1 lần / 60 giây / nhóm |
 | `/anxa` (reply) | Mọi người | Giá ân xá, hình phạt của người được reply, nút mở trang Ân xá |
 | `/warn [lý do]` `/unwarn` `/resetwarn` | Admin | Cảnh cáo (reply hoặc `@username` / ID) |
 | `/mute [30m\|2h\|1d] [lý do]` `/unmute` | Admin | Cấm chat |
