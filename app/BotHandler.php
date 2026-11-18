@@ -224,6 +224,11 @@ class BotHandler
             }
         }
 
+        // Gọi admin: gõ @admin / @admins trong tin nhắn
+        if (!str_starts_with($text, '/') && !$isAdmin && Commands::names('admins') && preg_match('/(^|[^\w@])@admins?(?![\w])/iu', $text)) {
+            $this->callAdmins($group, $msg, $member, trim(preg_replace('/(^|\s)@admins?(?![\w])/iu', ' ', $text)));
+        }
+
         // Lệnh tự tạo chạy trước (ưu tiên hơn lệnh có sẵn trùng tên)
         $isCommand = str_starts_with($text, '/');
         $flags = Rules::run($this->api, $this->botUsername, $this->botTgId, $group, $msg, $member, $isAdmin, $text,
@@ -395,7 +400,7 @@ class BotHandler
             switch ($cmd) {
                 case 'help':
                     $line = fn(string $k) => Commands::names($k) ? $c($k) . ' – ' . tg_esc(Commands::config()[$k]['description']) : null;
-                    $t = "📖 <b>Lệnh thành viên</b>\n" . implode("\n", array_filter(array_map($line, ['rules', 'me', 'top', 'checkin', 'info', 'amnesty', 'id'])));
+                    $t = "📖 <b>Lệnh thành viên</b>\n" . implode("\n", array_filter(array_map($line, ['rules', 'me', 'top', 'checkin', 'admins', 'info', 'amnesty', 'id'])));
                     $custom = Rules::helpLines($gid, $isAdmin);
                     if ($custom) $t .= "\n\n✨ <b>Lệnh riêng của nhóm</b>\n" . implode("\n", $custom);
                     if ($isAdmin) {
@@ -426,6 +431,9 @@ class BotHandler
                     return;
                 case 'checkin':
                     $this->checkinCmd($group, $msg, $member);
+                    return;
+                case 'admins':
+                    $this->callAdmins($group, $msg, $member, $args);
                     return;
                 case 'top':
                     $rows = DB::all("SELECT * FROM tg_members WHERE group_id = ? AND is_bot = 0 AND status <> 'banned' AND points > 0 ORDER BY points DESC, messages DESC LIMIT 10", [$gid]);
@@ -692,6 +700,38 @@ class BotHandler
         if ($c['cmd_autodel'] > 0) {
             DelQueue::add($this->api, (int)$this->bot['id'], $msg['chat']['id'], array_filter([$msg['message_id'], $sent['message_id'] ?? null]), (int)$c['cmd_autodel']);
         }
+    }
+
+    /** Tag @ tất cả quản trị viên (không tag bot, admin ẩn danh). Giới hạn 1 lần / 60 giây / nhóm. */
+    private function callAdmins(array $group, array $msg, array $member, string $reason): void
+    {
+        $gid = (int)$group['id'];
+        $chatId = $msg['chat']['id'];
+        $last = (int)DB::val('SELECT last_at FROM tg_rule_hits WHERE rule_id = -5 AND group_id = ? AND tg_user_id = 0', [$gid]);
+        if (now() - $last < 60) {
+            $r = $this->api->trySend($chatId, '⏳ Quản trị viên vừa được gọi, vui lòng chờ ' . (60 - (now() - $last)) . ' giây nữa.', ['reply_parameters' => ['message_id' => $msg['message_id'], 'allow_sending_without_reply' => true]]);
+            if (!empty($r['message_id'])) DelQueue::add($this->api, (int)$this->bot['id'], $chatId, [$r['message_id']], 15);
+            return;
+        }
+        $list = $this->api->tryCall('getChatAdministrators', ['chat_id' => $chatId]);
+        $tags = [];
+        foreach (is_array($list) ? $list : [] as $a) {
+            $u = $a['user'] ?? [];
+            if (!empty($u['is_bot']) || !empty($a['is_anonymous'])) continue;
+            $tags[] = !empty($u['username']) ? '@' . tg_esc($u['username'])
+                : '<a href="tg://user?id=' . (int)$u['id'] . '">' . tg_esc(trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? '')) ?: 'Admin') . '</a>';
+        }
+        if (!$tags) { $this->reply($msg, '⚠️ Không tìm thấy quản trị viên để gọi (bot cần là quản trị viên của nhóm).'); return; }
+        DB::run('DELETE FROM tg_rule_hits WHERE rule_id = -5 AND group_id = ? AND tg_user_id = 0', [$gid]);
+        DB::insert('tg_rule_hits', ['rule_id' => -5, 'group_id' => $gid, 'tg_user_id' => 0, 'last_at' => now()]);
+        $reason = trim(mb_substr($reason, 0, 300));
+        $target = $msg['reply_to_message'] ?? null;
+        $t = '🚨 ' . Repo::mention($member) . ' đang gọi quản trị viên' . ($target ? ' (xem tin được reply)' : '') . ":\n" . implode(' ', $tags);
+        if ($reason !== '') $t .= "\n📝 " . tg_esc($reason);
+        // Trả lời vào tin bị báo (nếu có) để admin thấy ngay
+        $this->api->trySend($chatId, $t, ['reply_parameters' => ['message_id' => $target['message_id'] ?? $msg['message_id'], 'allow_sending_without_reply' => true]]);
+        Repo::log($gid, Repo::name($member), 'call_admin', $member, ($target ? 'Báo tin #' . $target['message_id'] . ' · ' : '') . ($reason !== '' ? $reason : 'Gọi admin'),
+            ['source' => 'telegram', 'link' => $target ? Moderation::link($group, (int)$target['message_id']) : null], $target ? Moderation::evidence($target) : null);
     }
 
     /** Nội dung lệnh /anxa trong nhóm */
