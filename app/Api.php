@@ -148,6 +148,9 @@ class Api
             'antiraid/lock' => 'antiRaidLock',
             'antiraid/decide' => 'antiRaidDecide',
             'antiraid/decide-all' => 'antiRaidDecideAll',
+            'watermark' => 'watermark',
+            'watermark/save' => 'watermarkSave',
+            'watermark/preview' => 'watermarkPreview',
             'captcha' => 'captcha',
             'captcha/save' => 'captchaSave',
             'gift' => 'gift',
@@ -2478,6 +2481,49 @@ class Api
             DB::run('UPDATE vip_members SET until = ?, notified = 0 WHERE tg_user_id = ?', [$until, $tg]);
         }
         return ['until' => $until];
+    }
+
+    // ================= Đóng dấu ảnh chống copy =================
+    private function watermark(): array
+    {
+        Auth::requireAdmin();
+        $err = (string)Settings::get('watermark_error');
+        return [
+            'config' => Watermark::config(), 'defaults' => Watermark::DEFAULTS, 'styles' => Watermark::STYLES, 'ready' => Watermark::ready(),
+            'count' => (int)Settings::get('watermark_count'), 'error' => $err !== '' ? $err : null,
+            'groups' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title'], 'bot_admin' => (int)$g['bot_is_admin']], DB::all('SELECT id, title, bot_is_admin FROM tg_groups WHERE active = 1 ORDER BY title')),
+        ];
+    }
+
+    private function watermarkSave(): array
+    {
+        $u = Auth::requireAdmin();
+        $c = Watermark::save((array)$this->in('config', []));
+        Settings::set('watermark_error', '');
+        Repo::log(null, $u['username'], 'system', null, 'Đóng dấu ảnh: ' . ($c['enabled'] ? 'bật · ' . Watermark::STYLES[$c['style']] : 'tắt'));
+        return ['config' => $c];
+    }
+
+    /** Xem trước: trộn cấu hình đang sửa (chưa lưu) + ảnh mẫu (tuỳ chọn, base64) */
+    private function watermarkPreview(): array
+    {
+        Auth::requireAdmin();
+        $in = (array)$this->in('config', []);
+        $c = Watermark::config();
+        foreach (['style', 'color'] as $k) if (isset($in[$k])) $c[$k] = (string)$in[$k];
+        if (!isset(Watermark::STYLES[$c['style']])) $c['style'] = 'tile';
+        foreach (['opacity' => [5, 100], 'size' => [2, 12]] as $k => [$a, $b]) if (isset($in[$k])) $c[$k] = max($a, min($b, (int)$in[$k]));
+        if (isset($in['text']) && trim((string)$in['text']) !== '') $c['text'] = mb_substr((string)$in['text'], 0, 200);
+        $bin = null;
+        $img = (string)$this->in('image', '');
+        if ($img !== '') {
+            $bin = base64_decode(preg_replace('~^data:image/[a-z]+;base64,~', '', $img), true);
+            if ($bin === false || strlen($bin) > 8 * 1024 * 1024) throw new HttpError('Ảnh mẫu không hợp lệ hoặc quá lớn (tối đa 8MB)');
+        }
+        $gid = (int)$this->in('group_id', 0);
+        $g = $gid ? DB::get('SELECT title FROM tg_groups WHERE id = ?', [$gid]) : null;
+        $g = $g ?: DB::get('SELECT title FROM tg_groups WHERE active = 1 ORDER BY id LIMIT 1') ?: ['title' => 'Nhóm của bạn'];
+        return ['image' => Watermark::preview($c, ['id' => 0, 'title' => $g['title']], $bin)];
     }
 
     // ================= Captcha khi vào nhóm =================

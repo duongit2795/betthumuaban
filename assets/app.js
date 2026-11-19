@@ -350,7 +350,7 @@
     if (isWebAdmin()) {
       return {
         tab: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/logs', 'list', 'Nhật ký'], ['/more', 'grid', 'Thêm']],
-        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh'], ['/ads', 'megaphone', 'Quảng cáo'], ['/learn', 'book', 'Học tập'], ['/antiraid', 'shield', 'Chống raid'], ['/captcha', 'shield', 'Captcha vào nhóm'], ['/gates', 'lock', 'Điều kiện chat'], ['/tags', 'tagi', 'Tag thành viên'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/payments', 'bank', 'Nạp tiền & ân xá'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ['/checkin', 'calendar', 'Điểm danh'], ['/exchange', 'refresh', 'Đổi điểm'], ['/vip', 'trophy', 'Gói VIP'], ['/giftcode', 'star', 'Mã quà tặng'], ...payNav(), ['/account', 'user', 'Tài khoản']],
+        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh'], ['/ads', 'megaphone', 'Quảng cáo'], ['/learn', 'book', 'Học tập'], ['/antiraid', 'shield', 'Chống raid'], ['/captcha', 'shield', 'Captcha vào nhóm'], ['/watermark', 'image', 'Đóng dấu ảnh'], ['/gates', 'lock', 'Điều kiện chat'], ['/tags', 'tagi', 'Tag thành viên'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/payments', 'bank', 'Nạp tiền & ân xá'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ['/checkin', 'calendar', 'Điểm danh'], ['/exchange', 'refresh', 'Đổi điểm'], ['/vip', 'trophy', 'Gói VIP'], ['/giftcode', 'star', 'Mã quà tặng'], ...payNav(), ['/account', 'user', 'Tài khoản']],
       };
     }
     const ck = S.pay?.checkin ? [['/checkin', 'calendar', 'Điểm danh']] : [];
@@ -380,7 +380,7 @@
     const path = current();
     const direct = (p) => (p === '/' ? path === '/' : path === p || path.startsWith(p + '/') || (p === '/groups' && path.startsWith('/group/')) || (p === '/rules' && path === '/commands'));
     const inTabs = items.tab.some(([p]) => p !== '/more' && direct(p));
-    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments', '/learn', '/keyboard', '/gates', '/mylogs', '/checkin', '/tags', '/tagshop', '/exchange', '/giftcode', '/vip', '/captcha', '/antiraid'].some((x) => path.startsWith(x)));
+    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments', '/learn', '/keyboard', '/gates', '/mylogs', '/checkin', '/tags', '/tagshop', '/exchange', '/giftcode', '/vip', '/captcha', '/antiraid', '/watermark'].some((x) => path.startsWith(x)));
     $('#tabbar').innerHTML = items.tab.map(([p, ic, t]) => `<a href="#${p}" class="${isActive(p) ? 'active' : ''}">${icon(ic)}<span>${t}</span></a>`).join('');
     $('#sidebar').innerHTML = `<div class="brand"><img src="assets/icon.svg" alt="">${esc(S.site)}</div>`
       + items.side.map(([p, ic, t]) => `<a href="#${p}" class="nav ${isActive(p) && !(p === '/more') ? 'active' : ''}">${icon(ic)}${t}</a>`).join('')
@@ -2785,6 +2785,7 @@
         <a class="list-item" href="#/learn">${icon('book')}<div class="grow">Học tập bắt buộc</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/antiraid">${icon('shield')}<div class="grow">Chống raid & duyệt thành viên</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/captcha">${icon('shield')}<div class="grow">Captcha khi vào nhóm</div><span class="chev">${icon('chevron')}</span></a>
+        <a class="list-item" href="#/watermark">${icon('image')}<div class="grow">Đóng dấu ảnh chống copy</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/gates">${icon('lock')}<div class="grow">Điều kiện nhắn tin giữa các nhóm</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/tags">${icon('tagi')}<div class="grow">Tag thành viên</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         ${isWebAdmin() ? `<a class="list-item" href="#/users">${icon('key')}<div class="grow">Tài khoản web & phân quyền</div><span class="chev">${icon('chevron')}</span></a>
@@ -4243,6 +4244,106 @@
       },
     };
   }, { title: 'Gói VIP' });
+
+  // ================= Đóng dấu ảnh chống copy =================
+  route('/watermark', async () => {
+    const d = await api('watermark');
+    const c = d.config;
+    let sel = [...c.groups], style = c.style, color = c.color, sample = null, timer = 0, seq = 0;
+    const val = (n, def) => { const el = $(`#fwm [name=${n}]`); return el ? el.value : def; };
+    const capPreview = () => {
+      let t = val('caption', c.caption).replace('{tag}', '<u>@lan99</u>').replace('{mention}', '<u>Nguyễn Lan</u>').replace('{name}', 'Nguyễn Lan').replace('{group}', esc(d.groups[0]?.title || 'Nhóm'));
+      if ($('#fwm [name=keep_caption]')?.checked ?? c.keep_caption) t += '\n\nHàng mới về, ib mình nhé';
+      return previewText(t);
+    };
+    const loadImg = async (root) => {
+      const my = ++seq;
+      const box = $('[data-wmimg]', root);
+      box.classList.add('loading');
+      try {
+        const r = await api('watermark/preview', { config: { style, color, opacity: val('opacity', c.opacity), size: val('size', c.size), text: val('text', c.text) }, image: sample, group_id: sel[0] || 0 });
+        if (my === seq) $('img', box).src = r.image;
+      } catch (err) { if (my === seq) toast(err.message, 'err'); } finally { if (my === seq) box.classList.remove('loading'); }
+    };
+    const vars = '<code>{name}</code> tên · <code>{username}</code> @username · <code>{group}</code> tên nhóm · <code>{id}</code> ID · <code>{date}</code> ngày';
+    return {
+      title: 'Đóng dấu ảnh',
+      html: `
+      <div class="alert info" style="margin-bottom:12px">${icon('image')}<div class="xs">Thành viên gửi ảnh → bot <b>xoá ảnh gốc</b> và gửi lại ảnh đã in <b>chữ mờ</b> (tên, @username, tên nhóm…) kèm chú thích <i>“Ảnh của @xxx gửi”</i>, giúp chống lấy ảnh đi đăng lại. Bot cần quyền <b>Xoá tin nhắn</b>. Album nhiều ảnh sẽ được gửi lại thành từng ảnh.</div></div>
+      ${d.ready ? '' : `<div class="alert err" style="margin-bottom:12px">${icon('alert')}<div class="xs">Máy chủ thiếu <b>PHP GD + FreeType</b>. Vào aaPanel → App Store → PHP → Cài extension → <b>gd</b>, rồi tải lại trang.</div></div>`}
+      ${d.error ? `<div class="alert warn" style="margin-bottom:12px">${icon('alert')}<div class="xs">Lần lỗi gần nhất (ảnh gốc được giữ nguyên): ${esc(d.error)}</div></div>` : ''}
+      <div class="xs muted" style="margin:-4px 0 12px">Đã đóng dấu: <b>${num(d.count)}</b> ảnh</div>
+      <div class="kb-layout">
+      <form class="stack" id="fwm">
+        <div class="card">${sw('enabled', c.enabled, 'Bật đóng dấu ảnh')}</div>
+        <div class="card card-pad stack">
+          <label class="field"><span class="lbl">Chữ in lên ảnh</span><textarea class="input" name="text" rows="2" maxlength="200">${esc(c.text)}</textarea>
+            <div class="hint">Biến: ${vars}. Xuống dòng để in nhiều dòng. Emoji không được in.</div></label>
+          <div class="field"><span class="lbl">Kiểu đóng dấu</span><div class="segmented">${Object.entries({ tile: '▦ Lặp chéo', corner: '↘ Góc', center: '◎ Giữa' }).map(([k, l]) => `<button type="button" data-ws="${k}" class="${style === k ? 'active' : ''}" title="${esc(d.styles[k])}">${l}</button>`).join('')}</div>
+            <div class="hint">“Lặp chéo” phủ khắp ảnh nên khó cắt / xoá nhất.</div></div>
+          <div class="field"><span class="lbl">Màu chữ</span><div class="segmented"><button type="button" data-wc="white" class="${color === 'white' ? 'active' : ''}">⚪ Trắng</button><button type="button" data-wc="black" class="${color === 'black' ? 'active' : ''}">⚫ Đen</button></div></div>
+          <div class="grid grid-2">
+            <label class="field"><span class="lbl">Độ đậm: <b data-wov>${c.opacity}</b>%</span><input type="range" style="width:100%" name="opacity" min="5" max="100" value="${c.opacity}"></label>
+            <label class="field"><span class="lbl">Cỡ chữ: <b data-wsv>${c.size}</b>% bề ngang</span><input type="range" style="width:100%" name="size" min="2" max="12" value="${c.size}"></label>
+          </div>
+        </div>
+        <div class="card card-pad stack">
+          <label class="field"><span class="lbl">Chú thích khi gửi lại</span><textarea class="input" name="caption" rows="2" maxlength="300">${esc(c.caption)}</textarea>
+            <div class="hint">Biến: <code>{tag}</code> (@username, chưa có thì tag tên) <code>{mention}</code> <code>{name}</code> <code>{group}</code>. Hỗ trợ <b>đậm</b>, <i>nghiêng</i> kiểu HTML.</div></label>
+        </div>
+        <div class="card">${sw('keep_caption', c.keep_caption, 'Giữ chú thích gốc của người gửi')}${sw('documents', c.documents, 'Đóng dấu cả ảnh gửi dạng tệp (JPG / PNG)')}${sw('exempt_admins', c.exempt_admins, 'Không đóng dấu ảnh của quản trị viên')}${sw('exempt_vip', c.exempt_vip, 'Không đóng dấu ảnh của thành viên VIP')}</div>
+        <div class="card card-pad">
+          <div class="field"><span class="lbl">Áp dụng cho nhóm <span class="xs muted">(không chọn = tất cả)</span></span><div class="chips" style="flex-wrap:wrap">${d.groups.map((g) => `<button type="button" class="chip ${sel.includes(g.id) ? 'active' : ''}" data-wg="${g.id}">${esc(g.title)}${g.bot_admin ? '' : ' ⚠️'}</button>`).join('') || '<span class="xs muted">Chưa có nhóm</span>'}</div>
+            ${d.groups.some((g) => !g.bot_admin) ? '<div class="hint">⚠️ = bot chưa là quản trị viên ở nhóm đó, không xoá được ảnh gốc.</div>' : ''}</div>
+        </div>
+        <button class="btn primary block">Lưu cài đặt đóng dấu</button>
+      </form>
+      <div class="kb-side"><div class="pv-label">👁 Xem trước</div>
+        <div class="ad-preview" style="padding:10px">
+          <div class="tgpost" style="padding:0;overflow:hidden"><div data-wmimg class="wm-img"><img alt="Ảnh xem trước" style="display:block;width:100%;height:auto;min-height:120px;background:var(--primary-soft)"></div><div class="tgpost-cap" data-wcap style="padding:8px 10px">${capPreview()}</div></div>
+        </div>
+        <label class="btn block" style="margin-top:8px">${icon('image')} Thử với ảnh của bạn<input type="file" accept="image/*" data-wfile hidden></label>
+        <div class="xs muted" style="margin-top:6px">Ảnh thử chỉ dùng để xem trước, không lưu lên máy chủ. Tên / @username trong ảnh mẫu là ví dụ; thực tế lấy theo người gửi.</div></div>
+      </div>`,
+      mount: (root) => {
+        const later = () => { clearTimeout(timer); timer = setTimeout(() => loadImg(root), 350); };
+        loadImg(root);
+        root.addEventListener('input', (e) => {
+          const n = e.target.name;
+          if (n === 'opacity') $('[data-wov]', root).textContent = e.target.value;
+          if (n === 'size') $('[data-wsv]', root).textContent = e.target.value;
+          if (['opacity', 'size', 'text'].includes(n)) later();
+          $('[data-wcap]', root).innerHTML = capPreview();
+        });
+        root.addEventListener('change', (e) => {
+          if (e.target.name === 'keep_caption') $('[data-wcap]', root).innerHTML = capPreview();
+          if (!e.target.matches('[data-wfile]') || !e.target.files[0]) return;
+          // Thu nhỏ ảnh trên trình duyệt trước khi gửi xem trước
+          const img = new Image();
+          img.onload = () => {
+            const k = Math.min(1, 1600 / Math.max(img.width, img.height));
+            const cv = document.createElement('canvas'); cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
+            const ctx = cv.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height); ctx.drawImage(img, 0, 0, cv.width, cv.height);
+            sample = cv.toDataURL('image/jpeg', 0.9); URL.revokeObjectURL(img.src); loadImg(root);
+          };
+          img.onerror = () => toast('Không đọc được ảnh này', 'err');
+          img.src = URL.createObjectURL(e.target.files[0]);
+        });
+        root.addEventListener('click', (e) => {
+          const st = e.target.closest('[data-ws]');
+          if (st) { style = st.dataset.ws; $$('[data-ws]', root).forEach((x) => x.classList.toggle('active', x === st)); loadImg(root); return; }
+          const co = e.target.closest('[data-wc]');
+          if (co) { color = co.dataset.wc; $$('[data-wc]', root).forEach((x) => x.classList.toggle('active', x === co)); loadImg(root); return; }
+          const g = e.target.closest('[data-wg]');
+          if (g) { const id = +g.dataset.wg; sel = sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id]; g.classList.toggle('active'); loadImg(root); }
+        });
+        $('#fwm', root).onsubmit = (e) => {
+          e.preventDefault();
+          withBtn(e.target.querySelector('button.primary'), async () => { try { await api('watermark/save', { config: { ...formData(e.target), style, color, groups: sel } }); toast('Đã lưu'); render(); } catch (err) { toast(err.message, 'err'); } });
+        };
+      },
+    };
+  }, { webAdmin: true, title: 'Đóng dấu ảnh', back: '/more' });
 
   // ================= Captcha khi vào nhóm =================
   route('/captcha', async () => {

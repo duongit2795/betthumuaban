@@ -234,6 +234,11 @@ class BotHandler
         $flags = Rules::run($this->api, $this->botUsername, $this->botTgId, $group, $msg, $member, $isAdmin, $text,
             fn(int $uid) => $this->isAdmin($group, $uid), (int)$this->bot['id']);
 
+        // Đóng dấu ảnh chống copy: ảnh thành viên → gửi lại bản có chữ mờ, xoá ảnh gốc
+        if (!($flags & Rules::DELETED) && (!empty($msg['photo']) || !empty($msg['document']))) {
+            $this->safe(fn() => Watermark::handle($this->api, $group, $msg, $member, $isAdmin));
+        }
+
         // Đếm tin nhắn & điểm tương tác (tin bị lệnh tự tạo xoá thì không tính)
         $member = DB::get('SELECT * FROM tg_members WHERE id = ?', [$member['id']]);
         if (!($flags & Rules::DELETED)) {
