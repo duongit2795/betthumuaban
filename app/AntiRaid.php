@@ -190,10 +190,17 @@ class AntiRaid
         if (!self::applies($c, $group)) return; // không áp dụng: để admin duyệt trong Telegram / web
         [$locked] = self::track($api, $group, $u['id']);
         if ($locked) {
-            if ($c['request_action'] === 'decline') self::decide($api, $group, (int)$old, false, 'Bot (chống raid)');
+            if ($c['request_action'] === 'decline') self::decideQuiet($api, $group, (int)$old, false, 'Bot (chống raid)');
             return; // giữ chờ admin
         }
-        if ($c['auto_approve']) self::decide($api, $group, (int)$old, true, 'Bot (tự duyệt)');
+        if ($c['auto_approve']) self::decideQuiet($api, $group, (int)$old, true, 'Bot (tự duyệt)');
+    }
+
+    /** Bot tự duyệt: lỗi thì để yêu cầu ở trạng thái chờ cho admin xử lý trên web, không báo lỗi bot */
+    private static function decideQuiet(Telegram $api, array $group, int $id, bool $approve, string $by): void
+    {
+        try { self::decide($api, $group, $id, $approve, $by); }
+        catch (Throwable $e) { Settings::set('raid_error', mb_substr($e->getMessage(), 0, 200) . ' · ' . date('H:i d/m')); }
     }
 
     /** Duyệt / từ chối 1 yêu cầu */
@@ -205,8 +212,10 @@ class AntiRaid
             $api->call($approve ? 'approveChatJoinRequest' : 'declineChatJoinRequest', ['chat_id' => $group['chat_id'], 'user_id' => $r['tg_user_id']]);
             $st = $approve ? 'approved' : 'declined';
         } catch (TelegramException $e) {
-            $st = stripos($e->getMessage(), 'HIDE_REQUESTER_MISSING') !== false || stripos($e->getMessage(), 'not found') !== false ? 'expired' : null;
-            if (!$st) throw new HttpError('Telegram: ' . $e->getMessage());
+            $m = $e->getMessage();
+            if (stripos($m, 'USER_ALREADY_PARTICIPANT') !== false) $st = 'approved';  // đã ở trong nhóm (admin khác / link khác đã duyệt, hoặc Telegram gửi lặp yêu cầu)
+            elseif (preg_match('/HIDE_REQUESTER_MISSING|not found|USER_DEACTIVATED|USER_CHANNELS_TOO_MUCH|CHANNELS_TOO_MUCH/i', $m)) $st = 'expired';
+            else throw new HttpError('Telegram: ' . $m);
         }
         DB::run('UPDATE join_requests SET status = ?, decided_at = ?, decided_by = ? WHERE id = ?', [$st, now(), mb_substr($by, 0, 60), $id]);
         return true;
