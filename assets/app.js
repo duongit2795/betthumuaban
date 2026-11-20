@@ -342,22 +342,29 @@
   const payNav = () => [...(S.pay?.wallet ? [['/wallet', 'wallet', 'Ví']] : []), ...(S.pay?.amnesty ? [['/amnesty', 'heart', 'Ân xá']] : [])];
   const shopNav = () => [...(S.pay?.tagshop ? [['/tagshop', 'tagi', 'Mua tag']] : []), ...(S.pay?.exchange ? [['/exchange', 'refresh', 'Đổi điểm']] : []), ...(S.pay?.vip ? [['/vip', 'trophy', 'Gói VIP']] : []), ['/giftcode', 'star', 'Mã quà tặng']];
   function navItems() {
+    const planNav = S.tenant?.enabled || isTenant() ? [['/plan', 'star', 'Gói thuê']] : [];
+    if (!isWebAdmin() && isTenant()) {
+      return {
+        tab: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/plan', 'star', 'Gói'], ['/more', 'grid', 'Thêm']],
+        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm của tôi'], ['/bots', 'bot', 'Bot của tôi'], ['/plan', 'star', 'Gói thuê'], ...(can('rules') ? [['/rules', 'terminal', 'Lệnh']] : []), ['/logs', 'list', 'Nhật ký'], ...payNav(), ['/account', 'user', 'Tài khoản']],
+      };
+    }
     if (!isWebAdmin() && isManager()) {
       return {
         tab: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/rules', 'terminal', 'Lệnh'], ...(can('logs') ? [['/logs', 'list', 'Nhật ký']] : []), ['/more', 'grid', 'Thêm']],
-        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm của tôi'], ['/rules', 'terminal', 'Lệnh'], ...(can('logs') ? [['/logs', 'list', 'Nhật ký']] : []), ['/me', 'star', 'Điểm của tôi'], ...(S.pay?.checkin ? [['/checkin', 'calendar', 'Điểm danh']] : []), ['/rank', 'trophy', 'Xếp hạng'], ...payNav(), ['/account', 'user', 'Tài khoản']],
+        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm của tôi'], ...planNav, ['/rules', 'terminal', 'Lệnh'], ...(can('logs') ? [['/logs', 'list', 'Nhật ký']] : []), ['/me', 'star', 'Điểm của tôi'], ...(S.pay?.checkin ? [['/checkin', 'calendar', 'Điểm danh']] : []), ['/rank', 'trophy', 'Xếp hạng'], ...payNav(), ['/account', 'user', 'Tài khoản']],
       };
     }
     if (isWebAdmin()) {
       return {
         tab: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/logs', 'list', 'Nhật ký'], ['/more', 'grid', 'Thêm']],
-        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh'], ['/ads', 'megaphone', 'Quảng cáo'], ['/learn', 'book', 'Học tập'], ['/antiraid', 'shield', 'Chống raid'], ['/captcha', 'shield', 'Captcha vào nhóm'], ['/watermark', 'image', 'Đóng dấu ảnh'], ['/nameguard', 'shield', 'Cấm tên chứa từ cấm'], ['/gates', 'lock', 'Điều kiện chat'], ['/tags', 'tagi', 'Tag thành viên'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/payments', 'bank', 'Nạp tiền & ân xá'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ['/checkin', 'calendar', 'Điểm danh'], ['/exchange', 'refresh', 'Đổi điểm'], ['/vip', 'trophy', 'Gói VIP'], ['/giftcode', 'star', 'Mã quà tặng'], ...payNav(), ['/account', 'user', 'Tài khoản']],
+        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh'], ['/ads', 'megaphone', 'Quảng cáo'], ['/learn', 'book', 'Học tập'], ['/antiraid', 'shield', 'Chống raid'], ['/captcha', 'shield', 'Captcha vào nhóm'], ['/watermark', 'image', 'Đóng dấu ảnh'], ['/nameguard', 'shield', 'Cấm tên chứa từ cấm'], ['/gates', 'lock', 'Điều kiện chat'], ['/tags', 'tagi', 'Tag thành viên'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/admin', 'star', 'Quản lý cho thuê'], ['/payments', 'bank', 'Nạp tiền & ân xá'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ['/checkin', 'calendar', 'Điểm danh'], ['/exchange', 'refresh', 'Đổi điểm'], ['/vip', 'trophy', 'Gói VIP'], ['/giftcode', 'star', 'Mã quà tặng'], ...payNav(), ['/account', 'user', 'Tài khoản']],
       };
     }
     const ck = S.pay?.checkin ? [['/checkin', 'calendar', 'Điểm danh']] : [];
     const m = [['/', 'star', 'Của tôi'], ...ck, ['/rank', 'trophy', 'Xếp hạng'], ...payNav(), ['/account', 'user', 'Tài khoản']];
     const tab = m.length > 5 ? m.filter(([p]) => p !== '/rank') : m;
-    return { tab, side: [...m.slice(0, -1), ...shopNav(), ['/mylogs', 'list', 'Nhật ký của tôi'], m[m.length - 1]] };
+    return { tab, side: [...m.slice(0, -1), ...planNav, ...shopNav(), ['/mylogs', 'list', 'Nhật ký của tôi'], m[m.length - 1]] };
   }
 
   function shell(nav, title, back) {
@@ -381,7 +388,7 @@
     const path = current();
     const direct = (p) => (p === '/' ? path === '/' : path === p || path.startsWith(p + '/') || (p === '/groups' && path.startsWith('/group/')) || (p === '/rules' && path === '/commands'));
     const inTabs = items.tab.some(([p]) => p !== '/more' && direct(p));
-    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments', '/learn', '/keyboard', '/gates', '/mylogs', '/checkin', '/tags', '/tagshop', '/exchange', '/giftcode', '/vip', '/captcha', '/antiraid', '/watermark', '/nameguard'].some((x) => path.startsWith(x)));
+    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments', '/learn', '/keyboard', '/gates', '/mylogs', '/checkin', '/tags', '/tagshop', '/exchange', '/giftcode', '/vip', '/captcha', '/antiraid', '/watermark', '/nameguard', '/admin', '/plan', '/username'].some((x) => path.startsWith(x)));
     $('#tabbar').innerHTML = items.tab.map(([p, ic, t]) => `<a href="#${p}" class="${isActive(p) ? 'active' : ''}">${icon(ic)}<span>${t}</span></a>`).join('');
     $('#sidebar').innerHTML = `<div class="brand"><img src="assets/icon.svg" alt="">${esc(S.site)}</div>`
       + items.side.map(([p, ic, t]) => `<a href="#${p}" class="nav ${isActive(p) && !(p === '/more') ? 'active' : ''}">${icon(ic)}${t}</a>`).join('')
@@ -702,14 +709,14 @@
     const card = (g) => `
       <a class="list-item" href="#/group/${g.id}">
         ${avatar(g.title, g.chat_id, 'sq')}
-        <div class="grow"><div class="row" style="gap:6px"><span class="ellipsis" style="font-weight:600">${esc(g.title)}</span>${g.active ? '' : '<span class="badge red">Đã rời</span>'}${g.active && !g.bot_is_admin ? '<span class="badge amber">Bot chưa là admin</span>' : ''}</div>
-        <div class="xs muted">${num(g.member_count || g.tracked)} thành viên · ${num(g.messages_today)} tin hôm nay${g.bot_username ? ' · @' + esc(g.bot_username) : ''}</div></div>
+        <div class="grow"><div class="row" style="gap:6px"><span class="ellipsis" style="font-weight:600">${esc(g.title)}</span>${g.active ? '' : '<span class="badge red">Đã rời</span>'}${g.active && !g.bot_is_admin ? '<span class="badge amber">Bot chưa là admin</span>' : ''}${g.blocked ? '<span class="badge red">Tạm ngừng</span>' : ''}${isWebAdmin() && g.owner ? `<span class="badge">Khách: ${esc(g.owner.username)}</span>` : ''}</div>
+        <div class="xs muted">${num(g.member_count || g.tracked)} thành viên · ${num(g.messages_today)} tin hôm nay${g.bot_username ? ' · @' + esc(g.bot_username) : ''}</div>${g.blocked ? `<div class="xs" style="color:var(--danger)">⏸ ${esc(g.blocked)}</div>` : ''}</div>
         <span class="chev">${icon('chevron')}</span></a>`;
     return {
       title: 'Nhóm',
-      html: rows.length ? `<div class="list">${rows.map(card).join('')}</div>
+      html: (isTenant() && !isWebAdmin() && S.tenant?.me ? planStrip(S.tenant.me) : '') + (rows.length ? `<div class="list">${rows.map(card).join('')}</div>
         <p class="xs muted center" style="margin-top:14px">Thêm bot vào nhóm Telegram, nhóm sẽ tự xuất hiện ở đây.</p>`
-        : `<div class="card">${empty('users', 'Chưa có nhóm nào.<br>Hãy thêm bot vào nhóm Telegram và cấp quyền quản trị.')}</div>`,
+        : `<div class="card">${empty('users', 'Chưa có nhóm nào.<br>Hãy thêm bot vào nhóm Telegram và cấp quyền quản trị.')}</div>`),
     };
   }, { manage: true, title: 'Nhóm' });
 
@@ -1401,14 +1408,17 @@
 
   // ================= Admin: Bots =================
   route('/bots', async () => {
+    if (!isWebAdmin() && !isTenant()) return { title: 'Bot của tôi', html: tenantCta('Thuê gói để thêm bot riêng của bạn và tự quản lý nhóm.') };
     const bots = await api('bots');
+    const me = S.tenant?.me;
     const item = (b) => `
       <div class="card card-pad" style="margin-bottom:12px">
         <div class="row">${avatar(b.name || b.username, b.tg_bot_id, 'sq')}
           <div class="grow"><div class="row" style="gap:6px"><b class="ellipsis">${esc(b.name || '')}</b>
           <span class="dot ${b.status === 'running' ? 'green' : b.status === 'error' ? 'red' : ''}"></span></div>
-          <div class="small muted"><a href="https://t.me/${esc(b.username)}" target="_blank" rel="noopener">@${esc(b.username)}</a> · ${b.groups} nhóm</div></div>
+          <div class="small muted"><a href="https://t.me/${esc(b.username)}" target="_blank" rel="noopener">@${esc(b.username)}</a> · ${b.groups} nhóm${isWebAdmin() && b.owner ? ` · <span class="badge amber">Khách: ${esc(b.owner.username)}</span>` : ''}</div></div>
           <label class="switch"><input type="checkbox" data-toggle="${b.id}" ${b.enabled ? 'checked' : ''}><span></span></label></div>
+        ${b.blocked ? `<div class="alert warn" style="margin-top:12px">${icon('alert')}<div class="small">⏸ ${esc(b.blocked)}. ${isWebAdmin() ? '' : '<a href="#/plan">Gia hạn / nâng cấp</a>'}</div></div>` : ''}
         ${b.last_error ? `<div class="alert err" style="margin-top:12px">${icon('alert')}<div class="small" style="overflow-wrap:anywhere">${esc(b.last_error)}</div></div>` : ''}
         <div class="xs muted mono" style="margin-top:10px;overflow-wrap:anywhere">${esc(b.token_hint)}</div>
         <div class="row wrap" style="margin-top:12px;gap:8px">
@@ -1418,9 +1428,9 @@
         </div>
       </div>`;
     return {
-      title: 'Bot',
+      title: isWebAdmin() ? 'Bot' : 'Bot của tôi',
       actions: `<button class="btn primary sm" data-addbot>${icon('plus', 'sm')}Thêm bot</button>`,
-      html: `${bots.length ? bots.map(item).join('') : `<div class="card">${empty('bot', 'Chưa có bot nào')}</div>`}
+      html: `${!isWebAdmin() && me ? planStrip(me) : ''}${bots.length ? bots.map(item).join('') : `<div class="card">${empty('bot', 'Chưa có bot nào. Bấm <b>Thêm bot</b> và dán token từ @BotFather.')}</div>`}
         <div class="card card-pad stack" style="margin-top:6px">
           <h3>Hướng dẫn</h3>
           <div class="small text-2">1. Mở <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a> → <code>/newbot</code> → copy token.<br>
@@ -1470,7 +1480,7 @@
         });
       },
     };
-  }, { webAdmin: true, title: 'Bot' });
+  }, { title: 'Bot' });
 
   // ================= Admin: Lệnh tự tạo =================
   const TRIGGER = {
@@ -2791,6 +2801,7 @@
         <a class="list-item" href="#/watermark">${icon('image')}<div class="grow">Đóng dấu ảnh chống copy</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/gates">${icon('lock')}<div class="grow">Điều kiện nhắn tin giữa các nhóm</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/tags">${icon('tagi')}<div class="grow">Tag thành viên</div><span class="chev">${icon('chevron')}</span></a>` : ''}
+        ${isWebAdmin() ? `<a class="list-item" href="#/admin">${icon('star')}<div class="grow">Quản lý cho thuê</div><span class="chev">${icon('chevron')}</span></a>` : S.tenant?.enabled || isTenant() ? `<a class="list-item" href="#/plan">${icon('star')}<div class="grow">Gói thuê</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         ${isWebAdmin() ? `<a class="list-item" href="#/users">${icon('key')}<div class="grow">Tài khoản web & phân quyền</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/payments">${icon('bank')}<div class="grow">Nạp tiền & ân xá</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/system">${icon('download')}<div class="grow">Hệ thống & cập nhật</div><span class="chev">${icon('chevron')}</span></a>` : ''}
@@ -4254,6 +4265,197 @@
     };
   }, { title: 'Gói VIP' });
 
+  // ================= Cho thuê =================
+  const isTenant = () => !!S.access?.tenant;
+  const dateVi = (t) => (t ? new Date(t * 1000).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—');
+  const daysLeft = (t) => Math.max(0, Math.ceil((t - Date.now() / 1000) / 86400));
+  function tenantCta(text) {
+    return `<div class="card card-pad" style="text-align:center"><div style="font-size:40px">🤖</div><h2 style="margin:6px 0">Bot quản lý nhóm của riêng bạn</h2>
+      <div class="small text-2">${esc(text)}</div><a class="btn primary" style="margin-top:14px" href="#/plan">Xem các gói thuê</a></div>`;
+  }
+  /** Dải tóm tắt gói đang dùng (trang Bot / Nhóm của khách thuê) */
+  function planStrip(me) {
+    if (!me.plan) return `<div class="alert warn" style="margin-bottom:12px">${icon('alert')}<div class="small">Bạn chưa có gói. <a href="#/plan">Thuê gói</a> để bot hoạt động.</div></div>`;
+    const left = daysLeft(me.until);
+    return `<a class="card card-pad row" href="#/plan" style="margin-bottom:12px;gap:10px;color:inherit;text-decoration:none">
+      <div class="feat-ico">💎</div><div class="grow" style="min-width:0"><div class="row wrap" style="gap:6px"><b>${esc(me.plan.name)}</b>${me.active ? (left <= 3 ? `<span class="badge amber">Còn ${left} ngày</span>` : `<span class="badge green">Còn ${left} ngày</span>`) : '<span class="badge red">Hết hạn</span>'}</div>
+      <div class="xs muted">Bot ${me.usage.bots}/${me.plan.max_bots} · Nhóm ${me.usage.groups}/${me.plan.max_groups} · hết hạn ${dateVi(me.until)}</div></div><span class="chev">${icon('chevron')}</span></a>`;
+  }
+  const ORDER_KIND = { buy: 'Thuê gói', renew: 'Gia hạn', admin: 'Admin cấp' };
+
+  route('/plan', async () => {
+    const d = await api('plan');
+    const me = d.me;
+    const cur = me.plan;
+    const card = (pl) => {
+      const same = cur && cur.id === pl.id && me.active;
+      const usedFree = pl.price === 0 && d.used_free.includes(pl.id);
+      return `<div class="card card-pad stack plan-card ${same ? 'current' : ''}" style="gap:8px">
+        <div class="row" style="gap:8px"><b class="grow" style="font-size:17px">${esc(pl.name)}</b>${same ? '<span class="badge blue">Đang dùng</span>' : ''}</div>
+        <div><span style="font-size:24px;font-weight:800">${pl.price ? money(pl.price) : 'Miễn phí'}</span> <span class="muted small">/ ${pl.days} ngày</span></div>
+        ${pl.description ? `<div class="small text-2">${esc(pl.description)}</div>` : ''}
+        <div class="small">🤖 <b>${pl.max_bots}</b> bot · 👥 <b>${pl.max_groups}</b> nhóm</div>
+        <div class="stack" style="gap:3px">${Object.entries(d.features).map(([k, l]) => `<div class="xs ${pl.features.includes(k) ? '' : 'muted'}" style="${pl.features.includes(k) ? '' : 'text-decoration:line-through'}">${pl.features.includes(k) ? '✅' : '✖️'} ${esc(l)}</div>`).join('')}</div>
+        <button class="btn ${same ? '' : 'primary'} block" data-buy="${pl.id}" ${usedFree || !d.enabled ? 'disabled' : ''}>${usedFree ? 'Đã dùng thử' : same ? `Gia hạn +${pl.days} ngày` : cur && me.active ? 'Đổi sang gói này' : pl.price ? 'Thuê gói này' : 'Dùng thử'}</button>
+      </div>`;
+    };
+    return {
+      title: 'Gói thuê',
+      html: `
+      ${me.plan ? planStrip(me) : `<div class="hero" style="margin-bottom:12px"><div class="muted small">🤖 Bot quản lý nhóm của riêng bạn</div><div class="small" style="margin-top:6px">${esc(d.intro)}</div></div>`}
+      ${!d.enabled ? `<div class="alert info" style="margin-bottom:12px">${icon('info')}<div class="small">Hiện chưa mở bán gói thuê.</div></div>` : ''}
+      <div class="card card-pad row" style="margin-bottom:12px;gap:10px"><div class="grow"><div class="xs muted">Số dư ví</div><div style="font-size:20px;font-weight:700">${money(d.balance)}</div></div>${d.wallet ? '<a class="btn soft sm" href="#/wallet">Nạp tiền</a>' : ''}</div>
+      ${d.plans.length ? `<div class="plan-grid">${d.plans.map(card).join('')}</div>` : `<div class="card">${empty('star', 'Chưa có gói nào')}</div>`}
+      <div class="card card-pad stack" style="margin-top:14px">
+        <h3>Cách bắt đầu</h3>
+        <div class="small text-2">1. Nạp tiền vào ví rồi chọn gói.<br>2. Tạo bot ở <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a> (<code>/newbot</code>), copy token.<br>3. Vào <a href="#/bots">Bot của tôi</a> → <b>Thêm bot</b>, dán token.<br>4. Thêm bot vào nhóm, cấp quyền quản trị. Nhóm sẽ hiện ở mục <a href="#/groups">Nhóm</a>, bấm vào để cài đặt.</div>
+        <div class="xs muted">Cùng gói: gia hạn cộng dồn ngày. Đổi gói: tính từ hôm nay. Hết hạn thì bot ngừng xử lý nhóm cho tới khi gia hạn (cài đặt vẫn được giữ).</div>
+      </div>
+      ${d.orders.length ? `<div class="section-title"><h2>Lịch sử</h2></div><div class="list">${d.orders.map((o) => `<div class="list-item"><div class="grow"><div class="small"><b>${ORDER_KIND[o.kind] || o.kind}</b> · ${esc(o.plan)} · ${o.days > 0 ? '+' : ''}${o.days} ngày</div><div class="xs muted">${dateVi(o.created_at)}${o.until_after ? ' · hạn mới ' + dateVi(o.until_after) : ''}${o.note ? ' · ' + esc(o.note) : ''}</div></div><b class="small">${o.amount ? '-' + money(o.amount) : ''}</b></div>`).join('')}</div>` : ''}`,
+      mount: (root) => {
+        root.addEventListener('click', async (e) => {
+          const b = e.target.closest('[data-buy]');
+          if (!b) return;
+          const pl = d.plans.find((x) => x.id === +b.dataset.buy);
+          const same = cur && cur.id === pl.id && me.active;
+          const change = cur && me.active && !same;
+          if (!(await confirmBox(same ? 'Gia hạn gói?' : 'Thuê gói?', `${esc(pl.name)} · ${pl.price ? money(pl.price) : 'miễn phí'} / ${pl.days} ngày.${pl.price ? ' Trừ vào số dư ví.' : ''}${change ? '<br><b>Đổi gói sẽ tính lại từ hôm nay</b>, số ngày còn lại của gói cũ không được cộng.' : ''}`, { ok: pl.price ? 'Thanh toán' : 'Kích hoạt' }))) return;
+          withBtn(b, async () => {
+            try { const r = await api('plan/buy', { plan_id: pl.id }); toast('Thành công! Hạn dùng tới ' + dateVi(r.until)); await boot(); render(); }
+            catch (err) { toast(err.message, 'err'); if (err.status === 402 && d.wallet) setTimeout(() => go('/wallet'), 1200); }
+          });
+        });
+      },
+    };
+  }, { title: 'Gói thuê' });
+
+  // ================= /admin: quản lý cho thuê =================
+  route('/admin', async () => {
+    const d = await api('admin');
+    const st = d.stats;
+    const tab = sessionStorage.getItem('admTab') || 'tenants';
+    const tItem = (t) => `<div class="list-item" style="align-items:flex-start">${avatar(t.name, t.id)}
+      <div class="grow" style="min-width:0"><div class="row wrap" style="gap:6px"><b class="ellipsis">${esc(t.name)}</b><span class="xs muted">@${esc(t.username)}</span>
+        ${t.disabled ? '<span class="badge red">Đã khoá</span>' : t.active ? (daysLeft(t.until) <= 7 ? `<span class="badge amber">Còn ${daysLeft(t.until)} ngày</span>` : '<span class="badge green">Đang thuê</span>') : '<span class="badge">Hết hạn</span>'}</div>
+        <div class="xs muted">${t.plan ? esc(t.plan.name) : 'Chưa có gói'} · hạn ${dateVi(t.until)} · 🤖 ${t.bots}${t.plan ? '/' + t.plan.max_bots : ''} · 👥 ${t.groups}${t.plan ? '/' + t.plan.max_groups : ''}</div>
+        <div class="xs muted">Đã trả ${money(t.paid)} · ví ${money(t.balance)}${t.tg_user_id ? ' · TG ' + esc(t.tg_user_id) : ''}</div>
+        <div class="row wrap" style="gap:6px;margin-top:6px"><button class="btn sm soft" data-grant="${t.id}">${icon('plus', 'sm')}Gia hạn / đổi gói</button>
+          <button class="btn sm ${t.disabled ? '' : 'soft-danger'}" data-lock="${t.id}" data-off="${t.disabled ? 0 : 1}">${t.disabled ? 'Mở khoá' : 'Khoá'}</button></div></div></div>`;
+    const pItem = (pl) => `<button type="button" class="list-item" data-plan="${pl.id}" style="text-align:left"><div class="feat-ico">💎</div>
+      <div class="grow" style="min-width:0"><div class="row wrap" style="gap:6px"><b>${esc(pl.name)}</b>${pl.enabled ? '' : '<span class="badge">Ngừng bán</span>'}<span class="badge blue">${pl.users} khách</span></div>
+      <div class="xs muted">${pl.price ? money(pl.price) : 'Miễn phí'} / ${pl.days} ngày · ${pl.max_bots} bot · ${pl.max_groups} nhóm · ${pl.features.length}/${Object.keys(d.features).length} tính năng</div></div><span class="chev">${icon('chevron')}</span></button>`;
+    return {
+      title: 'Quản lý cho thuê',
+      html: `
+      <div class="card" style="margin-bottom:12px">${sw('t_enabled', d.config.enabled, 'Mở cho thuê', 'Hiện trang Gói thuê cho mọi tài khoản, cho phép tự mua gói bằng ví')}</div>
+      <div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:12px">
+        ${[['Khách đang thuê', `${num(st.active)} / ${num(st.tenants)}`], ['Sắp hết hạn (7 ngày)', num(st.expiring)], ['Doanh thu 30 ngày', money(st.revenue_30)], ['Doanh thu hôm nay', money(st.revenue_today)], ['Bot của khách', num(st.bots)], ['Nhóm của khách', num(st.groups)]]
+          .map(([l, v]) => `<div class="card stat" style="padding:12px"><div class="label">${l}</div><div class="value" style="font-size:20px">${v}</div></div>`).join('')}
+      </div>
+      <div class="tabs" data-atabs><button data-t="tenants">Khách thuê</button><button data-t="plans">Gói (${d.plans.length})</button><button data-t="orders">Đơn hàng</button><button data-t="settings">Cài đặt</button></div>
+      <div data-pane="tenants">
+        <div class="row" style="gap:8px;margin-bottom:10px"><div class="input-icon grow">${icon('search')}<input class="input" data-aq placeholder="Tìm tên đăng nhập, tên, ID Telegram"></div><button class="btn soft" data-grant="0">${icon('plus', 'sm')}Cấp gói</button></div>
+        <div class="list" data-alist>${d.tenants.length ? d.tenants.map(tItem).join('') : empty('users', 'Chưa có khách thuê. Khách tự mua gói ở trang Gói thuê, hoặc bấm <b>Cấp gói</b> để cấp cho 1 tài khoản.')}</div>
+      </div>
+      <div class="hidden" data-pane="plans">
+        <div class="list">${d.plans.map(pItem).join('')}<button type="button" class="list-item" data-plan="0" style="color:var(--primary);justify-content:center">${icon('plus', 'sm')}<b>Tạo gói</b></button></div>
+        <div class="xs muted" style="margin-top:8px">Gói giá 0đ là gói dùng thử, mỗi tài khoản dùng 1 lần. Xoá gói đang có khách sẽ chuyển thành ngừng bán.</div>
+      </div>
+      <div class="hidden" data-pane="orders"><div class="list">${d.orders.length ? d.orders.map((o) => `<div class="list-item"><div class="grow" style="min-width:0"><div class="small"><b>${esc(o.user?.name || '?')}</b> · ${ORDER_KIND[o.kind] || o.kind} ${esc(o.plan)} · ${o.days > 0 ? '+' : ''}${o.days} ngày</div><div class="xs muted">${dateVi(o.created_at)} · bởi ${esc(o.by || '')}${o.note ? ' · ' + esc(o.note) : ''}</div></div><b class="small">${o.amount ? money(o.amount) : ''}</b></div>`).join('') : empty('list', 'Chưa có đơn')}</div>
+        <div class="xs muted" style="margin-top:8px">Tổng doanh thu: <b>${money(st.revenue_all)}</b></div></div>
+      <form class="hidden stack" data-pane="settings" id="fadm">
+        <div class="card card-pad stack">
+          <label class="field"><span class="lbl">Giới thiệu trên trang Gói thuê</span><textarea class="input" name="intro" rows="3">${esc(d.config.intro)}</textarea></label>
+          <label class="field"><span class="lbl">Nhắc gia hạn qua Telegram trước (ngày, 0 = tắt)</span><input class="input" name="remind_days" inputmode="numeric" value="${d.config.remind_days}">
+            <div class="hint">Gửi bằng bot của bạn tới khách đã liên kết Telegram; báo cả khi hết hạn.</div></label>
+        </div>
+        <div class="alert info">${icon('info')}<div class="xs">Khách thuê: thêm <b>bot riêng</b>, quản lý nhóm của bot đó (cài đặt, thành viên, nhật ký, các tính năng có trong gói). Nhóm của khách <b>không</b> theo cài đặt chung của bạn và không dùng ví / ân xá / VIP / đổi điểm của bạn. Bạn (admin web) vẫn xem được mọi nhóm.</div></div>
+        <button class="btn primary block">Lưu cài đặt</button>
+      </form>`,
+      mount: (root) => {
+        const setTab = (t) => { sessionStorage.setItem('admTab', t); $$('[data-atabs] [data-t]', root).forEach((b) => b.classList.toggle('active', b.dataset.t === t)); $$('[data-pane]', root).forEach((x) => x.classList.toggle('hidden', x.dataset.pane !== t)); };
+        setTab(tab);
+        $('[data-atabs]', root).onclick = (e) => { const b = e.target.closest('[data-t]'); if (b) setTab(b.dataset.t); };
+        $('[name=t_enabled]', root).addEventListener('change', async (e) => { try { await api('admin/config', { config: { enabled: e.target.checked } }); toast(e.target.checked ? 'Đã mở cho thuê' : 'Đã tắt cho thuê'); await boot(); } catch (err) { toast(err.message, 'err'); } });
+        $('[data-aq]', root).addEventListener('input', debounce(async (e) => {
+          const r = await api('admin', undefined, { query: { q: e.target.value } });
+          $('[data-alist]', root).innerHTML = r.tenants.length ? r.tenants.map(tItem).join('') : empty('users', 'Không tìm thấy');
+        }, 350));
+        root.addEventListener('click', async (e) => {
+          let b;
+          if ((b = e.target.closest('[data-plan]'))) return planSheet(d.plans.find((x) => x.id === +b.dataset.plan) || null, d.features);
+          if ((b = e.target.closest('[data-grant]'))) return grantSheet(d.tenants.find((x) => x.id === +b.dataset.grant) || null, d.plans);
+          if ((b = e.target.closest('[data-lock]'))) {
+            const off = b.dataset.off === '1';
+            if (off && !(await confirmBox('Khoá khách thuê?', 'Khách không đăng nhập được, bot của khách ngừng xử lý nhóm.', { danger: true, ok: 'Khoá' }))) return;
+            withBtn(b, async () => { try { await api('admin/lock', { user_id: +b.dataset.lock, disabled: off }); toast(off ? 'Đã khoá' : 'Đã mở khoá'); render(); } catch (err) { toast(err.message, 'err'); } });
+          }
+        });
+        $('#fadm', root).onsubmit = (e) => {
+          e.preventDefault();
+          withBtn(e.target.querySelector('button.primary'), async () => { try { await api('admin/config', { config: formData(e.target) }); toast('Đã lưu'); } catch (err) { toast(err.message, 'err'); } });
+        };
+      },
+    };
+  }, { webAdmin: true, title: 'Quản lý cho thuê', back: '/more' });
+
+  function planSheet(pl, features) {
+    const v = pl || { name: '', description: '', price: 100000, days: 30, max_bots: 1, max_groups: 3, features: Object.keys(features), enabled: 1, sort: 0 };
+    sheet(`<div class="sheet-head"><h2>${pl ? 'Sửa gói' : 'Tạo gói'}</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
+      <form class="stack" id="fpl">
+        <label class="field"><span class="lbl">Tên gói</span><input class="input" name="name" value="${esc(v.name)}" maxlength="60" required placeholder="VD: Cơ bản, Pro, Dùng thử"></label>
+        <label class="field"><span class="lbl">Mô tả ngắn</span><input class="input" name="description" value="${esc(v.description)}" maxlength="500"></label>
+        <div class="grid grid-2">
+          <label class="field"><span class="lbl">Giá (VND, 0 = dùng thử)</span><input class="input" name="price" inputmode="numeric" value="${v.price}"></label>
+          <label class="field"><span class="lbl">Số ngày</span><input class="input" name="days" inputmode="numeric" value="${v.days}"></label>
+          <label class="field"><span class="lbl">Số bot tối đa</span><input class="input" name="max_bots" inputmode="numeric" value="${v.max_bots}"></label>
+          <label class="field"><span class="lbl">Số nhóm tối đa</span><input class="input" name="max_groups" inputmode="numeric" value="${v.max_groups}"></label>
+        </div>
+        <div class="field"><span class="lbl">Tính năng trong gói</span><div class="card" style="box-shadow:none">${Object.entries(features).map(([k, l]) => sw('f_' + k, v.features.includes(k), l)).join('')}</div>
+          <div class="hint">Luôn có: cài đặt nhóm (chào mừng, bộ lọc, chống spam, cảnh cáo, điểm), quản lý thành viên, nhật ký.</div></div>
+        <div class="grid grid-2"><label class="field"><span class="lbl">Thứ tự hiển thị</span><input class="input" name="sort" inputmode="numeric" value="${v.sort}"></label>
+          <div class="card" style="box-shadow:none;align-self:end">${sw('enabled', !!v.enabled, 'Đang bán')}</div></div>
+        <div class="grid ${pl ? 'grid-2' : ''}">${pl ? `<button type="button" class="btn soft-danger" data-delplan>${icon('trash', 'sm')}Xoá gói</button>` : ''}<button class="btn primary">Lưu gói</button></div>
+      </form>`, (el, close) => {
+      const f = $('#fpl', el);
+      f.onsubmit = (e) => {
+        e.preventDefault();
+        const x = formData(f);
+        const plan = { id: pl?.id || 0, name: x.name, description: x.description, price: +x.price, days: +x.days, max_bots: +x.max_bots, max_groups: +x.max_groups, sort: +x.sort, enabled: x.enabled, features: Object.keys(features).filter((k) => x['f_' + k]) };
+        withBtn(f.querySelector('button.primary'), async () => { try { await api('admin/plan/save', { plan }); close(); toast('Đã lưu gói'); render(); } catch (err) { toast(err.message, 'err'); } });
+      };
+      $('[data-delplan]', el)?.addEventListener('click', async (e) => {
+        if (!(await confirmBox('Xoá gói?', 'Gói đang có khách sẽ chỉ chuyển sang ngừng bán.', { danger: true, ok: 'Xoá' }))) return;
+        try { const r = await api('admin/plan/delete', { id: pl.id }); close(); toast(r.disabled ? 'Gói còn khách dùng nên đã chuyển sang ngừng bán' : 'Đã xoá gói'); render(); } catch (err) { toast(err.message, 'err'); }
+      });
+    });
+  }
+
+  function grantSheet(t, plans) {
+    if (!plans.length) return toast('Hãy tạo gói trước', 'err');
+    sheet(`<div class="sheet-head"><h2>${t ? 'Gia hạn / đổi gói' : 'Cấp gói cho tài khoản'}</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
+      <form class="stack" id="fgr">
+        ${t ? `<div class="card card-pad small"><b>${esc(t.name)}</b> <span class="muted">@${esc(t.username)}</span><div class="xs muted">${t.plan ? esc(t.plan.name) + ' · hạn ' + dateVi(t.until) : 'Chưa có gói'}</div></div>`
+          : '<label class="field"><span class="lbl">Tên đăng nhập web</span><input class="input" name="username" required placeholder="VD: shopabc"></label>'}
+        <label class="field"><span class="lbl">Gói</span><select class="input" name="plan_id">${plans.map((p) => `<option value="${p.id}" ${t?.plan?.id === p.id ? 'selected' : ''}>${esc(p.name)} · ${p.price ? money(p.price) : 'miễn phí'} / ${p.days} ngày</option>`).join('')}</select></label>
+        <label class="field"><span class="lbl">Số ngày (âm = bớt ngày)</span><input class="input" name="days" inputmode="numeric" value="${plans[0].days}"></label>
+        <div class="hint">Cùng gói đang dùng: cộng dồn vào hạn hiện tại. Gói khác: tính từ hôm nay. Không trừ tiền ví của khách.</div>
+        <label class="field"><span class="lbl">Ghi chú</span><input class="input" name="note" maxlength="190" placeholder="VD: Khách chuyển khoản tay"></label>
+        <button class="btn primary block">Xác nhận</button>
+      </form>`, (el, close) => {
+      const f = $('#fgr', el);
+      f.plan_id.onchange = () => { const p = plans.find((x) => x.id === +f.plan_id.value); if (p) f.days.value = p.days; };
+      f.onsubmit = (e) => {
+        e.preventDefault();
+        const x = formData(f);
+        withBtn(f.querySelector('button.primary'), async () => {
+          try { const r = await api('admin/grant', { user_id: t?.id || 0, username: x.username || '', plan_id: +x.plan_id, days: +x.days, note: x.note }); close(); toast('Đã cấp, hạn mới ' + dateVi(r.until)); render(); }
+          catch (err) { toast(err.message, 'err'); }
+        });
+      };
+    });
+  }
+
   // ================= Cài đặt theo nhóm: thanh phạm vi =================
   // sc = d.scope từ API: { key, group, custom, overrides, all_groups, global_enabled }
   function gq(gid) { return gid ? { query: { group_id: gid } } : {}; }
@@ -4349,9 +4551,10 @@
       try {
         const r = await api('features/group', undefined, { query: { id: g.id } });
         $('[data-gfeat]', root).innerHTML = `<div class="alert info" style="margin-bottom:12px">${icon('info')}<div class="xs">Mỗi tính năng có thể <b>theo cài đặt chung</b> hoặc có <b>cài đặt riêng cho nhóm này</b>. Bấm vào tính năng để chỉnh riêng cho nhóm.</div></div>
-          <div class="list">${r.features.map((f) => `<a class="list-item" href="#${f.page}/${g.id}"><div class="feat-ico">${f.icon}</div>
+          <div class="list">${r.features.map((f) => f.allowed ? `<a class="list-item" href="#${f.page}/${g.id}"><div class="feat-ico">${f.icon}</div>
             <div class="grow" style="min-width:0"><div class="row wrap" style="gap:6px"><b>${esc(f.name)}</b>${f.enabled ? '<span class="badge green">Bật</span>' : '<span class="badge">Tắt</span>'}</div>
-            <div class="xs muted" style="margin-top:2px">${f.custom ? '⚙️ Cài đặt riêng của nhóm' : '🌐 Theo cài đặt chung'}</div></div><span class="chev">${icon('chevron')}</span></a>`).join('')}</div>
+            <div class="xs muted" style="margin-top:2px">${f.custom ? '⚙️ Cài đặt riêng của nhóm' : g.owner ? 'Chưa cài đặt' : '🌐 Theo cài đặt chung'}</div></div><span class="chev">${icon('chevron')}</span></a>`
+            : `<div class="list-item off"><div class="feat-ico">${f.icon}</div><div class="grow" style="min-width:0"><b>${esc(f.name)}</b><div class="xs muted" style="margin-top:2px">🔒 Không có trong gói thuê${isWebAdmin() ? '' : ' · <a href="#/plan">Nâng cấp</a>'}</div></div></div>`).join('')}</div>
           <div class="xs muted" style="margin-top:8px">Cài đặt cơ bản (chào mừng, bộ lọc, cảnh cáo, điểm…) ở tab <a href="#/group/${g.id}/settings">Cài đặt</a>; lệnh riêng ở tab <a href="#/group/${g.id}/rules">Lệnh</a>.</div>`;
       } catch (err) { $('[data-gfeat]', root).innerHTML = `<div class="alert err">${icon('alert')}<div>${esc(err.message)}</div></div>`; }
     };
@@ -4877,7 +5080,7 @@
   async function boot() {
     try {
       const st = await api('status', undefined, { noRedirect: true });
-      S.status = st; S.csrf = st.csrf; S.user = st.user; S.site = st.site_name; S.allowRegister = st.allow_register; S.access = st.access; S.tgLogin = st.tg_login; S.pay = st.pay;
+      S.status = st; S.csrf = st.csrf; S.user = st.user; S.site = st.site_name; S.allowRegister = st.allow_register; S.access = st.access; S.tgLogin = st.tg_login; S.pay = st.pay; S.tenant = st.tenant;
     } catch (e) {
       $('#app').innerHTML = `<div class="auth"><div class="alert err">${icon('alert')}<div>${esc(e.message)}</div></div></div>`;
       throw e;

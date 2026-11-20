@@ -673,3 +673,7 @@ tg-spoiler, .tg-spoiler { background: color-mix(in srgb, var(--text) 18%, transp
 .wm-img { position: relative; }
 .wm-img.loading::after { content: ''; position: absolute; inset: 0; background: rgba(0,0,0,.18); }
 .wm-img.loading::before { content: ''; position: absolute; z-index: 1; left: 50%; top: 50%; width: 28px; height: 28px; margin: -14px 0 0 -14px; border: 3px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
+
+/* Gói thuê */
+.plan-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.plan-card.current { box-shadow: 0 0 0 2px var(--primary) inset; }

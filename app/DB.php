@@ -6,7 +6,7 @@ class DB
 {
     private static ?PDO $pdo = null;
     private static string $driver = 'sqlite';
-    const SCHEMA_VERSION = 20;
+    const SCHEMA_VERSION = 21;
 
     public static function connect(?array $c = null): PDO
     {
@@ -394,6 +394,32 @@ class DB
                 tg_user_id $big NOT NULL,
                 created_at INT NOT NULL
             )",
+            "CREATE TABLE IF NOT EXISTS plans (
+                id $pk,
+                name $str NOT NULL,
+                description TEXT,
+                price INT NOT NULL DEFAULT 0,
+                days INT NOT NULL DEFAULT 30,
+                max_groups INT NOT NULL DEFAULT 1,
+                max_bots INT NOT NULL DEFAULT 1,
+                features TEXT,
+                enabled INT NOT NULL DEFAULT 1,
+                sort INT NOT NULL DEFAULT 0,
+                created_at INT NOT NULL
+            )",
+            "CREATE TABLE IF NOT EXISTS tenant_orders (
+                id $pk,
+                user_id INT NOT NULL,
+                plan_id INT,
+                plan_name $str,
+                days INT NOT NULL,
+                amount INT NOT NULL DEFAULT 0,
+                kind VARCHAR(16) NOT NULL,
+                until_after INT,
+                by_user $str,
+                note $str,
+                created_at INT NOT NULL
+            )",
             "CREATE TABLE IF NOT EXISTS group_features (
                 id $pk,
                 group_id INT NOT NULL,
@@ -443,6 +469,7 @@ class DB
             'idx_join_events' => 'join_events (group_id, created_at)',
             'idx_join_req' => 'join_requests (group_id, status)',
             'idx_group_feat' => 'group_features (group_id, feature)',
+            'idx_tenant_orders' => 'tenant_orders (user_id, created_at)',
         ];
         foreach ($indexes as $name => $def) {
             try {
@@ -450,6 +477,11 @@ class DB
             } catch (PDOException $e) { /* đã tồn tại */ }
         }
 
+        // v21: cho thuê (khách thuê có bot riêng, gói thuê)
+        self::addColumn('tg_bots', 'owner_id', 'INT');
+        self::addColumn('app_users', 'plan_id', 'INT');
+        self::addColumn('app_users', 'plan_until', 'INT');
+        self::addColumn('app_users', 'tenant', 'INT NOT NULL DEFAULT 0');
         // v6: nhật ký lưu chi tiết + bằng chứng vi phạm
         self::addColumn('app_logs', 'meta', 'TEXT');
         self::addColumn('app_logs', 'evidence', 'TEXT');

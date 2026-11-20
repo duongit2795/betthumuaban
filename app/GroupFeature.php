@@ -34,7 +34,16 @@ class GroupFeature
     /** Cài đặt hiệu lực cho 1 nhóm (hoặc cài đặt chung khi $group = null) */
     public static function resolve(string $key, array $defaults, ?array $group): array
     {
+        if ($group && !array_key_exists('bot_id', $group)) $group = Repo::group((int)$group['id']) ?: $group;
         $o = $group ? self::get($key, (int)$group['id']) : null;
+        // Nhóm của khách thuê: không theo cài đặt chung của chủ web; tính năng ngoài gói luôn tắt
+        if ($group && Tenant::groupOwner($group)) {
+            $c = $o !== null ? array_merge($defaults, array_intersect_key($o, $defaults)) : $defaults;
+            if (array_key_exists('groups', $defaults)) $c['groups'] = [];
+            if ($o !== null) $c['_custom'] = true;
+            if (!Tenant::allows($group, $key)) $c['enabled'] = false;
+            return $c;
+        }
         if ($o !== null) {
             $c = array_merge($defaults, array_intersect_key($o, $defaults));
             if (array_key_exists('groups', $defaults)) $c['groups'] = []; // cài đặt riêng: luôn áp dụng cho chính nhóm này
@@ -70,7 +79,7 @@ class GroupFeature
         $out = [];
         foreach (self::FEATURES as $key => [$cls, $name, $ico, $page]) {
             $c = $cls::config($group);
-            $out[] = ['key' => $key, 'name' => $name, 'icon' => $ico, 'page' => $page, 'custom' => !empty($c['_custom']),
+            $out[] = ['key' => $key, 'name' => $name, 'icon' => $ico, 'page' => $page, 'custom' => !empty($c['_custom']), 'allowed' => Tenant::allows($group, $key),
                 'enabled' => !empty($c['enabled']) && (empty($c['groups']) || in_array((int)$group['id'], array_map('intval', $c['groups']), true))];
         }
         return $out;

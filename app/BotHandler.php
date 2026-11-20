@@ -19,6 +19,7 @@ class BotHandler
 
     public function handle(array $u): void
     {
+        if (!$this->tenantGate($u)) return;
         if (isset($u['my_chat_member'])) $this->onMyChatMember($u['my_chat_member']);
         elseif (isset($u['chat_member'])) $this->onChatMember($u['chat_member']);
         elseif (isset($u['message'])) $this->onMessage($u['message']);
@@ -36,6 +37,40 @@ class BotHandler
             if ($cap = Captcha::onCallback($this->api, $cbq)) { $this->afterCaptcha($cap); return; }
             if (!UsernameGuard::onCallback($this->api, $cbq) && !UpdateNotifier::onCallback($this->api, $cbq)) TgLogin::onCallback($this->api, $cbq);
         }
+    }
+
+    /**
+     * Cho thuê: bỏ qua cập nhật khi
+     *  - nhóm đang do bot của chủ khác quản lý (không cho bot khác "cướp" nhóm),
+     *  - bot của khách thuê hết hạn gói / bị khoá / nhóm vượt số lượng của gói.
+     */
+    private function tenantGate(array $u): bool
+    {
+        $chat = $u['message']['chat'] ?? $u['edited_message']['chat'] ?? $u['chat_member']['chat'] ?? $u['my_chat_member']['chat']
+            ?? $u['message_reaction']['chat'] ?? $u['chat_join_request']['chat'] ?? $u['callback_query']['message']['chat'] ?? null;
+        $botId = (int)$this->bot['id'];
+        $isGroup = $chat && $this->isGroup($chat);
+        $g = $isGroup ? DB::get('SELECT id, bot_id, active FROM tg_groups WHERE chat_id = ?', [$chat['id']]) : null;
+        if ($g && $g['active'] && $g['bot_id'] && (int)$g['bot_id'] !== $botId && Tenant::botOwner((int)$g['bot_id']) !== Tenant::botOwner($botId)
+            && DB::val('SELECT enabled FROM tg_bots WHERE id = ?', [$g['bot_id']])) return false;
+        if (!Tenant::botOwner($botId) || isset($u['my_chat_member'])) return true; // bot chủ web; bot được thêm / bị xoá luôn ghi nhận
+        $why = Tenant::blockReason($botId, $g ? (int)$g['id'] : null);
+        if (!$why) return true;
+        // Báo lý do tối đa 1 lần / ngày ở mỗi nhóm, 1 lần / giờ trong chat riêng
+        $key = $isGroup ? 'tn_blk_' . $g['id'] : null;
+        if ($isGroup && $g && isset($u['message']) && Settings::get($key) !== date('Ymd')) {
+            Settings::set($key, date('Ymd'));
+            $this->api->trySend($chat['id'], '⏸ Bot tạm ngừng quản lý nhóm này: ' . tg_esc($why) . '.');
+        } elseif (!$isGroup && isset($u['message']['chat']['id'])) {
+            $cid = $u['message']['chat']['id'];
+            $last = (int)DB::val('SELECT last_at FROM tg_rule_hits WHERE rule_id = -7 AND group_id = 0 AND tg_user_id = ?', [$cid]);
+            if (now() - $last > 3600) {
+                DB::run('DELETE FROM tg_rule_hits WHERE rule_id = -7 AND group_id = 0 AND tg_user_id = ?', [$cid]);
+                DB::insert('tg_rule_hits', ['rule_id' => -7, 'group_id' => 0, 'tg_user_id' => $cid, 'last_at' => now()]);
+                $this->api->trySend($cid, '⏸ Bot đang tạm ngừng hoạt động: ' . tg_esc($why) . '.');
+            }
+        }
+        return false;
     }
 
     private function isGroup(array $chat): bool
@@ -62,7 +97,9 @@ class BotHandler
             Repo::log((int)$group['id'], $actor, 'bot_added', null, 'Bot được thêm vào nhóm');
             $count = $this->api->tryCall('getChatMemberCount', ['chat_id' => $chat['id']]);
             if ($count) DB::run('UPDATE tg_groups SET member_count = ? WHERE id = ?', [$count, $group['id']]);
-            $this->api->trySend($chat['id'], "🤖 Xin chào! Tôi là bot quản lý nhóm.\nHãy cấp quyền <b>Quản trị viên</b> (xoá tin, cấm thành viên) để tôi hoạt động đầy đủ.\nGõ /" . Commands::name('help') . " để xem lệnh.");
+            $why = Tenant::blockReason((int)$this->bot['id'], (int)$group['id']);
+            if ($why) $this->api->trySend($chat['id'], '⏸ Bot chưa thể quản lý nhóm này: ' . tg_esc($why) . '. Chủ bot cần nâng cấp / gia hạn gói trên web.');
+            else $this->api->trySend($chat['id'], "🤖 Xin chào! Tôi là bot quản lý nhóm.\nHãy cấp quyền <b>Quản trị viên</b> (xoá tin, cấm thành viên) để tôi hoạt động đầy đủ.\nGõ /" . Commands::name('help') . " để xem lệnh.");
         }
         Repo::tgAdmins(Repo::group((int)$group['id']), $this->api, true);
     }

@@ -18,6 +18,7 @@ class Wallet
         'buy_points' => 'Mua điểm',
         'gift' => 'Mã quà tặng',
         'vip' => 'Mua VIP',
+        'plan' => 'Thuê gói',
         'refund' => 'Hoàn tiền',
         'admin' => 'Admin điều chỉnh',
     ];
