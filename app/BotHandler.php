@@ -293,7 +293,7 @@ class BotHandler
             if (empty($u['is_bot'])) $names[] = $m;
         }
         DB::run('UPDATE tg_groups SET member_count = member_count + ? WHERE id = ?', [count($names), $gid]);
-        if ($s['delete_service_messages'] || ($captcha && Captcha::config()['delete_join']) || ($nameHit && NameGuard::config()['delete_msg'])) $this->del($msg['chat']['id'], $msg['message_id']);
+        if ($s['delete_service_messages'] || ($captcha && Captcha::config($group)['delete_join']) || ($nameHit && NameGuard::config($group)['delete_msg'])) $this->del($msg['chat']['id'], $msg['message_id']);
         if ($s['welcome_enabled'] && $names) {
             foreach ($names as $m) {
                 if (isset($captcha[$m['tg_user_id']])) continue;
@@ -676,7 +676,7 @@ class BotHandler
             . (Commands::names('link') ? '🔗 Liên kết tài khoản web: ' . $c('link') . " MÃ\n" : '')
             . (Commands::names('pme') ? '⭐ Xem điểm: ' . $c('pme') . "\n" : '')
             . (Commands::names('balance') ? '💳 Số dư ví: ' . $c('balance') . "\n" : '')
-            . (Learn::config()['enabled'] ? '📚 Học tập: ' . $c('learn') . " hoặc bấm nút bên dưới\n" : '')
+            . (GroupFeature::anyEnabled('learn') ? '📚 Học tập: ' . $c('learn') . " hoặc bấm nút bên dưới\n" : '')
             . "\nID của bạn: <code>{$from['id']}</code>", ['reply_markup' => BotKeyboard::markup() ?: ['remove_keyboard' => true]]);
     }
 
@@ -697,8 +697,8 @@ class BotHandler
     /** Lệnh /diemdanh trong nhóm: điểm danh ngay cho người gõ, kèm nút mở trang điểm danh trên web */
     private function checkinCmd(array $group, array $msg, array $member): void
     {
-        $c = Checkin::config();
-        if (!$c['enabled']) { $this->reply($msg, '📅 Tính năng điểm danh chưa được bật.'); return; }
+        $c = Checkin::config($group);
+        if (!$c['enabled'] || !Checkin::applies($c, (int)$group['id'])) { $this->reply($msg, '📅 Tính năng điểm danh chưa được bật ở nhóm này.'); return; }
         $btn = $this->webButton('📅 Điểm danh tại đây', '/checkin');
         try {
             $r = Checkin::run($group, $member, 'telegram');

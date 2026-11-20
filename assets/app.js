@@ -27,6 +27,7 @@
     settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
     refresh: '<path d="M21 12a9 9 0 0 1-15.5 6.2L3 16M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5M3 21v-5h5"/>',
     download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
+    upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>',
     send: '<path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/>',
     search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
     chevron: '<path d="m9 18 6-6-6-6"/>',
@@ -719,7 +720,7 @@
     const d = await api('group', undefined, { query: { id } });
     const g = d.group;
     const gp = d.access || {};
-    const tabs = [['overview', 'Tổng quan'], ['chat', '💬 Chat', 'chat'], ['members', 'Thành viên'], ['settings', 'Cài đặt', 'settings'], ['rules', 'Lệnh'], ['send', 'Gửi tin', 'send'], ['logs', 'Nhật ký', 'logs']]
+    const tabs = [['overview', 'Tổng quan'], ['chat', '💬 Chat', 'chat'], ['members', 'Thành viên'], ['settings', 'Cài đặt', 'settings'], ['features', '⚙️ Tính năng', 'settings'], ['rules', 'Lệnh'], ['send', 'Gửi tin', 'send'], ['logs', 'Nhật ký', 'logs']]
       .filter(([, , perm]) => !perm || gp[perm]);
     if (!tabs.some(([k]) => k === tab)) tab = 'overview';
     const tabsHtml = `<div class="tabs">${tabs.map(([k, t]) => `<button data-tab="${k}" class="${k === tab ? 'active' : ''}">${t}</button>`).join('')}</div>`;
@@ -727,6 +728,7 @@
     let mount = () => {};
     if (tab === 'members') ({ body, mount } = groupMembers(d));
     else if (tab === 'settings') ({ body, mount } = groupSettings(d));
+    else if (tab === 'features') ({ body, mount } = groupFeatures(d));
     else if (tab === 'send') ({ body, mount } = groupSend(d));
     else if (tab === 'logs') ({ body, mount } = groupLogs(d));
     else if (tab === 'rules') ({ body, mount } = rulesBlock(g.id));
@@ -2318,7 +2320,7 @@
   }, { manage: true, title: 'Lệnh' });
 
   // Tính năng mặc định: yêu cầu đặt Username Telegram
-  function usernameSheet(d, onSaved) {
+  function usernameSheet(d, onSaved, gid = 0) {
     const ru = d.features.require_username;
     const can = d.can_edit;
     const dis = can ? '' : 'disabled';
@@ -2335,7 +2337,7 @@
         </div>
         <div class="field"><span class="lbl">Khi thành viên chưa có username</span>
           <div class="stack" style="gap:6px">${Object.entries(ru.actions).map(([k, t]) => `<label class="radio-row"><input type="radio" name="action" value="${k}" ${ru.action === k ? 'checked' : ''} ${dis}><span><b>${t}</b><small>${hints[k]}</small></span></label>`).join('')}</div></div>
-        <div class="field"><span class="lbl">Áp dụng cho</span>
+        <div class="field ${gid ? 'hidden' : ''}"><span class="lbl">Áp dụng cho</span>
           <div class="chips" style="flex-wrap:wrap"><button type="button" class="chip ${ru.groups.length ? '' : 'active'}" data-allgroups ${dis}>Tất cả nhóm</button>
           ${d.groups.map((g) => `<button type="button" class="chip ${ru.groups.includes(g.id) ? 'active' : ''}" data-gsel="${g.id}" ${dis}>${esc(g.title)}</button>`).join('')}</div></div>
         <div class="grid grid-2">
@@ -2375,7 +2377,7 @@
         const v = formData(f);
         await withBtn(f.querySelector('button.primary'), async () => {
           try {
-            await api('commands/feature', { feature: 'require_username', config: { enabled: v.enabled, on_join: v.on_join, exempt_admins: v.exempt_admins, action: v.action, groups: groupsSel, autodel: Number(v.autodel), cooldown: Number(v.cooldown), text: v.text } });
+            await api('commands/feature', { feature: 'require_username', group_id: gid, config: { enabled: v.enabled, on_join: v.on_join, exempt_admins: v.exempt_admins, action: v.action, groups: groupsSel, autodel: Number(v.autodel), cooldown: Number(v.cooldown), text: v.text } });
             close(); toast(v.enabled ? 'Đã bật yêu cầu đặt Username' : 'Đã lưu (đang tắt)'); onSaved();
           } catch (err) { toast(err.message, 'err'); }
         });
@@ -2929,6 +2931,9 @@
         <button class="btn primary block" style="height:46px;margin-top:14px">${icon('check')}Lưu cài đặt</button>
       </form>
 
+      <div class="section-title"><h2>📦 Xuất / nhập cài đặt chung</h2></div>
+      ${ioCard(0)}
+      <div class="xs muted" style="margin-top:6px">Xuất / nhập cài đặt của từng nhóm ở trang nhóm → tab <b>⚙️ Tính năng</b>.</div>
       <div class="section-title"><h2>Tác vụ định kỳ (Cron)</h2></div>
       <div class="card card-pad stack">
         <div class="small">${d.cron_last && Date.now() / 1000 - d.cron_last < 180 ? `<span style="color:var(--success)">${icon('check', 'sm')}</span> Cron đang chạy · lần cuối ${ago(d.cron_last)}` : `<span style="color:var(--warning)">${icon('alert', 'sm')}</span> ${d.cron_last ? 'Cron chạy lần cuối ' + ago(d.cron_last) : 'Cron chưa chạy lần nào'}`}</div>
@@ -2944,6 +2949,7 @@
         <dt>Máy chủ</dt><dd>${esc(env.server || '—')}</dd><dt>cURL</dt><dd>${env.curl ? '✅' : '❌'}</dd><dt>Zip</dt><dd>${env.zip ? '✅' : '❌'}</dd><dt>Quyền ghi</dt><dd>${env.writable ? '✅' : '❌'}</dd>
       </dl>`,
       mount: (root) => {
+        bindIo(root, 0);
         const box = $('#upd', root);
         const check = async (btn) => withBtn(btn, async () => {
           try {
@@ -3462,11 +3468,12 @@
     });
   }
 
-  route('/learn', async () => {
-    const d = await api('learn');
+  featureRoute('/learn', async (p = {}) => {
+    const gid = +p.gid || 0;
+    const d = await api('learn', undefined, gq(gid));
     const c = d.config;
-    const tab = sessionStorage.getItem('learnTab') || 'questions';
-    const total = d.questions.filter((q) => q.enabled).length;
+    const tab = gid ? 'settings' : sessionStorage.getItem('learnTab') || 'questions';
+    const total = gid ? d.question_count : d.questions.filter((q) => q.enabled).length;
     const bot = d.bots[0];
     const varChips = (k) => `<div class="chips" style="flex-wrap:wrap">${(LEARN_VARS[k] || []).map(([v, t]) => `<button type="button" class="chip var-chip" data-lvar="${v}" data-for="${k}" title="${esc(t)}"><code>${v}</code><small>${esc(t)}</small></button>`).join('')}</div>`;
     const txt = (k, label, hint = '') => `<div class="field"><span class="lbl">${label}</span><textarea class="input" data-rich name="${k}" style="min-height:80px">${esc(c[k])}</textarea>${LEARN_VARS[k] ? varChips(k) : ''}${hint ? `<div class="hint">${hint}</div>` : ''}</div>`;
@@ -3476,9 +3483,9 @@
       <div class="row" style="gap:6px;margin-top:6px">${p.status !== 'done' ? `<button class="btn sm soft" data-lpass="${esc(p.tg_user_id)}">${icon('check', 'sm')}Cho qua</button>` : ''}<button class="btn sm ghost" data-lreset="${esc(p.tg_user_id)}">${icon('refresh', 'sm')}Bắt học lại</button></div></div></div>`; };
     return {
       title: 'Học tập',
-      actions: `<button class="btn primary sm" data-newq>${icon('plus', 'sm')}Câu hỏi</button>`,
-      html: `
-      <div class="card card-pad" style="margin-bottom:14px">
+      actions: gid ? '' : `<button class="btn primary sm" data-newq>${icon('plus', 'sm')}Câu hỏi</button>`,
+      html: `${scopeBar(d.scope, '/learn')}
+      <div class="card card-pad ${gid ? 'hidden' : ''}" style="margin-bottom:14px">
         <div class="row" style="align-items:flex-start"><div class="feat-ico">📚</div><div class="grow"><div class="row wrap" style="gap:6px"><b style="font-size:16px">Học tập bắt buộc</b>${c.enabled ? '<span class="badge green">Đang bật</span>' : '<span class="badge">Đang tắt</span>'}</div>
           <div class="xs text-2" style="margin-top:4px">Thành viên chưa học mà nhắn trong nhóm → <b>xoá tin</b> + nhắc vào bot học. Trong bot bấm nút <b>Học tập</b> (hoặc /${esc(d.cmd)}), trả lời đúng hết <b>${total}</b> câu là chat được.</div></div></div>
         <div class="grid grid-3x" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px">
@@ -3489,7 +3496,7 @@
         ${c.enabled && !total ? `<div class="alert warn" style="margin-top:10px">${icon('alert')}<div class="xs">Chưa có câu hỏi nào đang bật nên bot <b>chưa chặn</b> ai. Thêm câu hỏi để bắt đầu.</div></div>` : ''}
         ${bot ? `<div class="xs muted" style="margin-top:8px">Link học: <span class="mono">t.me/${esc(bot)}?start=learn</span> <button class="btn icon sm ghost" data-copy="https://t.me/${esc(bot)}?start=learn">${icon('copy', 'sm')}</button></div>` : ''}
       </div>
-      <div class="tabs" data-tabs><button data-t="questions">Câu hỏi (${d.questions.length})</button><button data-t="settings">Cài đặt</button><button data-t="progress">Tiến độ</button></div>
+      ${gid ? `<div class="alert info" style="margin-bottom:12px">${icon('info')}<div class="xs">Câu hỏi (${num(total)} câu đang bật) và nội dung trong bot <b>dùng chung</b> cho mọi nhóm. Ở đây chỉnh cách áp dụng trong nhóm này.</div></div>` : ''}<div class="tabs ${gid ? 'hidden' : ''}" data-tabs><button data-t="questions">Câu hỏi (${d.questions.length})</button><button data-t="settings">Cài đặt</button><button data-t="progress">Tiến độ</button></div>
 
       <div data-pane="questions">
         <div class="list">${d.questions.length ? d.questions.map((q, i) => `<div class="list-item ${q.enabled ? '' : 'off'}" style="align-items:flex-start">
@@ -3507,11 +3514,11 @@
       <form class="stack hidden" data-pane="settings" id="flearn">
         <div class="card">${sw('enabled', c.enabled, 'Bật Học tập bắt buộc')}${sw('exempt_admins', c.exempt_admins, 'Bỏ qua quản trị viên')}</div>
         <div class="card card-pad stack">
-          <div class="field"><span class="lbl">Áp dụng cho nhóm <span class="xs muted">(không chọn = tất cả)</span></span><div class="chips" style="flex-wrap:wrap">${d.groups.map((g) => `<button type="button" class="chip ${c.groups.includes(g.id) ? 'active' : ''}" data-lg="${g.id}">${esc(g.title)}</button>`).join('') || '<span class="xs muted">Chưa có nhóm</span>'}</div></div>
+          <div class="field ${d.scope?.group ? 'hidden' : ''}"><span class="lbl">Áp dụng cho nhóm <span class="xs muted">(không chọn = tất cả)</span></span><div class="chips" style="flex-wrap:wrap">${d.groups.map((g) => `<button type="button" class="chip ${c.groups.includes(g.id) ? 'active' : ''}" data-lg="${g.id}">${esc(g.title)}</button>`).join('') || '<span class="xs muted">Chưa có nhóm</span>'}</div></div>
           <label class="field"><span class="lbl">Ai phải học</span><select class="input" name="scope">${Object.entries(d.scopes).map(([k, l]) => `<option value="${k}" ${c.scope === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>
             <div class="hint"><b>Chỉ thành viên mới</b>: người vào nhóm sau khi chọn chế độ này mới phải học; thành viên cũ chat bình thường.</div></label>
         </div>
-        <div class="card card-pad stack">
+        <div class="card card-pad stack ${gid ? 'hidden' : ''}">
           <h3>🤖 Trong bot</h3>
           <div class="alert info">${icon('info')}<div class="xs">Đổi tên nút <b>Học tập</b> hoặc thêm nút khác ở <a href="#/keyboard">Lệnh → ⌨️ Bàn phím</a>.</div></div>
           ${txt('intro_text', 'Lời mở đầu bài học')}
@@ -3542,6 +3549,7 @@
           <div class="grid grid-2"><button type="button" class="btn sm soft" data-idpass>Cho qua</button><button type="button" class="btn sm" data-idreset>Bắt học lại</button></div></form>
       </div>`,
       mount: (root) => {
+        bindScope(root, d.scope, '/learn');
         const setTab = (t) => { sessionStorage.setItem('learnTab', t); $$('[data-t]', root).forEach((b) => b.classList.toggle('active', b.dataset.t === t)); $$('[data-pane]', root).forEach((x) => x.classList.toggle('hidden', x.dataset.pane !== t)); };
         setTab(tab);
         $('[data-tabs]', root).onclick = (e) => { const b = e.target.closest('[data-t]'); if (b) setTab(b.dataset.t); };
@@ -3572,12 +3580,12 @@
         $('#flearn', root).onsubmit = (e) => {
           e.preventDefault();
           withBtn(e.target.querySelector('button.primary'), async () => {
-            try { await api('learn/save', { config: { ...formData(e.target), groups: sel } }); toast('Đã lưu'); render(); } catch (err) { toast(err.message, 'err'); }
+            try { await api('learn/save', { group_id: gid, config: { ...formData(e.target), groups: sel } }); toast('Đã lưu'); render(); } catch (err) { toast(err.message, 'err'); }
           });
         };
       },
     };
-  }, { webAdmin: true, title: 'Học tập', back: '/more' });
+  }, 'Học tập');
 
   // ================= Bàn phím bot (chat riêng) =================
   route('/keyboard', async () => {
@@ -4246,9 +4254,174 @@
     };
   }, { title: 'Gói VIP' });
 
+  // ================= Cài đặt theo nhóm: thanh phạm vi =================
+  // sc = d.scope từ API: { key, group, custom, overrides, all_groups, global_enabled }
+  function gq(gid) { return gid ? { query: { group_id: gid } } : {}; }
+  function scopeBar(sc, path) {
+    if (!sc) return '';
+    if (sc.group) return `<div class="card card-pad scope-bar" style="margin-bottom:12px">
+      <div class="row" style="gap:10px;align-items:center">${avatar(sc.group.title, sc.group.id, 'sq')}<div class="grow" style="min-width:0">
+        <div class="xs muted">Cài đặt riêng cho nhóm</div><div class="ellipsis" style="font-weight:700">${esc(sc.group.title)}</div></div>
+        ${sc.custom ? '<span class="badge blue">Cài đặt riêng</span>' : '<span class="badge">Theo cài đặt chung</span>'}</div>
+      <div class="xs muted" style="margin-top:8px">${sc.custom ? 'Thay đổi ở đây <b>chỉ áp dụng cho nhóm này</b>.' : `Nhóm đang theo cài đặt chung (${sc.global_enabled ? 'đang bật' : 'đang tắt'}). Bấm <b>Lưu</b> để tạo cài đặt riêng cho nhóm này.`}</div>
+      <div class="row wrap" style="gap:8px;margin-top:10px"><a class="btn sm" href="#/group/${sc.group.id}/features">${icon('settings', 'sm')}Tính năng của nhóm</a>${sc.custom ? '<button type="button" class="btn sm soft-danger" data-scope-reset>↩ Dùng lại cài đặt chung</button>' : ''}</div></div>`;
+    return `<div class="card card-pad scope-bar" style="margin-bottom:12px"><div class="small">🌐 <b>Cài đặt chung</b>: áp dụng cho các nhóm <b>chưa có cài đặt riêng</b>.</div>
+      ${sc.overrides.length ? `<div class="xs muted" style="margin-top:8px">Nhóm đang dùng cài đặt riêng:</div><div class="chips" style="flex-wrap:wrap;margin-top:4px">${sc.overrides.map((o) => `<a class="chip" href="#${path}/${o.id}">${o.enabled ? '✅' : '⏸'} ${esc(o.title)}</a>`).join('')}</div>` : ''}
+      ${sc.all_groups.length ? `<label class="field" style="margin-top:10px"><span class="lbl">Cài đặt riêng cho 1 nhóm</span><select class="input" data-scope-go><option value="">Chọn nhóm…</option>${sc.all_groups.map((g) => `<option value="${g.id}">${esc(g.title)}</option>`).join('')}</select></label>` : ''}</div>`;
+  }
+  function bindScope(root, sc, path) {
+    if (!sc) return;
+    $('[data-scope-go]', root)?.addEventListener('change', (e) => { if (e.target.value) go(`${path}/${e.target.value}`); });
+    $('[data-scope-reset]', root)?.addEventListener('click', async (e) => {
+      if (!(await confirmBox('Dùng lại cài đặt chung?', 'Xoá cài đặt riêng của nhóm này, nhóm sẽ theo cài đặt chung.', { ok: 'Dùng cài đặt chung' }))) return;
+      withBtn(e.target, async () => { try { await api('features/reset', { feature: sc.key, group_id: sc.group.id }); toast('Đã chuyển về cài đặt chung'); render(); } catch (err) { toast(err.message, 'err'); } });
+    });
+  }
+  /** Đăng ký trang tính năng ở 2 dạng: /trang (cài đặt chung, admin web) và /trang/:gid (riêng nhóm, quản trị viên nhóm) */
+  function featureRoute(path, view, title) {
+    route(path, view, { webAdmin: true, title, back: '/more' });
+    route(path + '/:gid', view, { manage: true, perm: 'settings', title, back: '/groups' });
+  }
+
+  // ================= Điểm danh: cài đặt riêng của nhóm =================
+  route('/checkin/:gid', async (p) => {
+    const gid = +p.gid;
+    const d = await api('checkin/config', undefined, gq(gid));
+    const c = d.config;
+    return {
+      title: 'Điểm danh',
+      html: `${scopeBar(d.scope, '/checkin')}
+      <div class="xs muted" style="margin:-4px 0 12px">Hôm nay ở nhóm này: ${num(d.today_count)} lượt · ${num(d.today_points)} điểm</div>
+      <form class="stack" id="fckg">
+        <div class="card">${sw('enabled', c.enabled, 'Bật điểm danh cho nhóm này')}${sw('notify', c.notify, 'Báo vào nhóm khi có người điểm danh')}</div>
+        <div class="card card-pad stack">
+          <div class="grid grid-2">
+            <label class="field"><span class="lbl">Điểm mỗi lần</span><input class="input" name="points" inputmode="numeric" value="${c.points}"></label>
+            <label class="field"><span class="lbl">Thưởng mỗi ngày liên tiếp</span><input class="input" name="streak_bonus" inputmode="numeric" value="${c.streak_bonus}"></label>
+          </div>
+          <label class="field"><span class="lbl">Thưởng chuỗi tối đa (số ngày)</span><input class="input" name="streak_max" inputmode="numeric" value="${c.streak_max}"></label>
+          <label class="field"><span class="lbl">Nội dung báo vào nhóm</span><textarea class="input" name="notify_text" rows="3">${esc(c.notify_text)}</textarea>
+            <div class="hint">Biến: <code>{mention}</code> <code>{name}</code> <code>{points}</code> <code>{streak}</code> <code>{total}</code> <code>{group}</code></div></label>
+          <div class="grid grid-2">
+            <label class="field"><span class="lbl">Tự xoá tin báo (giây)</span><input class="input" name="notify_autodel" inputmode="numeric" value="${c.notify_autodel}"></label>
+            <label class="field"><span class="lbl">Tự xoá lệnh /diemdanh (giây)</span><input class="input" name="cmd_autodel" inputmode="numeric" value="${c.cmd_autodel}"></label>
+          </div>
+        </div>
+        <button class="btn primary block">Lưu cài đặt điểm danh</button>
+      </form>`,
+      mount: (root) => {
+        bindScope(root, d.scope, '/checkin');
+        $('#fckg', root).onsubmit = (e) => {
+          e.preventDefault();
+          withBtn(e.target.querySelector('button.primary'), async () => { try { await api('checkin/save', { group_id: gid, config: formData(e.target) }); toast('Đã lưu'); render(); } catch (err) { toast(err.message, 'err'); } });
+        };
+      },
+    };
+  }, { manage: true, perm: 'settings', title: 'Điểm danh', back: '/groups' });
+
+  // ================= Yêu cầu đặt Username: trang riêng (chung / theo nhóm) =================
+  featureRoute('/username', async (p = {}) => {
+    const gid = +p.gid || 0;
+    const d = await api('features/username', undefined, gq(gid));
+    const ru = d.features.require_username;
+    return {
+      title: 'Yêu cầu đặt Username',
+      html: `${scopeBar(d.scope, '/username')}
+        <div class="list"><button type="button" class="list-item cmd-row" data-open>
+          <div class="feat-ico">🔖</div><div class="grow"><div class="row wrap" style="gap:6px"><b>Yêu cầu đặt Username</b>${ru.enabled ? '<span class="badge green">Đang bật</span>' : '<span class="badge">Tắt</span>'}</div>
+          <div class="xs text-2" style="margin-top:3px">${ru.enabled ? esc(ru.actions[ru.action]) + (ru.on_join ? ' · kiểm tra khi vào nhóm' : '') : 'Bắt thành viên phải có @username Telegram mới được nhắn tin'}</div></div>
+          <span class="chev">${icon('chevron')}</span></button></div>`,
+      mount: (root) => {
+        bindScope(root, d.scope, '/username');
+        $('[data-open]', root).onclick = () => usernameSheet(d, () => render(), gid);
+      },
+    };
+  }, 'Yêu cầu đặt Username');
+
+  // ================= Tab Tính năng trong trang nhóm + xuất / nhập cài đặt =================
+  function groupFeatures(d) {
+    const g = d.group;
+    const body = `<div data-gfeat>${loading()}</div>
+      <div class="section-title"><h2>📦 Xuất / nhập cài đặt</h2></div>
+      ${ioCard(g.id)}`;
+    const mount = async (root) => {
+      bindIo(root, g.id);
+      try {
+        const r = await api('features/group', undefined, { query: { id: g.id } });
+        $('[data-gfeat]', root).innerHTML = `<div class="alert info" style="margin-bottom:12px">${icon('info')}<div class="xs">Mỗi tính năng có thể <b>theo cài đặt chung</b> hoặc có <b>cài đặt riêng cho nhóm này</b>. Bấm vào tính năng để chỉnh riêng cho nhóm.</div></div>
+          <div class="list">${r.features.map((f) => `<a class="list-item" href="#${f.page}/${g.id}"><div class="feat-ico">${f.icon}</div>
+            <div class="grow" style="min-width:0"><div class="row wrap" style="gap:6px"><b>${esc(f.name)}</b>${f.enabled ? '<span class="badge green">Bật</span>' : '<span class="badge">Tắt</span>'}</div>
+            <div class="xs muted" style="margin-top:2px">${f.custom ? '⚙️ Cài đặt riêng của nhóm' : '🌐 Theo cài đặt chung'}</div></div><span class="chev">${icon('chevron')}</span></a>`).join('')}</div>
+          <div class="xs muted" style="margin-top:8px">Cài đặt cơ bản (chào mừng, bộ lọc, cảnh cáo, điểm…) ở tab <a href="#/group/${g.id}/settings">Cài đặt</a>; lệnh riêng ở tab <a href="#/group/${g.id}/rules">Lệnh</a>.</div>`;
+      } catch (err) { $('[data-gfeat]', root).innerHTML = `<div class="alert err">${icon('alert')}<div>${esc(err.message)}</div></div>`; }
+    };
+    return { body, mount };
+  }
+
+  /** Thẻ xuất / nhập cài đặt. gid = 0 → cài đặt chung */
+  function ioCard(gid) {
+    return `<div class="card card-pad stack" data-io>
+      <div class="xs muted">${gid ? 'Lưu toàn bộ cài đặt của nhóm (cài đặt nhóm, các tính năng, lệnh riêng) thành 1 file. Dùng để sao lưu, hoặc nhập sang nhóm khác cho nhanh.' : 'Lưu cài đặt chung (các tính năng, lệnh dùng chung, lệnh mặc định, bàn phím bot) thành 1 file để sao lưu hoặc chuyển sang web khác.'} File không chứa token bot, mật khẩu hay thông tin ví.</div>
+      <div class="grid grid-2"><button type="button" class="btn" data-export>${icon('download', 'sm')}Xuất file</button>
+        <label class="btn" style="margin:0">${icon('upload', 'sm')}Nhập từ file<input type="file" accept=".json,application/json" data-import hidden></label></div>
+    </div>`;
+  }
+  function bindIo(root, gid) {
+    $('[data-export]', root)?.addEventListener('click', (e) => withBtn(e.target.closest('button'), async () => {
+      try {
+        const r = await api('settings/export', gid ? { group_id: gid } : {});
+        const url = URL.createObjectURL(new Blob([JSON.stringify(r.file, null, 2)], { type: 'application/json' }));
+        const a = document.createElement('a'); a.href = url; a.download = r.name; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+        toast('Đã xuất file cài đặt');
+      } catch (err) { toast(err.message, 'err'); }
+    }));
+    $('[data-import]', root)?.addEventListener('change', async (e) => {
+      const f = e.target.files[0]; e.target.value = '';
+      if (!f) return;
+      let file;
+      try { file = JSON.parse(await f.text()); } catch { return toast('File không phải JSON hợp lệ', 'err'); }
+      let pv;
+      try { pv = (await api('settings/import', { group_id: gid || 0, file, dry: true })).preview; } catch (err) { return toast(err.message, 'err'); }
+      importSheet(pv, file, gid);
+    });
+  }
+  function importSheet(pv, file, gid) {
+    const opt = (k, label, on, sub) => `<label class="radio-row"><input type="checkbox" name="${k}" ${on ? 'checked' : ''}><span><b>${label}</b>${sub ? `<small>${sub}</small>` : ''}</span></label>`;
+    sheet(`<div class="sheet-head"><h2>Nhập cài đặt</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
+      <div class="card card-pad" style="margin-bottom:12px"><div class="small">📄 Từ: <b>${esc(pv.source || '?')}</b> <span class="badge">${pv.type === 'group' ? 'Cài đặt nhóm' : 'Cài đặt chung'}</span></div>
+        <div class="xs muted" style="margin-top:4px">Phiên bản ${esc(pv.version || '?')} · ${esc((pv.exported_at || '').slice(0, 16).replace('T', ' '))}</div></div>
+      <form class="stack" id="fimp">
+        ${pv.has_settings ? opt('settings', 'Cài đặt nhóm', true, 'Chào mừng, nội quy, bộ lọc, khoá nội dung, cảnh cáo, điểm…') : ''}
+        ${pv.features.length ? opt('features', `Tính năng (${pv.features.length})`, true, pv.features.map((f) => `${f.enabled ? '✅' : '⏸'} ${esc(f.name)}`).join(' · ') + (gid ? '<br>Sẽ thành <b>cài đặt riêng</b> của nhóm này.' : '')) : ''}
+        ${pv.rules ? opt('rules', `Lệnh tự tạo (${pv.rules})`, true, 'Lệnh trùng tên với lệnh đã có sẽ được bỏ qua.') : ''}
+        ${pv.rules ? `<label class="field" data-rmode><span class="lbl">Cách nhập lệnh</span><select class="input" name="rules_mode"><option value="add">Thêm vào lệnh hiện có</option><option value="replace">Xoá lệnh ${gid ? 'của nhóm' : 'dùng chung'} hiện có rồi nhập</option></select></label>` : ''}
+        ${pv.has_commands ? opt('commands', 'Lệnh mặc định & bàn phím bot', false, 'Tên lệnh, mô tả, bật/tắt; nút bàn phím trong chat riêng.') : ''}
+        <div class="alert warn">${icon('alert')}<div class="xs">Cài đặt hiện tại của các mục được chọn sẽ bị <b>ghi đè</b>. Nên xuất file sao lưu trước.</div></div>
+        <button class="btn primary block">Nhập cài đặt</button>
+      </form>`, (el, close) => {
+      $('#fimp', el).onsubmit = (e) => {
+        e.preventDefault();
+        const v = formData(e.target);
+        const parts = ['settings', 'features', 'rules', 'commands'].filter((k) => v[k]);
+        if (!parts.length) return toast('Chọn ít nhất 1 mục', 'err');
+        withBtn(e.target.querySelector('button.primary'), async () => {
+          try {
+            const r = await api('settings/import', { group_id: gid || 0, file, parts, rules_mode: v.rules_mode || 'add' });
+            close();
+            toast('Đã nhập: ' + (r.done.join(', ') || 'không có gì'), r.errors.length ? 'err' : undefined);
+            if (r.errors.length) sheet(`<div class="sheet-head"><h2>Một số mục chưa nhập được</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div><div class="alert warn">${icon('alert')}<div class="xs">${r.errors.map(esc).join('<br>')}</div></div>`);
+            render();
+          } catch (err) { toast(err.message, 'err'); }
+        });
+      };
+    });
+  }
+
   // ================= Cấm tên chứa từ cấm =================
-  route('/nameguard', async () => {
-    const d = await api('nameguard');
+  featureRoute('/nameguard', async (p = {}) => {
+    const gid = +p.gid || 0;
+    const d = await api('nameguard', undefined, gq(gid));
     const c = d.config;
     let sel = [...c.groups], action = c.action, timer = 0, scanned = [];
     const draft = () => { const v = formData($('#fng')); return { ...v, groups: sel }; };
@@ -4256,7 +4429,7 @@
       const name = $('[data-tname]', root).value, username = $('[data-tuser]', root).value, out = $('[data-tres]', root);
       if (!name.trim() && !username.trim()) { out.innerHTML = '<span class="muted">Nhập tên để thử…</span>'; return; }
       try {
-        const r = await api('nameguard/test', { config: draft(), name, username, group_id: sel[0] || 0 });
+        const r = await api('nameguard/test', { config: draft(), name, username, group_id: gid || sel[0] || 0 });
         out.innerHTML = r.why ? `<span style="color:var(--danger)">🚫 ${esc(r.why)}</span> → ${esc(d.actions[action])}` : '<span style="color:var(--success)">✅ Tên hợp lệ</span>';
         if (r.norm) out.innerHTML += `<div class="xs muted" style="margin-top:4px">Bot đọc tên thành: <code>${esc(r.norm) || '(trống)'}</code></div>`;
       } catch (err) { out.textContent = err.message; }
@@ -4269,7 +4442,7 @@
       <button type="button" class="btn danger block" data-spunish style="margin-top:8px">Xử lý các thành viên đã chọn (${esc(d.actions[action])})</button>` : '';
     return {
       title: 'Cấm tên chứa từ cấm',
-      html: `
+      html: `${scopeBar(d.scope, '/nameguard')}
       <div class="alert info" style="margin-bottom:12px">${icon('shield')}<div class="xs">Người có <b>tên hoặc @username chứa từ cấm</b> (VD “Admin”, “Hỗ trợ”, “CSKH”) sẽ bị xử lý ngay khi <b>vào nhóm</b>, khi <b>nhắn tin</b> (người đổi tên sau khi vào) và bị <b>từ chối yêu cầu tham gia</b>. Chặn kẻ giả mạo admin để lừa đảo. Bot cần quyền <b>Cấm thành viên</b> và <b>Xoá tin nhắn</b>.</div></div>
       ${d.error ? `<div class="alert warn" style="margin-bottom:12px">${icon('alert')}<div class="xs">Lỗi gần nhất: ${esc(d.error)}</div></div>` : ''}
       <div class="xs muted" style="margin:-4px 0 12px">Đã xử lý 7 ngày qua: <b>${num(d.week)}</b> người</div>
@@ -4290,7 +4463,7 @@
         </div>
         <div class="card">${sw('on_join', c.on_join, 'Kiểm tra khi vào nhóm')}${sw('on_message', c.on_message, 'Kiểm tra khi nhắn tin (bắt người đổi tên sau khi vào)')}${sw('on_request', c.on_request, 'Từ chối yêu cầu tham gia có tên vi phạm')}${sw('delete_msg', c.delete_msg, 'Xoá tin nhắn / tin “đã tham gia” của người vi phạm')}${sw('notify', c.notify, 'Báo vào nhóm khi xử lý')}</div>
         <div class="card card-pad stack">
-          <div class="field"><span class="lbl">Áp dụng cho nhóm <span class="xs muted">(không chọn = tất cả)</span></span><div class="chips" style="flex-wrap:wrap">${d.groups.map((g) => `<button type="button" class="chip ${sel.includes(g.id) ? 'active' : ''}" data-ng="${g.id}">${esc(g.title)}${g.bot_admin ? '' : ' ⚠️'}</button>`).join('') || '<span class="xs muted">Chưa có nhóm</span>'}</div>
+          <div class="field ${d.scope?.group ? 'hidden' : ''}"><span class="lbl">Áp dụng cho nhóm <span class="xs muted">(không chọn = tất cả)</span></span><div class="chips" style="flex-wrap:wrap">${d.groups.map((g) => `<button type="button" class="chip ${sel.includes(g.id) ? 'active' : ''}" data-ng="${g.id}">${esc(g.title)}${g.bot_admin ? '' : ' ⚠️'}</button>`).join('') || '<span class="xs muted">Chưa có nhóm</span>'}</div>
             ${d.groups.some((g) => !g.bot_admin) ? '<div class="hint">⚠️ = bot chưa là quản trị viên ở nhóm đó, không xử lý được.</div>' : ''}</div>
           <label class="field"><span class="lbl">Bỏ qua các ID Telegram <span class="xs muted">(người tên bị trùng nhầm)</span></span><textarea class="input" name="allow_ids" rows="2" placeholder="123456789, 987654321">${esc(c.allow_ids.join(', '))}</textarea>
             <div class="hint">Quản trị viên và bot luôn được bỏ qua.</div></label>
@@ -4309,6 +4482,7 @@
       </div>
       </div>`,
       mount: (root) => {
+        bindScope(root, d.scope, '/nameguard');
         const later = () => { clearTimeout(timer); timer = setTimeout(() => test(root), 300); };
         root.addEventListener('input', (e) => { if (e.target.closest('[data-slist]')) return; later(); });
         root.addEventListener('change', (e) => {
@@ -4330,7 +4504,7 @@
           if (sc) {
             withBtn(sc, async () => {
               try {
-                const r = await api('nameguard/scan', { config: draft() });
+                const r = await api('nameguard/scan', { group_id: gid, config: draft() });
                 scanned = r.items;
                 $('[data-slist]', root).innerHTML = scanned.length ? scanList() : '<div class="small" style="margin-top:8px;color:var(--success)">✅ Không có thành viên nào có tên vi phạm.</div>';
               } catch (err) { toast(err.message, 'err'); }
@@ -4344,7 +4518,7 @@
             if (!(await confirmBox(`Xử lý ${ids.length} thành viên?`, `Hành động: ${d.actions[action]}. Không gửi thông báo vào nhóm.`, { danger: true, ok: 'Xử lý' }))) return;
             withBtn(sp, async () => {
               try {
-                const r = await api('nameguard/punish', { ids, config: draft() });
+                const r = await api('nameguard/punish', { group_id: gid, ids, config: draft() });
                 toast(`Đã xử lý ${r.ok} người` + (r.errors.length ? ` · ${r.errors.length} lỗi` : ''), r.errors.length ? 'err' : undefined);
                 if (r.errors.length) console.warn(r.errors);
                 scanned = scanned.filter((m) => !ids.includes(m.id)); $('[data-slist]', root).innerHTML = scanList();
@@ -4354,15 +4528,16 @@
         });
         $('#fng', root).onsubmit = (e) => {
           e.preventDefault();
-          withBtn(e.target.querySelector('button.primary'), async () => { try { await api('nameguard/save', { config: { ...formData(e.target), action, groups: sel } }); toast('Đã lưu'); render(); } catch (err) { toast(err.message, 'err'); } });
+          withBtn(e.target.querySelector('button.primary'), async () => { try { await api('nameguard/save', { group_id: gid, config: { ...formData(e.target), action, groups: sel } }); toast('Đã lưu'); render(); } catch (err) { toast(err.message, 'err'); } });
         };
       },
     };
-  }, { webAdmin: true, title: 'Cấm tên chứa từ cấm', back: '/more' });
+  }, 'Cấm tên chứa từ cấm');
 
   // ================= Đóng dấu ảnh chống copy =================
-  route('/watermark', async () => {
-    const d = await api('watermark');
+  featureRoute('/watermark', async (p = {}) => {
+    const gid = +p.gid || 0;
+    const d = await api('watermark', undefined, gq(gid));
     const c = d.config;
     let sel = [...c.groups], style = c.style, color = c.color, sample = null, timer = 0, seq = 0;
     const val = (n, def) => { const el = $(`#fwm [name=${n}]`); return el ? el.value : def; };
@@ -4376,14 +4551,14 @@
       const box = $('[data-wmimg]', root);
       box.classList.add('loading');
       try {
-        const r = await api('watermark/preview', { config: { style, color, opacity: val('opacity', c.opacity), size: val('size', c.size), text: val('text', c.text) }, image: sample, group_id: sel[0] || 0 });
+        const r = await api('watermark/preview', { config: { style, color, opacity: val('opacity', c.opacity), size: val('size', c.size), text: val('text', c.text) }, image: sample, group_id: gid || sel[0] || 0 });
         if (my === seq) $('img', box).src = r.image;
       } catch (err) { if (my === seq) toast(err.message, 'err'); } finally { if (my === seq) box.classList.remove('loading'); }
     };
     const vars = '<code>{name}</code> tên · <code>{username}</code> @username · <code>{group}</code> tên nhóm · <code>{id}</code> ID · <code>{date}</code> ngày';
     return {
       title: 'Đóng dấu ảnh',
-      html: `
+      html: `${scopeBar(d.scope, '/watermark')}
       <div class="alert info" style="margin-bottom:12px">${icon('image')}<div class="xs">Thành viên gửi ảnh → bot <b>xoá ảnh gốc</b> và gửi lại ảnh đã in <b>chữ mờ</b> (tên, @username, tên nhóm…) kèm chú thích <i>“Ảnh của @xxx gửi”</i>, giúp chống lấy ảnh đi đăng lại. Bot cần quyền <b>Xoá tin nhắn</b>. Album nhiều ảnh sẽ được gửi lại thành từng ảnh.</div></div>
       ${d.ready ? '' : `<div class="alert err" style="margin-bottom:12px">${icon('alert')}<div class="xs">Máy chủ thiếu <b>PHP GD + FreeType</b>. Vào aaPanel → App Store → PHP → Cài extension → <b>gd</b>, rồi tải lại trang.</div></div>`}
       ${d.error ? `<div class="alert warn" style="margin-bottom:12px">${icon('alert')}<div class="xs">Lần lỗi gần nhất (ảnh gốc được giữ nguyên): ${esc(d.error)}</div></div>` : ''}
@@ -4407,7 +4582,7 @@
             <div class="hint">Biến: <code>{tag}</code> (@username, chưa có thì tag tên) <code>{mention}</code> <code>{name}</code> <code>{group}</code>. Hỗ trợ <b>đậm</b>, <i>nghiêng</i> kiểu HTML.</div></label>
         </div>
         <div class="card">${sw('keep_caption', c.keep_caption, 'Giữ chú thích gốc của người gửi')}${sw('documents', c.documents, 'Đóng dấu cả ảnh gửi dạng tệp (JPG / PNG)')}${sw('exempt_admins', c.exempt_admins, 'Không đóng dấu ảnh của quản trị viên')}${sw('exempt_vip', c.exempt_vip, 'Không đóng dấu ảnh của thành viên VIP')}</div>
-        <div class="card card-pad">
+        <div class="card card-pad ${d.scope?.group ? 'hidden' : ''}">
           <div class="field"><span class="lbl">Áp dụng cho nhóm <span class="xs muted">(không chọn = tất cả)</span></span><div class="chips" style="flex-wrap:wrap">${d.groups.map((g) => `<button type="button" class="chip ${sel.includes(g.id) ? 'active' : ''}" data-wg="${g.id}">${esc(g.title)}${g.bot_admin ? '' : ' ⚠️'}</button>`).join('') || '<span class="xs muted">Chưa có nhóm</span>'}</div>
             ${d.groups.some((g) => !g.bot_admin) ? '<div class="hint">⚠️ = bot chưa là quản trị viên ở nhóm đó, không xoá được ảnh gốc.</div>' : ''}</div>
         </div>
@@ -4421,6 +4596,7 @@
         <div class="xs muted" style="margin-top:6px">Ảnh thử chỉ dùng để xem trước, không lưu lên máy chủ. Tên / @username trong ảnh mẫu là ví dụ; thực tế lấy theo người gửi.</div></div>
       </div>`,
       mount: (root) => {
+        bindScope(root, d.scope, '/watermark');
         const later = () => { clearTimeout(timer); timer = setTimeout(() => loadImg(root), 350); };
         loadImg(root);
         root.addEventListener('input', (e) => {
@@ -4454,15 +4630,16 @@
         });
         $('#fwm', root).onsubmit = (e) => {
           e.preventDefault();
-          withBtn(e.target.querySelector('button.primary'), async () => { try { await api('watermark/save', { config: { ...formData(e.target), style, color, groups: sel } }); toast('Đã lưu'); render(); } catch (err) { toast(err.message, 'err'); } });
+          withBtn(e.target.querySelector('button.primary'), async () => { try { await api('watermark/save', { group_id: gid, config: { ...formData(e.target), style, color, groups: sel } }); toast('Đã lưu'); render(); } catch (err) { toast(err.message, 'err'); } });
         };
       },
     };
-  }, { webAdmin: true, title: 'Đóng dấu ảnh', back: '/more' });
+  }, 'Đóng dấu ảnh');
 
   // ================= Captcha khi vào nhóm =================
-  route('/captcha', async () => {
-    const d = await api('captcha');
+  featureRoute('/captcha', async (p = {}) => {
+    const gid = +p.gid || 0;
+    const d = await api('captcha', undefined, gq(gid));
     const c = d.config;
     let sel = [...c.groups], mode = c.mode, where = c.where || 'bot';
     const val = (n, d) => $(`#fcap [name=${n}]`)?.value || d;
@@ -4485,7 +4662,7 @@
     };
     return {
       title: 'Captcha vào nhóm',
-      html: `
+      html: `${scopeBar(d.scope, '/captcha')}
       <div class="alert info" style="margin-bottom:12px">${icon('shield')}<div class="xs">Người mới vào nhóm bị <b>tạm cấm chat</b> và phải xác minh trong thời gian quy định. Đúng → được chat ngay (khôi phục quyền mặc định của nhóm) và nhận lời chào. Sai / hết giờ → xử lý theo cài đặt. Bot cần quyền <b>Cấm thành viên</b> và <b>Xoá tin nhắn</b>.</div></div>
       <div class="grid grid-2" style="margin-bottom:12px;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px">
         ${[['Đã hỏi', d.stats.asked, ''], ['Qua', d.stats.passed, 'var(--success)'], ['Bị loại', d.stats.failed, 'var(--danger)'], ['Đang chờ', d.stats.pending, 'var(--primary)']].map(([l, v, col]) => `<div class="card stat" style="padding:10px;text-align:center"><div class="value" style="margin:0;font-size:20px;${col ? 'color:' + col : ''}">${num(v)}</div><div class="sub">${l}</div></div>`).join('')}
@@ -4503,7 +4680,7 @@
             <label class="field"><span class="lbl">Số lần chọn sai tối đa</span><input class="input" name="attempts" inputmode="numeric" value="${c.attempts}"></label>
           </div>
           <label class="field"><span class="lbl">Không xác minh được thì</span><select class="input" name="fail_action">${Object.entries(d.fail).map(([k, l]) => `<option value="${k}" ${c.fail_action === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
-          <div class="field"><span class="lbl">Áp dụng cho nhóm <span class="xs muted">(không chọn = tất cả)</span></span><div class="chips" style="flex-wrap:wrap">${d.groups.map((g) => `<button type="button" class="chip ${sel.includes(g.id) ? 'active' : ''}" data-cg="${g.id}">${esc(g.title)}${g.bot_admin ? '' : ' ⚠️'}</button>`).join('')}</div>
+          <div class="field ${d.scope?.group ? 'hidden' : ''}"><span class="lbl">Áp dụng cho nhóm <span class="xs muted">(không chọn = tất cả)</span></span><div class="chips" style="flex-wrap:wrap">${d.groups.map((g) => `<button type="button" class="chip ${sel.includes(g.id) ? 'active' : ''}" data-cg="${g.id}">${esc(g.title)}${g.bot_admin ? '' : ' ⚠️'}</button>`).join('')}</div>
             ${d.groups.some((g) => !g.bot_admin) ? '<div class="hint">⚠️ = bot chưa là quản trị viên ở nhóm đó, captcha sẽ không hoạt động.</div>' : ''}</div>
         </div>
         <div class="card">${sw('skip_admin_added', c.skip_admin_added, 'Bỏ qua người do admin thêm vào')}${sw('skip_verified', c.skip_verified, 'Không hỏi lại người đã xác minh trước đây')}${sw('skip_vip', c.skip_vip, 'Bỏ qua thành viên VIP')}${sw('delete_join', c.delete_join, 'Xoá tin "đã tham gia nhóm"')}${sw('notify_fail', c.notify_fail, 'Báo vào nhóm khi đuổi / cấm người không xác minh')}</div>
@@ -4525,6 +4702,7 @@
         <div class="xs muted" style="margin-top:8px">Lời chào của nhóm (Cài đặt nhóm → Chào mừng) được gửi <b>sau khi</b> thành viên xác minh xong.</div></div>
       </div>`,
       mount: (root) => {
+        bindScope(root, d.scope, '/captcha');
         const pv = () => { $('[data-cpv]', root).innerHTML = preview(); };
         root.addEventListener('input', pv);
         root.addEventListener('click', (e) => {
@@ -4542,15 +4720,16 @@
         });
         $('#fcap', root).onsubmit = (e) => {
           e.preventDefault();
-          withBtn(e.target.querySelector('button.primary'), async () => { try { await api('captcha/save', { config: { ...formData(e.target), mode, where, groups: sel } }); toast('Đã lưu'); render(); } catch (err) { toast(err.message, 'err'); } });
+          withBtn(e.target.querySelector('button.primary'), async () => { try { await api('captcha/save', { group_id: gid, config: { ...formData(e.target), mode, where, groups: sel } }); toast('Đã lưu'); render(); } catch (err) { toast(err.message, 'err'); } });
         };
       },
     };
-  }, { webAdmin: true, title: 'Captcha vào nhóm', back: '/more' });
+  }, 'Captcha vào nhóm');
 
   // ================= Chống raid + duyệt yêu cầu tham gia =================
-  route('/antiraid', async () => {
-    const d = await api('antiraid');
+  featureRoute('/antiraid', async (p = {}) => {
+    const gid = +p.gid || 0;
+    const d = await api('antiraid', undefined, gq(gid));
     const c = d.config;
     let sel = [...c.groups];
     const left = (t) => { const m = Math.max(0, Math.ceil((t - Date.now() / 1000) / 60)); return m >= 60 ? Math.floor(m / 60) + ' giờ ' + (m % 60) + ' phút' : m + ' phút'; };
@@ -4565,7 +4744,7 @@
     </div>`;
     return {
       title: 'Chống raid',
-      html: `
+      html: `${scopeBar(d.scope, '/antiraid')}
       <div class="alert info" style="margin-bottom:12px">${icon('shield')}<div class="xs">Bật <b>"Phê duyệt thành viên mới"</b> trong nhóm Telegram (Quản lý nhóm → Loại nhóm / Thành viên), cho bot quyền <b>Thêm thành viên</b> + <b>Cấm thành viên</b>. Bình thường bot <b>tự duyệt</b> ngay; khi có <b>${c.threshold} người trong ${c.window} giây</b> bot <b>ngừng tự duyệt</b> và khoá ${c.lock_minutes} phút để chặn đẩy bot / tài khoản ảo.${d.decided ? ` Đã tự duyệt ${num(d.decided)} người trong 24 giờ.` : ''}</div></div>
       <div class="section-title"><h2>Trạng thái các nhóm</h2></div>
       <div class="stack">${d.groups.map(gcard).join('') || empty('users', 'Chưa có nhóm')}</div>
@@ -4582,7 +4761,7 @@
           <label class="field"><span class="lbl">Khoá trong (phút)</span><input class="input" name="lock_minutes" inputmode="numeric" value="${c.lock_minutes}"></label>
           <label class="field"><span class="lbl">Yêu cầu tham gia khi đang khoá</span><select class="input" name="request_action"><option value="hold" ${c.request_action === 'hold' ? 'selected' : ''}>Giữ lại chờ admin duyệt</option><option value="decline" ${c.request_action === 'decline' ? 'selected' : ''}>Tự từ chối</option></select></label>
           <label class="field"><span class="lbl">Người vào thẳng (qua link / username) khi đang khoá</span><select class="input" name="join_action">${Object.entries(d.actions).map(([k, l]) => `<option value="${k}" ${c.join_action === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
-          <div class="field"><span class="lbl">Áp dụng cho nhóm <span class="xs muted">(không chọn = tất cả)</span></span><div class="chips" style="flex-wrap:wrap">${d.groups.map((g) => `<button type="button" class="chip ${sel.includes(g.id) ? 'active' : ''}" data-rg="${g.id}">${esc(g.title)}</button>`).join('')}</div></div>
+          <div class="field ${d.scope?.group ? 'hidden' : ''}"><span class="lbl">Áp dụng cho nhóm <span class="xs muted">(không chọn = tất cả)</span></span><div class="chips" style="flex-wrap:wrap">${d.groups.map((g) => `<button type="button" class="chip ${sel.includes(g.id) ? 'active' : ''}" data-rg="${g.id}">${esc(g.title)}</button>`).join('')}</div></div>
         </div>
         <div class="card">${sw('punish_trigger', c.punish_trigger, 'Xử lý cả những người vừa vào kích hoạt raid')}${sw('revoke_link', c.revoke_link, 'Đổi link mời chính khi khoá', 'Link mời cũ (đang bị phát tán) hết hiệu lực')}${sw('lock_chat', c.lock_chat, 'Khoá chat cả nhóm khi khoá', 'Chỉ admin nhắn được, hết hạn tự mở lại quyền cũ')}${sw('notify_group', c.notify_group, 'Báo trong nhóm')}${sw('notify_admins', c.notify_admins, 'Nhắn riêng cho admin web (đã liên kết Telegram)')}</div>
         <div class="card card-pad"><label class="field"><span class="lbl">Nội dung báo trong nhóm</span><textarea class="input" name="group_text" rows="3">${esc(c.group_text)}</textarea>
@@ -4590,6 +4769,7 @@
         <button class="btn primary block">Lưu cài đặt chống raid</button>
       </form>`,
       mount: (root) => {
+        bindScope(root, d.scope, '/antiraid');
         root.addEventListener('click', async (e) => {
           let b;
           if ((b = e.target.closest('[data-rg]'))) { const id = +b.dataset.rg; sel = sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id]; b.classList.toggle('active'); return; }
@@ -4607,11 +4787,11 @@
         });
         $('#fraid', root).onsubmit = (e) => {
           e.preventDefault();
-          withBtn(e.target.querySelector('button.primary'), async () => { try { await api('antiraid/save', { config: { ...formData(e.target), groups: sel } }); toast('Đã lưu'); render(); } catch (err) { toast(err.message, 'err'); } });
+          withBtn(e.target.querySelector('button.primary'), async () => { try { await api('antiraid/save', { group_id: gid, config: { ...formData(e.target), groups: sel } }); toast('Đã lưu'); render(); } catch (err) { toast(err.message, 'err'); } });
         };
       },
     };
-  }, { webAdmin: true, title: 'Chống raid', back: '/more' });
+  }, 'Chống raid');
 
   route('/me', viewMe, { title: 'Điểm của tôi', back: '/more' });
 

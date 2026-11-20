@@ -31,15 +31,15 @@ class NameGuard
     ];
     const HIT_RULE_ID = -6; // tg_rule_hits: chống xử lý 2 lần (tin "đã vào" + chat_member)
 
-    public static function config(): array
+    /** Cài đặt hiệu lực: nhóm có cài đặt riêng thì dùng riêng, không thì dùng cài đặt chung */
+    public static function config(?array $group = null): array
     {
-        $c = json_decode((string)Settings::get('name_guard'), true) ?: [];
-        return array_merge(self::DEFAULTS, array_intersect_key($c, self::DEFAULTS));
+        return GroupFeature::resolve('name_guard', self::DEFAULTS, $group);
     }
 
-    public static function save(array $in): array
+    public static function save(array $in, ?array $group = null, string $by = ''): array
     {
-        $c = self::config();
+        $c = self::config($group);
         foreach (['enabled', 'smart', 'check_name', 'check_username', 'impersonate', 'on_join', 'on_message', 'on_request', 'delete_msg', 'notify'] as $k) {
             if (array_key_exists($k, $in)) $c[$k] = !empty($in[$k]);
         }
@@ -60,7 +60,7 @@ class NameGuard
             $c['allow_ids'] = array_values(array_unique(array_map('strval', $mm[0])));
         }
         if ($c['enabled'] && !$c['words'] && !$c['impersonate']) throw new HttpError('Nhập ít nhất 1 từ cấm (hoặc bật chống giả tên quản trị viên)');
-        Settings::set('name_guard', json_encode($c, JSON_UNESCAPED_UNICODE));
+        GroupFeature::store('name_guard', $c, $group, $by);
         return $c;
     }
 
@@ -176,7 +176,7 @@ class NameGuard
      */
     public static function check(Telegram $api, array $group, array $user, bool $isAdmin, string $when, ?array $msg = null): bool
     {
-        $c = self::config();
+        $c = self::config($group);
         if (!self::applies($c, $group) || self::exempt($c, $user, $isAdmin)) return false;
         if (($when === 'join' && !$c['on_join']) || ($when === 'message' && !$c['on_message'])) return false;
         $why = self::match($c, $user, $group);
@@ -208,7 +208,7 @@ class NameGuard
     /** Yêu cầu tham gia: tên vi phạm → từ chối luôn. @return bool true nếu đã từ chối */
     public static function onRequest(Telegram $api, array $group, array $req): bool
     {
-        $c = self::config();
+        $c = self::config($group);
         $u = $req['from'];
         if (!self::applies($c, $group) || !$c['on_request'] || self::exempt($c, $u, false)) return false;
         $why = self::match($c, $u, $group);

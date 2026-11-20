@@ -28,15 +28,15 @@ class AntiRaid
         'group_text' => "🛡 <b>Phát hiện tham gia hàng loạt</b> ({count} người trong {window} giây).\nNhóm tạm khoá duyệt thành viên mới trong <b>{minutes} phút</b>.",
     ];
 
-    public static function config(): array
+    /** Cài đặt hiệu lực: nhóm có cài đặt riêng thì dùng riêng, không thì dùng cài đặt chung */
+    public static function config(?array $group = null): array
     {
-        $c = json_decode((string)Settings::get('antiraid'), true) ?: [];
-        return array_merge(self::DEFAULTS, array_intersect_key($c, self::DEFAULTS));
+        return GroupFeature::resolve('antiraid', self::DEFAULTS, $group);
     }
 
-    public static function save(array $in): array
+    public static function save(array $in, ?array $group = null, string $by = ''): array
     {
-        $c = self::config();
+        $c = self::config($group);
         foreach (['enabled', 'auto_approve', 'punish_trigger', 'lock_chat', 'revoke_link', 'notify_group', 'notify_admins'] as $k) if (array_key_exists($k, $in)) $c[$k] = !empty($in[$k]);
         if (isset($in['groups'])) $c['groups'] = array_values(array_unique(array_map('intval', array_filter((array)$in['groups'], 'is_numeric'))));
         if (isset($in['threshold'])) $c['threshold'] = max(2, min(500, (int)$in['threshold']));
@@ -45,7 +45,7 @@ class AntiRaid
         if (isset($in['request_action']) && in_array($in['request_action'], ['hold', 'decline'], true)) $c['request_action'] = $in['request_action'];
         if (isset($in['join_action']) && isset(self::ACTIONS[$in['join_action']])) $c['join_action'] = $in['join_action'];
         if (isset($in['group_text'])) { $t = trim(mb_substr((string)$in['group_text'], 0, 1500)); $c['group_text'] = $t !== '' ? $t : self::DEFAULTS['group_text']; }
-        Settings::set('antiraid', json_encode($c, JSON_UNESCAPED_UNICODE));
+        GroupFeature::store('antiraid', $c, $group, $by);
         return $c;
     }
 
@@ -72,7 +72,7 @@ class AntiRaid
      */
     private static function track(Telegram $api, array $group, $tgUserId): array
     {
-        $c = self::config();
+        $c = self::config($group);
         $gid = (int)$group['id'];
         if (!self::applies($c, $group)) return [false, false];
         // Không đếm trùng (1 lần vào sinh ra cả tin hệ thống lẫn chat_member; duyệt yêu cầu rồi vào nhóm)
@@ -90,7 +90,7 @@ class AntiRaid
     /** Bật chế độ khoá */
     public static function lock(Telegram $api, array $group, int $minutes, string $why, int $count = 0, string $by = 'Bot'): void
     {
-        $c = self::config();
+        $c = self::config($group);
         $gid = (int)$group['id'];
         $prev = self::state($gid);
         $st = ['until' => now() + $minutes * 60, 'started_at' => now(), 'why' => $why, 'by' => $by, 'perms' => $prev['perms'] ?? null, 'chat_locked' => $prev['chat_locked'] ?? false];
@@ -126,7 +126,7 @@ class AntiRaid
         if (!empty($st['chat_locked'])) {
             $api->tryCall('setChatPermissions', ['chat_id' => $group['chat_id'], 'permissions' => $st['perms'] ?: Telegram::permAll(), 'use_independent_chat_permissions' => true]);
         }
-        $c = self::config();
+        $c = self::config($group);
         $pending = (int)DB::val("SELECT COUNT(*) FROM join_requests WHERE group_id = ? AND status = 'pending'", [$gid]);
         if ($c['notify_group']) $api->trySend($group['chat_id'], '✅ Đã hết chế độ chống raid, nhóm hoạt động bình thường.' . (!empty($st['chat_locked']) ? ' Chat đã được mở lại.' : ''));
         if ($c['notify_admins'] && $pending) self::notifyAdmins($api, '🛡 ' . tg_esc($group['title']) . ": hết khoá chống raid. Còn <b>$pending</b> yêu cầu tham gia chờ duyệt trên web.");
@@ -135,7 +135,7 @@ class AntiRaid
 
     private static function punish(Telegram $api, array $group, $tgUserId, string $why): void
     {
-        $c = self::config();
+        $c = self::config($group);
         try {
             if ($c['join_action'] === 'mute') {
                 $api->call('restrictChatMember', ['chat_id' => $group['chat_id'], 'user_id' => $tgUserId, 'permissions' => Telegram::PERM_NONE, 'use_independent_chat_permissions' => true, 'until_date' => 0]);
@@ -160,7 +160,7 @@ class AntiRaid
     {
         if (!empty($user['is_bot']) && $addedBy && $isAdminFn($addedBy)) return false; // admin thêm bot
         if ($isAdmin || ($addedBy && $addedBy != $user['id'] && $isAdminFn($addedBy))) return false;
-        $c = self::config();
+        $c = self::config($group);
         if (!self::applies($c, $group)) return false;
         $m = Repo::upsertMember((int)$group['id'], $user, ['status' => 'member', 'joined' => true]); // ghi nhận trước để lock() xử lý được cả người này
         if ($m['status'] === 'left') DB::run("UPDATE tg_members SET status = 'member' WHERE id = ?", [$m['id']]);
@@ -186,7 +186,7 @@ class AntiRaid
             'bio' => isset($req['bio']) ? mb_substr($req['bio'], 0, 250) : null, 'status' => 'pending', 'created_at' => now(), 'decided_at' => null, 'decided_by' => null];
         $old = DB::val("SELECT id FROM join_requests WHERE group_id = ? AND tg_user_id = ? AND status = 'pending'", [$gid, $u['id']]);
         if ($old) DB::update('join_requests', $row, 'id = ?', [$old]); else $old = DB::insert('join_requests', $row);
-        $c = self::config();
+        $c = self::config($group);
         if (!self::applies($c, $group)) return; // không áp dụng: để admin duyệt trong Telegram / web
         [$locked] = self::track($api, $group, $u['id']);
         if ($locked) {

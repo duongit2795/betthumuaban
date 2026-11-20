@@ -33,15 +33,15 @@ class Captcha
         'dm_text' => "🔐 <b>Xác minh để chat trong nhóm {group}</b>\nCòn <b>{seconds} giây</b>.\n\n{question}",
     ];
 
-    public static function config(): array
+    /** Cài đặt hiệu lực: nhóm có cài đặt riêng thì dùng riêng, không thì dùng cài đặt chung */
+    public static function config(?array $group = null): array
     {
-        $c = json_decode((string)Settings::get('captcha'), true) ?: [];
-        return array_merge(self::DEFAULTS, array_intersect_key($c, self::DEFAULTS));
+        return GroupFeature::resolve('captcha', self::DEFAULTS, $group);
     }
 
-    public static function save(array $in): array
+    public static function save(array $in, ?array $group = null, string $by = ''): array
     {
-        $c = self::config();
+        $c = self::config($group);
         foreach (['enabled', 'skip_admin_added', 'skip_verified', 'skip_vip', 'delete_join', 'notify_fail'] as $k) if (array_key_exists($k, $in)) $c[$k] = !empty($in[$k]);
         if (isset($in['groups'])) $c['groups'] = array_values(array_unique(array_map('intval', array_filter((array)$in['groups'], 'is_numeric'))));
         if (isset($in['mode']) && isset(self::MODES[$in['mode']])) $c['mode'] = $in['mode'];
@@ -54,7 +54,7 @@ class Captcha
         foreach (['group_text_bot' => 1500, 'dm_text' => 1500, 'bot_button' => 40] as $k => $max) {
             if (isset($in[$k])) { $t = trim(mb_substr((string)$in[$k], 0, $max)); $c[$k] = $t !== '' ? $t : self::DEFAULTS[$k]; }
         }
-        Settings::set('captcha', json_encode($c, JSON_UNESCAPED_UNICODE));
+        GroupFeature::store('captcha', $c, $group, $by);
         return $c;
     }
 
@@ -104,7 +104,7 @@ class Captcha
      */
     public static function start(Telegram $api, int $botId, array $group, array $user, ?int $addedBy, callable $isAdmin): bool
     {
-        $c = self::config();
+        $c = self::config($group);
         if (!empty($user['is_bot']) || !self::applies($c, $group)) return false;
         $gid = (int)$group['id'];
         if ($isAdmin((int)$user['id'])) return false;
@@ -153,7 +153,7 @@ class Captcha
         if ((string)$msg['from']['id'] !== (string)$p['tg_user_id']) { $api->trySend($chat, '⛔ Liên kết xác minh này dành cho người khác.'); return true; }
         $group = Repo::group((int)$p['group_id']);
         if (!$group) return true;
-        $c = self::config();
+        $c = self::config($group);
         [$q, $ans, $opts] = self::challenge($c['mode']); // câu hỏi mới mỗi lần mở
         DB::run('UPDATE captcha_pending SET answer = ? WHERE id = ?', [$ans, $p['id']]);
         $left = max(5, (int)$p['expires_at'] - now());
@@ -175,7 +175,7 @@ class Captcha
         if (!$p) { $answer('Yêu cầu xác minh này đã hết hạn'); return ['other', null, null]; }
         if ((string)$cb['from']['id'] !== (string)$p['tg_user_id']) { $answer('Nút này dành cho thành viên mới vào nhóm', true); return ['other', null, null]; }
         $group = Repo::group((int)$p['group_id']);
-        $c = self::config();
+        $c = self::config($group);
         $inDm = ($cb['message']['chat']['type'] ?? '') === 'private';
         $edit = function (string $t) use ($api, $cb, $inDm) {
             if ($inDm) $api->tryCall('editMessageText', ['chat_id' => $cb['message']['chat']['id'], 'message_id' => $cb['message']['message_id'], 'text' => $t, 'parse_mode' => 'HTML']);
@@ -220,7 +220,7 @@ class Captcha
     {
         DB::run('DELETE FROM captcha_pending WHERE id = ?', [$p['id']]);
         if ($p['message_id']) $api->tryCall('deleteMessage', ['chat_id' => $group['chat_id'], 'message_id' => $p['message_id']]);
-        $c = self::config();
+        $c = self::config($group);
         $m = Repo::member((int)$group['id'], $p['tg_user_id']);
         $label = ['kick' => 'đuổi khỏi nhóm', 'ban' => 'cấm vĩnh viễn', 'mute' => 'giữ cấm chat'][$c['fail_action']];
         try {
@@ -244,7 +244,7 @@ class Captcha
             $group = Repo::group((int)$p['group_id']);
             $api = $group ? Repo::apiForGroup($group) : null;
             if (!$group || !$api) { DB::run('DELETE FROM captcha_pending WHERE id = ?', [$p['id']]); continue; }
-            self::fail($api, $group, $p, 'Hết ' . self::config()['timeout'] . ' giây không xác minh');
+            self::fail($api, $group, $p, 'Hết ' . self::config($group)['timeout'] . ' giây không xác minh');
             $n++;
         }
         return $n;
