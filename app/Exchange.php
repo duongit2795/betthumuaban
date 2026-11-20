@@ -41,6 +41,7 @@ class Exchange
 
     public static function applies(array $c, int $groupId): bool
     {
+        if (Tenant::groupOwner(Repo::group($groupId))) return false; // đổi điểm của chủ web không áp dụng ở nhóm khách thuê
         return !$c['groups'] || in_array($groupId, $c['groups'], true);
     }
 

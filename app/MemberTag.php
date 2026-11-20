@@ -183,6 +183,7 @@ class MemberTag
     // ================= Cửa hàng tag =================
     public static function shopApplies(array $c, int $groupId): bool
     {
+        if (Tenant::groupOwner(Repo::group($groupId))) return false;
         return $c['shop'] && (!$c['shop_groups'] || in_array($groupId, $c['shop_groups'], true));
     }
 
@@ -209,7 +210,7 @@ class MemberTag
         if (!$c['shop']) throw new HttpError('Cửa hàng tag đang tắt');
         if (!$u['tg_user_id']) throw new HttpError('Hãy liên kết Telegram ở trang Tài khoản trước khi mua tag');
         $group = Repo::group($groupId);
-        if (!$group || !$group['active'] || !self::shopApplies($c, $groupId)) throw new HttpError('Nhóm này không bán tag');
+        if (!$group || !$group['active'] || !self::shopApplies($c, $groupId) || Tenant::groupOwner($group)) throw new HttpError('Nhóm này không bán tag');
         $m = Repo::member($groupId, $u['tg_user_id']);
         if (!$m || !in_array($m['status'], ['member', 'muted'], true)) throw new HttpError('Bạn cần đang ở trong nhóm này');
         if ($m['is_admin']) throw new HttpError('Bạn là quản trị viên nhóm: đổi danh hiệu admin trong Telegram, không cần mua tag');

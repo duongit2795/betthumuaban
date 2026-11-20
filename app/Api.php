@@ -154,6 +154,14 @@ class Api
             'features/username' => 'usernameFeature',
             'settings/export' => 'settingsExport',
             'settings/import' => 'settingsImport',
+            'plan' => 'plan',
+            'plan/buy' => 'planBuy',
+            'admin' => 'adminPanel',
+            'admin/plan/save' => 'adminPlanSave',
+            'admin/plan/delete' => 'adminPlanDelete',
+            'admin/grant' => 'adminGrant',
+            'admin/lock' => 'adminLock',
+            'admin/config' => 'adminConfig',
             'nameguard' => 'nameGuard',
             'nameguard/save' => 'nameGuardSave',
             'nameguard/test' => 'nameGuardTest',
@@ -209,6 +217,11 @@ class Api
             'allow_register' => $inst ? Settings::get('allow_register') === '1' : false,
             'tg_login' => $inst && TgLogin::enabled() ? ['bots' => TgLogin::bots(), 'cmd' => Commands::name('login')] : null,
             'pay' => $inst ? ['wallet' => Wallet::config()['enabled'] && Wallet::config()['account_no'] !== '', 'amnesty' => Amnesty::config()['enabled'], 'checkin' => GroupFeature::anyEnabled('checkin'), 'tagshop' => MemberTag::config()['shop'], 'exchange' => Exchange::config()['enabled'], 'vip' => Vip::config()['enabled']] : null,
+            'tenant' => $inst ? (function () {
+                $u = Auth::user();
+                $on = Tenant::config()['enabled'];
+                return ['enabled' => $on, 'me' => $u && ($on || !empty($u['tenant'])) ? Tenant::summary($u) : null];
+            })() : null,
             'version' => APP_VERSION,
             'php' => PHP_VERSION,
             'checks' => $inst ? null : [
@@ -497,11 +510,30 @@ class Api
         }
     }
 
+    /** Admin web: mọi bot; khách thuê: bot của mình */
+    private function botUser(): array
+    {
+        $u = Auth::requireUser();
+        if (!Access::isWebAdmin($u) && !Access::isTenant($u)) fail('Bạn chưa thuê gói. Vào mục Gói thuê để bắt đầu.', 403);
+        return $u;
+    }
+
+    private function loadBot(array $u): array
+    {
+        $bot = DB::get('SELECT * FROM tg_bots WHERE id = ?', [$this->int('id')]) ?: fail('Không tìm thấy bot', 404);
+        if (!Access::isWebAdmin($u) && (int)$bot['owner_id'] !== (int)$u['id']) fail('Không tìm thấy bot', 404);
+        return $bot;
+    }
+
     private function bots(): array
     {
-        Auth::requireAdmin();
-        $rows = DB::all('SELECT b.*, (SELECT COUNT(*) FROM tg_groups g WHERE g.bot_id = b.id AND g.active = 1) AS groups FROM tg_bots b ORDER BY b.id');
+        $u = $this->botUser();
+        $web = Access::isWebAdmin($u);
+        $rows = DB::all('SELECT b.*, u.username AS owner_name, (SELECT COUNT(*) FROM tg_groups g WHERE g.bot_id = b.id AND g.active = 1) AS groups FROM tg_bots b LEFT JOIN app_users u ON u.id = b.owner_id'
+            . ($web ? '' : ' WHERE b.owner_id = ' . (int)$u['id']) . ' ORDER BY b.id');
         return array_map(fn($b) => [
+            'owner' => $b['owner_id'] ? ['id' => (int)$b['owner_id'], 'username' => $b['owner_name']] : null,
+            'blocked' => Tenant::blockReason((int)$b['id'], null),
             'id' => (int)$b['id'],
             'username' => $b['username'],
             'name' => $b['name'],
@@ -518,7 +550,12 @@ class Api
 
     private function botAdd(): array
     {
-        Auth::requireAdmin();
+        $u = $this->botUser();
+        $web = Access::isWebAdmin($u);
+        if (!$web) {
+            $p = Tenant::activePlan($u) ?: fail('Gói thuê đã hết hạn. Gia hạn để thêm bot.', 402);
+            if (Tenant::usage((int)$u['id'])['bots'] >= $p['max_bots']) fail("Gói {$p['name']} cho tối đa {$p['max_bots']} bot. Nâng cấp gói để thêm.", 402);
+        }
         $token = trim((string)$this->in('token'));
         if (!preg_match('/^\d+:[\w-]{30,}$/', $token)) fail('Token không đúng định dạng (lấy từ @BotFather)');
         if (DB::get('SELECT id FROM tg_bots WHERE token = ?', [$token])) fail('Bot này đã được thêm');
@@ -529,7 +566,7 @@ class Api
         }
         $id = DB::insert('tg_bots', [
             'token' => $token, 'tg_bot_id' => $me['id'], 'username' => $me['username'], 'name' => $me['first_name'],
-            'enabled' => 1, 'status' => 'stopped', 'created_at' => now(),
+            'enabled' => 1, 'status' => 'stopped', 'created_at' => now(), 'owner_id' => $web ? null : (int)$u['id'],
         ]);
         Repo::log(null, Auth::user()['username'], 'bot_add', null, '@' . $me['username']);
         $warn = null;
@@ -543,8 +580,7 @@ class Api
 
     private function botToggle(): array
     {
-        Auth::requireAdmin();
-        $bot = DB::get('SELECT * FROM tg_bots WHERE id = ?', [$this->int('id')]) ?: fail('Không tìm thấy bot', 404);
+        $bot = $this->loadBot($this->botUser());
         $on = (bool)$this->in('enabled');
         DB::run('UPDATE tg_bots SET enabled = ? WHERE id = ?', [$on ? 1 : 0, $bot['id']]);
         if ($on) $this->setWebhook($bot);
@@ -558,8 +594,7 @@ class Api
 
     private function botRefresh(): array
     {
-        Auth::requireAdmin();
-        $bot = DB::get('SELECT * FROM tg_bots WHERE id = ?', [$this->int('id')]) ?: fail('Không tìm thấy bot', 404);
+        $bot = $this->loadBot($this->botUser());
         $api = new Telegram($bot['token']);
         try {
             $me = $api->call('getMe');
@@ -584,8 +619,7 @@ class Api
 
     private function botDelete(): array
     {
-        Auth::requireAdmin();
-        $bot = DB::get('SELECT * FROM tg_bots WHERE id = ?', [$this->int('id')]) ?: fail('Không tìm thấy bot', 404);
+        $bot = $this->loadBot($this->botUser());
         (new Telegram($bot['token']))->tryCall('deleteWebhook');
         DB::run('UPDATE tg_groups SET bot_id = NULL WHERE bot_id = ?', [$bot['id']]);
         DB::run('DELETE FROM tg_bots WHERE id = ?', [$bot['id']]);
@@ -609,6 +643,8 @@ class Api
             'active' => (int)$g['active'],
             'bot_id' => $g['bot_id'] ? (int)$g['bot_id'] : null,
             'bot_username' => $g['bot_username'] ?? null,
+            'owner' => ($oid = Tenant::groupOwner($g)) ? ['id' => $oid, 'username' => (Tenant::user($oid)['username'] ?? '?')] : null,
+            'blocked' => $g['bot_id'] && $g['active'] ? Tenant::blockReason((int)$g['bot_id'], (int)$g['id']) : null,
             'created_at' => (int)$g['created_at'],
         ];
     }
@@ -650,7 +686,7 @@ class Api
                 'admins' => (int)DB::val('SELECT COUNT(*) FROM tg_members WHERE group_id = ? AND is_admin = 1', [$id]),
                 'points' => (int)DB::val('SELECT COALESCE(SUM(points),0) FROM tg_members WHERE group_id = ?', [$id]),
             ],
-            'access' => Access::summary($u)['perms'],
+            'access' => array_combine(array_keys(Access::PERMS), array_map(fn($k) => Access::can($u, $k, (int)$id), array_keys(Access::PERMS))), // quyền theo đúng nhóm này (gói thuê / quyền admin nhóm)
             'bots' => !Access::isWebAdmin($u) ? [] : array_map(fn($b) => ['id' => (int)$b['id'], 'username' => $b['username']], DB::all('SELECT id, username FROM tg_bots ORDER BY id')),
         ];
     }
@@ -1217,8 +1253,10 @@ class Api
         $ids = Access::groupIds($u);
         $sql = 'SELECT r.*, g.title AS group_title FROM tg_rules r LEFT JOIN tg_groups g ON g.id = r.group_id';
         // Quản trị viên nhóm: thấy lệnh của nhóm mình + lệnh dùng chung (chỉ xem)
-        $scope = '(r.group_id IS NULL OR ' . Access::sqlIn($ids, 'r.group_id') . ')';
-        $rows = $gid ? DB::all("$sql WHERE (r.group_id IS NULL OR r.group_id = ?) ORDER BY r.group_id IS NULL, r.priority DESC, r.id", [$gid])
+        // Khách thuê / nhóm của khách thuê: lệnh dùng chung của chủ web không áp dụng → không hiện
+        $noGlobal = (Access::isTenant($u) && !Access::isWebAdmin($u)) || ($gid && Tenant::groupOwner(Repo::group($gid)));
+        $scope = $noGlobal ? Access::sqlIn($ids, 'r.group_id') : '(r.group_id IS NULL OR ' . Access::sqlIn($ids, 'r.group_id') . ')';
+        $rows = $gid ? DB::all("$sql WHERE " . ($noGlobal ? 'r.group_id = ?' : '(r.group_id IS NULL OR r.group_id = ?)') . " ORDER BY r.group_id IS NULL, r.priority DESC, r.id", [$gid])
             : DB::all("$sql WHERE $scope ORDER BY r.group_id IS NOT NULL, r.priority DESC, r.id");
         return [
             'rules' => array_map(function ($r) use ($u) {
@@ -1845,7 +1883,7 @@ class Api
         $cfg = Amnesty::config();
         $mine = [];
         if ($u['tg_user_id']) {
-            foreach (DB::all('SELECT m.*, g.title FROM tg_members m JOIN tg_groups g ON g.id = m.group_id WHERE g.active = 1 AND m.tg_user_id = ? AND ' . Amnesty::punishedSql('m'), [$u['tg_user_id']]) as $m) {
+            foreach (DB::all('SELECT m.*, g.title FROM tg_members m JOIN tg_groups g ON g.id = m.group_id WHERE g.active = 1 AND ' . Tenant::ownerGroupsSql('g') . ' AND m.tg_user_id = ? AND ' . Amnesty::punishedSql('m'), [$u['tg_user_id']]) as $m) {
                 $r = $this->amnestyMember($m, $cfg);
                 if ($r['punishments']) $mine[] = $r;
             }
@@ -1855,7 +1893,7 @@ class Api
             $ids = Amnesty::groupIds($u);
             $groups = array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title'],
                 'punished' => (int)DB::val('SELECT COUNT(*) FROM tg_members WHERE is_bot = 0 AND group_id = ? AND ' . Amnesty::punishedSql(), [$g['id']])],
-                DB::all('SELECT id, title FROM tg_groups WHERE active = 1 AND ' . Access::sqlIn($ids, 'id') . ' ORDER BY title'));
+                DB::all('SELECT g.id, g.title FROM tg_groups g WHERE g.active = 1 AND ' . Tenant::ownerGroupsSql('g') . ' AND ' . Access::sqlIn($ids, 'g.id') . ' ORDER BY g.title'));
         }
         $recent = DB::all("SELECT t.*, u.display_name, u.username FROM wallet_tx t JOIN app_users u ON u.id = t.user_id WHERE t.type = 'amnesty' ORDER BY t.id DESC LIMIT 10");
         return [
@@ -2534,7 +2572,7 @@ class Api
     /** Danh sách nhóm hiển thị trên trang tính năng: chế độ nhóm chỉ có chính nhóm đó */
     private function featGroups(?array $g): array
     {
-        $rows = $g ? [$g] : DB::all('SELECT id, title, bot_is_admin FROM tg_groups WHERE active = 1 ORDER BY title');
+        $rows = $g ? [$g] : DB::all('SELECT g.id, g.title, g.bot_is_admin FROM tg_groups g WHERE g.active = 1 AND ' . Tenant::ownerGroupsSql('g') . ' ORDER BY g.title');
         return array_map(fn($r) => ['id' => (int)$r['id'], 'title' => $r['title'], 'bot_admin' => (int)$r['bot_is_admin']], $rows);
     }
 
@@ -2548,7 +2586,7 @@ class Api
             'group' => $g ? ['id' => (int)$g['id'], 'title' => $g['title']] : null,
             'custom' => $g ? GroupFeature::get($key, (int)$g['id']) !== null : false,
             'overrides' => $g ? [] : $over,
-            'all_groups' => $g ? [] : array_map(fn($r) => ['id' => (int)$r['id'], 'title' => $r['title']], DB::all('SELECT id, title FROM tg_groups WHERE active = 1 ORDER BY title')),
+            'all_groups' => $g ? [] : array_map(fn($r) => ['id' => (int)$r['id'], 'title' => $r['title']], DB::all('SELECT g.id, g.title FROM tg_groups g WHERE g.active = 1 AND ' . Tenant::ownerGroupsSql('g') . ' ORDER BY g.title')),
             'global_enabled' => (bool)(json_decode((string)Settings::get($key), true)['enabled'] ?? false),
         ];
     }
@@ -2571,6 +2609,119 @@ class Api
         $g = $this->loadGroup();
         $this->gate('settings', $g);
         return ['features' => GroupFeature::summary($g)];
+    }
+
+    // ================= Cho thuê: gói thuê của khách =================
+    private function orderRow(array $o): array
+    {
+        return ['id' => (int)$o['id'], 'user' => isset($o['username']) ? ['id' => (int)$o['user_id'], 'name' => $o['display_name'] ?: $o['username'], 'username' => $o['username']] : null,
+            'plan' => $o['plan_name'], 'days' => (int)$o['days'], 'amount' => (int)$o['amount'], 'kind' => $o['kind'], 'until_after' => $o['until_after'] ? (int)$o['until_after'] : null,
+            'by' => $o['by_user'], 'note' => $o['note'], 'created_at' => (int)$o['created_at']];
+    }
+
+    private function plan(): array
+    {
+        $u = Auth::requireUser();
+        $c = Tenant::config();
+        return [
+            'enabled' => $c['enabled'], 'intro' => $c['intro'], 'features' => Tenant::FEATURES,
+            'plans' => Tenant::plans(), 'me' => Tenant::summary($u), 'balance' => Wallet::balance((int)$u['id']),
+            'used_free' => array_map('intval', array_column(DB::all("SELECT DISTINCT o.plan_id FROM tenant_orders o JOIN plans p ON p.id = o.plan_id WHERE o.user_id = ? AND p.price = 0 AND o.kind IN ('buy','renew')", [$u['id']]), 'plan_id')),
+            'orders' => array_map([$this, 'orderRow'], DB::all('SELECT * FROM tenant_orders WHERE user_id = ? ORDER BY id DESC LIMIT 30', [$u['id']])),
+            'wallet' => Wallet::config()['enabled'] && Wallet::config()['account_no'] !== '',
+        ];
+    }
+
+    private function planBuy(): array
+    {
+        $u = Auth::requireUser();
+        return Tenant::buy($u, $this->int('plan_id'));
+    }
+
+    // ================= /admin: quản lý cho thuê (chủ web) =================
+    private function adminPanel(): array
+    {
+        Auth::requireAdmin();
+        $q = trim((string)$this->in('q', ''));
+        $where = 'u.tenant = 1';
+        $p = [];
+        if ($q !== '') { $where .= ' AND (LOWER(u.username) LIKE ? OR LOWER(u.display_name) LIKE ? OR CAST(u.tg_user_id AS CHAR) LIKE ?)'; $l = '%' . mb_strtolower($q) . '%'; $p = [$l, $l, $l]; }
+        $tenants = array_map(function ($r) {
+            $us = Tenant::usage((int)$r['id']);
+            $pl = Tenant::plan((int)$r['plan_id']);
+            return ['id' => (int)$r['id'], 'username' => $r['username'], 'name' => $r['display_name'] ?: $r['username'], 'tg_user_id' => $r['tg_user_id'] ? (string)$r['tg_user_id'] : null,
+                'plan' => $pl ? ['id' => $pl['id'], 'name' => $pl['name'], 'max_groups' => $pl['max_groups'], 'max_bots' => $pl['max_bots']] : null,
+                'until' => $r['plan_until'] ? (int)$r['plan_until'] : null, 'active' => !$r['disabled'] && (int)$r['plan_until'] > now(), 'disabled' => (bool)$r['disabled'],
+                'balance' => (int)$r['balance'], 'bots' => $us['bots'], 'groups' => $us['groups'],
+                'paid' => (int)DB::val('SELECT COALESCE(SUM(amount),0) FROM tenant_orders WHERE user_id = ?', [$r['id']]), 'created_at' => (int)$r['created_at']];
+        }, DB::all("SELECT u.* FROM app_users u WHERE $where ORDER BY u.plan_until DESC LIMIT 300", $p));
+        $sum = fn($since) => (int)DB::val('SELECT COALESCE(SUM(amount),0) FROM tenant_orders WHERE created_at >= ?', [$since]);
+        return [
+            'config' => Tenant::config(), 'features' => Tenant::FEATURES,
+            'plans' => array_map(fn($pl) => $pl + ['users' => (int)DB::val('SELECT COUNT(*) FROM app_users WHERE tenant = 1 AND plan_id = ? AND plan_until > ?', [$pl['id'], now()])], Tenant::plans(false)),
+            'tenants' => $tenants,
+            'orders' => array_map([$this, 'orderRow'], DB::all('SELECT o.*, u.username, u.display_name FROM tenant_orders o JOIN app_users u ON u.id = o.user_id ORDER BY o.id DESC LIMIT 50')),
+            'stats' => [
+                'tenants' => (int)DB::val('SELECT COUNT(*) FROM app_users WHERE tenant = 1'),
+                'active' => (int)DB::val('SELECT COUNT(*) FROM app_users WHERE tenant = 1 AND disabled = 0 AND plan_until > ?', [now()]),
+                'expiring' => (int)DB::val('SELECT COUNT(*) FROM app_users WHERE tenant = 1 AND disabled = 0 AND plan_until BETWEEN ? AND ?', [now(), now() + 7 * 86400]),
+                'revenue_30' => $sum(now() - 30 * 86400), 'revenue_today' => $sum(strtotime('today')), 'revenue_all' => $sum(0),
+                'bots' => (int)DB::val('SELECT COUNT(*) FROM tg_bots WHERE owner_id IS NOT NULL'),
+                'groups' => (int)DB::val('SELECT COUNT(*) FROM tg_groups g JOIN tg_bots b ON b.id = g.bot_id WHERE b.owner_id IS NOT NULL AND g.active = 1'),
+            ],
+        ];
+    }
+
+    private function adminPlanSave(): array
+    {
+        $u = Auth::requireAdmin();
+        $p = Tenant::savePlan((array)$this->in('plan', []));
+        Repo::log(null, $u['username'], 'system', null, "Lưu gói thuê {$p['name']} · " . Wallet::money($p['price']) . " / {$p['days']} ngày");
+        return ['plan' => $p];
+    }
+
+    private function adminPlanDelete(): array
+    {
+        $u = Auth::requireAdmin();
+        $p = Tenant::plan($this->int('id')) ?: fail('Không tìm thấy gói', 404);
+        if (DB::val('SELECT COUNT(*) FROM app_users WHERE plan_id = ?', [$p['id']])) {
+            DB::run('UPDATE plans SET enabled = 0 WHERE id = ?', [$p['id']]);
+            return ['disabled' => true]; // còn khách dùng → chỉ ngừng bán
+        }
+        DB::run('DELETE FROM plans WHERE id = ?', [$p['id']]);
+        Repo::log(null, $u['username'], 'system', null, "Xoá gói thuê {$p['name']}");
+        return ['disabled' => false];
+    }
+
+    /** Gia hạn / tặng / đổi gói cho 1 tài khoản (theo id hoặc tên đăng nhập) */
+    private function adminGrant(): array
+    {
+        $a = Auth::requireAdmin();
+        $uid = $this->int('user_id');
+        if (!$uid && ($name = trim((string)$this->in('username'))) !== '') $uid = (int)DB::val('SELECT id FROM app_users WHERE LOWER(username) = LOWER(?)', [ltrim($name, '@')]);
+        if (!$uid) fail('Không tìm thấy tài khoản');
+        $days = max(-3650, min(3650, $this->int('days')));
+        if (!$days) fail('Nhập số ngày');
+        return ['until' => Tenant::grant($uid, $this->int('plan_id'), $days, $a['username'], (string)$this->in('note', ''))];
+    }
+
+    private function adminLock(): array
+    {
+        $a = Auth::requireAdmin();
+        $t = DB::get('SELECT * FROM app_users WHERE id = ? AND tenant = 1', [$this->int('user_id')]) ?: fail('Không tìm thấy khách thuê', 404);
+        if ($t['role'] === 'admin') fail('Không thể khoá admin web');
+        $off = (bool)$this->in('disabled');
+        DB::run('UPDATE app_users SET disabled = ? WHERE id = ?', [$off ? 1 : 0, $t['id']]);
+        Repo::log(null, $a['username'], 'system', null, ($off ? 'Khoá' : 'Mở khoá') . ' khách thuê ' . $t['username']);
+        return [];
+    }
+
+    private function adminConfig(): array
+    {
+        $a = Auth::requireAdmin();
+        $c = Tenant::saveConfig((array)$this->in('config', []));
+        Repo::log(null, $a['username'], 'system', null, 'Cho thuê: ' . ($c['enabled'] ? 'bật' : 'tắt'));
+        return ['config' => $c];
     }
 
     // ================= Xuất / nhập cài đặt =================

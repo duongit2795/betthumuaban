@@ -11,6 +11,13 @@ class Rules
     const MOD_ACTIONS = ['warn', 'mute', 'unmute', 'kick', 'ban', 'unban'];
 
     // ================= Lưu / kiểm tra dữ liệu =================
+    /** Lệnh áp dụng cho nhóm: nhóm chủ web = lệnh chung + lệnh riêng; nhóm khách thuê = chỉ lệnh riêng (nếu gói có "Lệnh tự tạo") */
+    public static function scope(array $group): string
+    {
+        if (!Tenant::groupOwner($group)) return '(group_id IS NULL OR group_id = ?)';
+        return Tenant::allows($group, 'rules') ? 'group_id = ?' : '(1 = 0 AND group_id = ?)';
+    }
+
     public static function sanitize(array $in): array
     {
         $type = in_array($in['trigger_type'] ?? '', self::TRIGGERS, true) ? $in['trigger_type'] : 'command';
@@ -148,7 +155,7 @@ class Rules
     public static function run(Telegram $api, string $botUsername, int $botTgId, array $group, array $msg, array $member, bool $isAdmin, string $text, callable $isAdminFn, int $botId = 0): int
     {
         if ($text === '') return 0;
-        $rules = DB::all("SELECT * FROM tg_rules WHERE enabled = 1 AND trigger_type <> 'reaction' AND (group_id IS NULL OR group_id = ?) ORDER BY priority DESC, id ASC", [$group['id']]);
+        $rules = DB::all("SELECT * FROM tg_rules WHERE enabled = 1 AND trigger_type <> 'reaction' AND " . self::scope($group) . " ORDER BY priority DESC, id ASC", [$group['id']]);
         if (!$rules) return 0;
 
         $cmd = null;
@@ -206,7 +213,7 @@ class Rules
         $added = array_values(array_diff($keys($mr['new_reaction'] ?? []), $keys($mr['old_reaction'] ?? [])));
         if (!$added) return; // chỉ gỡ cảm xúc
 
-        $rules = DB::all("SELECT * FROM tg_rules WHERE enabled = 1 AND trigger_type = 'reaction' AND (group_id IS NULL OR group_id = ?) ORDER BY priority DESC, id ASC", [$group['id']]);
+        $rules = DB::all("SELECT * FROM tg_rules WHERE enabled = 1 AND trigger_type = 'reaction' AND " . self::scope($group) . " ORDER BY priority DESC, id ASC", [$group['id']]);
         if (!$rules) return;
         $gid = (int)$group['id'];
         $chatId = $mr['chat']['id'];
@@ -488,7 +495,7 @@ class Rules
     public static function helpLines(int $groupId, bool $isAdmin): array
     {
         $out = [];
-        foreach (DB::all("SELECT * FROM tg_rules WHERE enabled = 1 AND trigger_type = 'command' AND (group_id IS NULL OR group_id = ?) ORDER BY trigger_value", [$groupId]) as $r) {
+        foreach (DB::all("SELECT * FROM tg_rules WHERE enabled = 1 AND trigger_type = 'command' AND " . self::scope(Repo::group($groupId) ?: ['id' => $groupId]) . " ORDER BY trigger_value", [$groupId]) as $r) {
             $c = json_decode($r['conditions'] ?: '{}', true) ?: [];
             if (($c['who'] ?? 'all') === 'admin' && !$isAdmin) continue;
             $out[] = '/' . $r['trigger_value'] . ' – ' . tg_esc($r['name']);

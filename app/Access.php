@@ -47,10 +47,11 @@ class Access
     {
         if (!$u) return [];
         if (self::isWebAdmin($u)) return null;
-        if (!self::enabled() || !$u['tg_user_id']) return [];
         $key = 'g' . $u['id'];
         if (isset(self::$cache[$key])) return self::$cache[$key];
-        $ids = [];
+        $own = !empty($u['tenant']) ? Tenant::groupIds((int)$u['id']) : []; // khách thuê: nhóm của bot riêng
+        if (!self::enabled() || !$u['tg_user_id']) return self::$cache[$key] = $own;
+        $ids = $own;
         $tg = (string)$u['tg_user_id'];
         foreach (DB::all('SELECT id, admins_json FROM tg_groups WHERE active = 1') as $g) {
             $admins = array_map('strval', json_decode((string)$g['admins_json'], true) ?: []);
@@ -65,12 +66,36 @@ class Access
 
     public static function isManager(?array $u): bool
     {
-        return self::isWebAdmin($u) || (bool)self::groupIds($u);
+        return self::isWebAdmin($u) || self::isTenant($u) || (bool)self::groupIds($u);
+    }
+
+    /** Quyền theo gói của khách thuê với nhóm của chính họ */
+    private static function tenantCan(array $u, string $perm): bool
+    {
+        if (in_array($perm, ['chat', 'send', 'rules'], true)) {
+            $p = Tenant::activePlan($u);
+            return $p && in_array($perm, $p['features'], true);
+        }
+        return true;
+    }
+
+    public static function isTenant(?array $u): bool
+    {
+        return $u && !empty($u['tenant']) && !$u['disabled'];
     }
 
     public static function can(?array $u, string $perm, ?int $groupId = null): bool
     {
         if (self::isWebAdmin($u)) return true;
+        if (self::isTenant($u)) {
+            if ($groupId === null && Tenant::groupIds((int)$u['id'])) return self::tenantCan($u, $perm) || self::canAsAdmin($u, $perm, null);
+            if ($groupId !== null && in_array($groupId, Tenant::groupIds((int)$u['id']), true)) return self::tenantCan($u, $perm);
+        }
+        return self::canAsAdmin($u, $perm, $groupId);
+    }
+
+    private static function canAsAdmin(?array $u, string $perm, ?int $groupId): bool
+    {
         if ($perm !== 'view' && empty(self::perms()[$perm])) return false;
         $ids = self::groupIds($u);
         if ($groupId === null) return (bool)$ids;
@@ -86,6 +111,9 @@ class Access
         if (!$ids) fail(self::enabled() ? 'Bạn chưa quản lý nhóm nào. Hãy liên kết Telegram và là quản trị viên của nhóm có bot.' : 'Admin web đang tắt quyền vào web của quản trị viên nhóm', 403);
         if ($groupId !== null && !in_array($groupId, $ids, true)) fail('Bạn không phải quản trị viên của nhóm này', 403);
         $name = self::PERMS[$perm][1] ?? $perm;
+        if (self::isTenant($u) && ($groupId === null || in_array($groupId, Tenant::groupIds((int)$u['id']), true))) {
+            fail(Tenant::activePlan($u) ? "Gói thuê của bạn chưa có tính năng \"$name\". Nâng cấp gói để dùng." : 'Gói thuê đã hết hạn. Gia hạn để tiếp tục.', 403);
+        }
         fail("Admin web chưa cấp quyền \"$name\" cho quản trị viên nhóm", 403);
     }
 
@@ -103,9 +131,11 @@ class Access
         $ids = self::groupIds($u);
         return [
             'web_admin' => $web,
-            'manager' => $web || (bool)$ids,
+            'manager' => $web || (bool)$ids || self::isTenant($u),
+            'tenant' => self::isTenant($u),
             'groups' => $ids,
-            'perms' => $web ? array_map(fn() => true, self::PERMS) : (self::enabled() ? self::perms() : array_map(fn() => false, self::PERMS)),
+            'perms' => $web ? array_map(fn() => true, self::PERMS) : (self::isTenant($u) ? array_combine(array_keys(self::PERMS), array_map(fn($k) => self::can($u, $k), array_keys(self::PERMS)))
+                : (self::enabled() ? self::perms() : array_map(fn() => false, self::PERMS))),
         ];
     }
 }

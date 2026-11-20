@@ -64,6 +64,7 @@ class Vip
         $c ??= self::config();
         if (!$c['enabled'] || !$tgUserId) return false;
         if ($groupId && $c['groups'] && !in_array($groupId, $c['groups'], true)) return false;
+        if ($groupId && Tenant::groupOwner(Repo::group($groupId))) return false; // VIP của chủ web không áp dụng ở nhóm khách thuê
         return (self::until($tgUserId) ?? 0) > now();
     }
 
@@ -106,7 +107,9 @@ class Vip
         $out = [];
         foreach (DB::all("SELECT m.*, g.id AS gid FROM tg_members m JOIN tg_groups g ON g.id = m.group_id WHERE g.active = 1 AND m.tg_user_id = ? AND m.status IN ('member','muted')", [$tgUserId]) as $m) {
             if ($c['groups'] && !in_array((int)$m['gid'], $c['groups'], true)) continue;
-            $out[] = [Repo::group((int)$m['gid']), $m];
+            $g = Repo::group((int)$m['gid']);
+            if (Tenant::groupOwner($g)) continue;
+            $out[] = [$g, $m];
         }
         return $out;
     }

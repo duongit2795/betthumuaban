@@ -170,6 +170,7 @@ class Amnesty
         $m = DB::get('SELECT * FROM tg_members WHERE id = ?', [$memberId]) ?: throw new HttpError('Không tìm thấy thành viên', 404);
         $group = Repo::group((int)$m['group_id']);
         if (!$group || !$group['active']) throw new HttpError('Nhóm không còn hoạt động');
+        if (Tenant::groupOwner($group)) throw new HttpError('Nhóm này không áp dụng ân xá');
         if (!self::canTarget($u, $m, $cfg, $byId)) throw new HttpError('Bạn không thể ân xá thành viên này', 403);
         // Kiểm tra lại trạng thái thật trên Telegram trước khi trừ tiền (tránh trả tiền cho hình phạt đã hết)
         if ($kind !== 'unwarn') $m = self::syncTelegram($group, $m['tg_user_id']) ?: $m;
