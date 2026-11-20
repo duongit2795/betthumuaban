@@ -25,15 +25,15 @@ class UsernameGuard
     ];
     const HIT_RULE_ID = -1; // dùng bảng tg_rule_hits để giới hạn tần suất nhắc
 
-    public static function config(): array
+    /** Cài đặt hiệu lực: nhóm có cài đặt riêng thì dùng riêng, không thì dùng cài đặt chung */
+    public static function config(?array $group = null): array
     {
-        $c = json_decode((string)Settings::get('require_username'), true) ?: [];
-        return array_merge(self::DEFAULTS, array_intersect_key($c, self::DEFAULTS));
+        return GroupFeature::resolve('require_username', self::DEFAULTS, $group);
     }
 
-    public static function save(array $in): array
+    public static function save(array $in, ?array $group = null, string $by = ''): array
     {
-        $c = self::config();
+        $c = self::config($group);
         if (array_key_exists('enabled', $in)) $c['enabled'] = !empty($in['enabled']);
         if (isset($in['groups'])) $c['groups'] = array_values(array_unique(array_map('intval', array_filter((array)$in['groups'], 'is_numeric'))));
         if (isset($in['action']) && isset(self::ACTIONS[$in['action']])) $c['action'] = $in['action'];
@@ -45,13 +45,13 @@ class UsernameGuard
             $t = trim(mb_substr((string)$in['text'], 0, 2000));
             $c['text'] = $t !== '' ? $t : self::DEFAULTS['text'];
         }
-        Settings::set('require_username', json_encode($c, JSON_UNESCAPED_UNICODE));
+        GroupFeature::store('require_username', $c, $group, $by);
         return $c;
     }
 
     public static function appliesTo(array $group): bool
     {
-        $c = self::config();
+        $c = self::config($group);
         return $c['enabled'] && (!$c['groups'] || in_array((int)$group['id'], $c['groups'], true));
     }
 
@@ -62,7 +62,7 @@ class UsernameGuard
     public static function check(Telegram $api, int $botId, array $group, array $user, ?array $msg, bool $isAdmin, bool $joined = false): bool
     {
         if (!empty($user['username']) || !empty($user['is_bot']) || !self::appliesTo($group)) return false;
-        $c = self::config();
+        $c = self::config($group);
         if ($isAdmin && $c['exempt_admins']) return false;
         if ($joined && !$c['on_join']) return false;
         $gid = (int)$group['id'];

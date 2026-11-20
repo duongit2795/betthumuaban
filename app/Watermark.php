@@ -25,15 +25,15 @@ class Watermark
         'keep_caption' => true,       // giữ chú thích gốc phía dưới
     ];
 
-    public static function config(): array
+    /** Cài đặt hiệu lực: nhóm có cài đặt riêng thì dùng riêng, không thì dùng cài đặt chung */
+    public static function config(?array $group = null): array
     {
-        $c = json_decode((string)Settings::get('watermark'), true) ?: [];
-        return array_merge(self::DEFAULTS, array_intersect_key($c, self::DEFAULTS));
+        return GroupFeature::resolve('watermark', self::DEFAULTS, $group);
     }
 
-    public static function save(array $in): array
+    public static function save(array $in, ?array $group = null, string $by = ''): array
     {
-        $c = self::config();
+        $c = self::config($group);
         foreach (['enabled', 'exempt_admins', 'exempt_vip', 'documents', 'keep_caption'] as $k) if (array_key_exists($k, $in)) $c[$k] = !empty($in[$k]);
         if (isset($in['groups'])) $c['groups'] = array_values(array_unique(array_map('intval', array_filter((array)$in['groups'], 'is_numeric'))));
         if (isset($in['style']) && isset(self::STYLES[$in['style']])) $c['style'] = $in['style'];
@@ -44,7 +44,7 @@ class Watermark
             if (isset($in[$k])) { $t = trim(mb_substr((string)$in[$k], 0, $max)); $c[$k] = $t !== '' ? $t : self::DEFAULTS[$k]; }
         }
         if ($c['enabled'] && !self::ready()) throw new HttpError('Máy chủ thiếu PHP GD + FreeType: aaPanel → App Store → PHP → Cài extension "gd" (bản có FreeType)');
-        Settings::set('watermark', json_encode($c, JSON_UNESCAPED_UNICODE));
+        GroupFeature::store('watermark', $c, $group, $by);
         return $c;
     }
 
@@ -195,7 +195,7 @@ class Watermark
      */
     public static function handle(Telegram $api, array $group, array $msg, array $member, bool $isAdmin): bool
     {
-        $c = self::config();
+        $c = self::config($group);
         if (!self::applies($c, $group) || !empty($msg['sender_chat']) || !empty($msg['from']['is_bot'])) return false;
         if ($isAdmin && $c['exempt_admins']) return false;
         $fileId = null;

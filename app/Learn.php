@@ -32,15 +32,15 @@ class Learn
     ];
 
     // ================= Cấu hình =================
-    public static function config(): array
+    /** Cài đặt hiệu lực: nhóm có cài đặt riêng thì dùng riêng, không thì dùng cài đặt chung */
+    public static function config(?array $group = null): array
     {
-        $c = json_decode((string)Settings::get('learn'), true) ?: [];
-        return array_merge(self::DEFAULTS, array_intersect_key($c, self::DEFAULTS));
+        return GroupFeature::resolve('learn', self::DEFAULTS, $group);
     }
 
-    public static function save(array $in): array
+    public static function save(array $in, ?array $group = null, string $by = ''): array
     {
-        $c = self::config();
+        $c = self::config($group);
         foreach (['enabled', 'exempt_admins', 'notify_done'] as $k) if (array_key_exists($k, $in)) $c[$k] = !empty($in[$k]);
         if (isset($in['groups'])) $c['groups'] = array_values(array_unique(array_map('intval', array_filter((array)$in['groups'], 'is_numeric'))));
         if (isset($in['scope']) && isset(self::SCOPES[$in['scope']])) {
@@ -63,13 +63,13 @@ class Learn
                 $c[$k] = $t !== '' ? $t : self::DEFAULTS[$k];
             }
         }
-        Settings::set('learn', json_encode($c, JSON_UNESCAPED_UNICODE));
+        GroupFeature::store('learn', $c, $group, $by);
         return $c;
     }
 
     public static function appliesTo(array $group): bool
     {
-        $c = self::config();
+        $c = self::config($group);
         return $c['enabled'] && (!$c['groups'] || in_array((int)$group['id'], $c['groups'], true));
     }
 
@@ -141,7 +141,7 @@ class Learn
     /** Thành viên vừa vào nhóm (chế độ "chỉ thành viên mới") → đánh dấu cần học */
     public static function onJoin(array $group, array $user): void
     {
-        if (!empty($user['is_bot']) || !self::appliesTo($group) || self::config()['scope'] !== 'new') return;
+        if (!empty($user['is_bot']) || !self::appliesTo($group) || self::config($group)['scope'] !== 'new') return;
         $p = self::progress($user['id']);
         if ($p && $p['status'] === 'done') return;
         self::touch($user, (int)$group['id']);
@@ -154,7 +154,7 @@ class Learn
     public static function check(Telegram $api, array $bot, array $group, array $user, array $msg, bool $isAdmin): bool
     {
         if (!empty($user['is_bot']) || !self::appliesTo($group)) return false;
-        $c = self::config();
+        $c = self::config($group);
         if ($isAdmin && $c['exempt_admins']) return false;
         $p = self::progress($user['id']);
         if ($p && $p['status'] === 'done') return false;
@@ -290,12 +290,13 @@ class Learn
             if (!$group) continue;
             $m = Repo::member((int)$gid, $from['id']) ?: Repo::upsertMember((int)$gid, $from);
             Repo::log((int)$gid, $by ?: 'Bot', 'learn_done', $m, $by ? "Admin $by đánh dấu đã học" : "Hoàn thành bài học ($total câu)", ['source' => $by ? 'web' : 'bot']);
-            if (!$c['notify_done']) continue;
+            $gc = self::config($group); // nhóm có thể có cài đặt riêng (thông báo hoàn thành)
+            if (!$gc['notify_done']) continue;
             $gapi = Repo::apiForGroup($group);
             if (!$gapi) continue;
-            $sent = $gapi->trySend($group['chat_id'], strtr($c['done_text'], ['{mention}' => Repo::mention($m), '{name}' => tg_esc(Repo::name($m)), '{group}' => tg_esc($group['title'])]));
-            if ($sent && !empty($sent['message_id']) && $c['done_autodel'] > 0 && $group['bot_id']) {
-                DelQueue::add($gapi, (int)$group['bot_id'], $group['chat_id'], [$sent['message_id']], $c['done_autodel']);
+            $sent = $gapi->trySend($group['chat_id'], strtr($gc['done_text'], ['{mention}' => Repo::mention($m), '{name}' => tg_esc(Repo::name($m)), '{group}' => tg_esc($group['title'])]));
+            if ($sent && !empty($sent['message_id']) && $gc['done_autodel'] > 0 && $group['bot_id']) {
+                DelQueue::add($gapi, (int)$group['bot_id'], $group['chat_id'], [$sent['message_id']], $gc['done_autodel']);
             }
         }
     }

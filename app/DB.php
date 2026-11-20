@@ -6,7 +6,7 @@ class DB
 {
     private static ?PDO $pdo = null;
     private static string $driver = 'sqlite';
-    const SCHEMA_VERSION = 19;
+    const SCHEMA_VERSION = 20;
 
     public static function connect(?array $c = null): PDO
     {
@@ -394,6 +394,14 @@ class DB
                 tg_user_id $big NOT NULL,
                 created_at INT NOT NULL
             )",
+            "CREATE TABLE IF NOT EXISTS group_features (
+                id $pk,
+                group_id INT NOT NULL,
+                feature VARCHAR(32) NOT NULL,
+                config TEXT NOT NULL,
+                updated_at INT NOT NULL,
+                updated_by $str
+            )",
             "CREATE TABLE IF NOT EXISTS join_requests (
                 id $pk,
                 group_id INT NOT NULL,
@@ -434,6 +442,7 @@ class DB
             'idx_captcha_exp' => 'captcha_pending (expires_at)',
             'idx_join_events' => 'join_events (group_id, created_at)',
             'idx_join_req' => 'join_requests (group_id, status)',
+            'idx_group_feat' => 'group_features (group_id, feature)',
         ];
         foreach ($indexes as $name => $def) {
             try {

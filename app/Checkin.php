@@ -19,15 +19,15 @@ class Checkin
         'cmd_autodel' => 60,     // lệnh /diemdanh trong nhóm: tự xoá lệnh + tin trả lời sau N giây (0 = không)
     ];
 
-    public static function config(): array
+    /** Cài đặt hiệu lực: nhóm có cài đặt riêng thì dùng riêng, không thì dùng cài đặt chung */
+    public static function config(?array $group = null): array
     {
-        $c = json_decode((string)Settings::get('checkin'), true) ?: [];
-        return array_merge(self::DEFAULTS, array_intersect_key($c, self::DEFAULTS));
+        return GroupFeature::resolve('checkin', self::DEFAULTS, $group);
     }
 
-    public static function save(array $in): array
+    public static function save(array $in, ?array $group = null, string $by = ''): array
     {
-        $c = self::config();
+        $c = self::config($group);
         foreach (['enabled', 'notify'] as $k) if (array_key_exists($k, $in)) $c[$k] = !empty($in[$k]);
         if (isset($in['groups'])) $c['groups'] = array_values(array_unique(array_map('intval', array_filter((array)$in['groups'], 'is_numeric'))));
         if (isset($in['points'])) $c['points'] = max(1, min(100000, (int)$in['points']));
@@ -39,7 +39,7 @@ class Checkin
             $t = trim(mb_substr((string)$in['notify_text'], 0, 1000));
             $c['notify_text'] = $t !== '' ? $t : self::DEFAULTS['notify_text'];
         }
-        Settings::set('checkin', json_encode($c, JSON_UNESCAPED_UNICODE));
+        GroupFeature::store('checkin', $c, $group, $by);
         return $c;
     }
 
@@ -84,7 +84,7 @@ class Checkin
      */
     public static function run(array $group, array $m, string $source = 'web'): array
     {
-        $c = self::config();
+        $c = self::config($group);
         if (!$c['enabled']) throw new HttpError('Tính năng điểm danh đang tắt');
         $groupId = (int)$group['id'];
         if (!self::applies($c, $groupId)) throw new HttpError('Nhóm này không áp dụng điểm danh');

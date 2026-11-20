@@ -62,7 +62,7 @@ class BotKeyboard
     /** Nút có hiện không (nút Học tập ẩn khi Học tập tắt…) */
     private static function visible(array $b): bool
     {
-        if ($b['action'] === 'learn') return Learn::config()['enabled'];
+        if ($b['action'] === 'learn') return GroupFeature::anyEnabled('learn');
         if ($b['action'] === 'balance') return Commands::names('balance') !== [];
         if ($b['action'] === 'points') return Commands::names('pme') !== [];
         return true;

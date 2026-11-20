@@ -136,6 +136,7 @@ class Api
             'checkin' => 'checkin',
             'checkin/do' => 'checkinDo',
             'checkin/save' => 'checkinSave',
+            'checkin/config' => 'checkinConfig',
             'tags' => 'tags',
             'tags/save' => 'tagsSave',
             'tags/apply' => 'tagsApply',
@@ -148,6 +149,11 @@ class Api
             'antiraid/lock' => 'antiRaidLock',
             'antiraid/decide' => 'antiRaidDecide',
             'antiraid/decide-all' => 'antiRaidDecideAll',
+            'features/reset' => 'featureReset',
+            'features/group' => 'groupFeatures',
+            'features/username' => 'usernameFeature',
+            'settings/export' => 'settingsExport',
+            'settings/import' => 'settingsImport',
             'nameguard' => 'nameGuard',
             'nameguard/save' => 'nameGuardSave',
             'nameguard/test' => 'nameGuardTest',
@@ -185,7 +191,7 @@ class Api
         $writeRoutes = ['install', 'auth/login', 'auth/register', 'auth/logout', 'me/update', 'me/link-code', 'me/unlink'];
         if (!isset($map[$route])) fail('Không tìm thấy API', 404);
         $fn = $map[$route];
-        $isWrite = in_array($route, $writeRoutes, true) || str_contains($route, '/') && !in_array($route, ['system/check-update', 'chat/poll', 'ads/image', 'me/logs', 'amnesty/search', 'users/tx', 'chat/media'], true);
+        $isWrite = in_array($route, $writeRoutes, true) || str_contains($route, '/') && !in_array($route, ['system/check-update', 'chat/poll', 'ads/image', 'me/logs', 'amnesty/search', 'users/tx', 'chat/media', 'features/group', 'features/username', 'checkin/config'], true);
         if ($isWrite && $this->method !== 'POST') fail('Phương thức không hợp lệ', 405);
         json_out(['ok' => true, 'data' => $this->$fn()]);
     }
@@ -202,7 +208,7 @@ class Api
             'site_name' => $inst ? Settings::get('site_name') : 'Tele Manager',
             'allow_register' => $inst ? Settings::get('allow_register') === '1' : false,
             'tg_login' => $inst && TgLogin::enabled() ? ['bots' => TgLogin::bots(), 'cmd' => Commands::name('login')] : null,
-            'pay' => $inst ? ['wallet' => Wallet::config()['enabled'] && Wallet::config()['account_no'] !== '', 'amnesty' => Amnesty::config()['enabled'], 'checkin' => Checkin::config()['enabled'], 'tagshop' => MemberTag::config()['shop'], 'exchange' => Exchange::config()['enabled'], 'vip' => Vip::config()['enabled']] : null,
+            'pay' => $inst ? ['wallet' => Wallet::config()['enabled'] && Wallet::config()['account_no'] !== '', 'amnesty' => Amnesty::config()['enabled'], 'checkin' => GroupFeature::anyEnabled('checkin'), 'tagshop' => MemberTag::config()['shop'], 'exchange' => Exchange::config()['enabled'], 'vip' => Vip::config()['enabled']] : null,
             'version' => APP_VERSION,
             'php' => PHP_VERSION,
             'checks' => $inst ? null : [
@@ -1334,11 +1340,21 @@ class Api
     /** Lưu tính năng mặc định (hiện có: yêu cầu đặt username) */
     private function commandFeature(): array
     {
-        $u = Auth::requireAdmin();
         if ($this->in('feature') !== 'require_username') fail('Tính năng không hợp lệ');
-        $c = UsernameGuard::save((array)$this->in('config', []));
-        Repo::log(null, $u['username'], 'system', null, 'Yêu cầu đặt username: ' . ($c['enabled'] ? 'bật · ' . UsernameGuard::ACTIONS[$c['action']] : 'tắt'));
+        [$u, $g] = $this->featScope();
+        $c = UsernameGuard::save((array)$this->in('config', []), $g, $u['username']);
+        Repo::log($g ? (int)$g['id'] : null, $u['username'], 'system', null, 'Yêu cầu đặt username: ' . ($c['enabled'] ? 'bật · ' . UsernameGuard::ACTIONS[$c['action']] : 'tắt'));
         return ['config' => $c];
+    }
+
+    /** Yêu cầu đặt Username: cài đặt chung / riêng nhóm (trang riêng) */
+    private function usernameFeature(): array
+    {
+        [$u, $g] = $this->featScope();
+        return [
+            'features' => ['require_username' => UsernameGuard::config($g) + ['actions' => UsernameGuard::ACTIONS, 'default_text' => UsernameGuard::DEFAULTS['text']]],
+            'scope' => $this->featInfo('require_username', $g), 'groups' => $this->featGroups($g), 'can_edit' => true,
+        ];
     }
 
     private function commandReset(): array
@@ -2032,7 +2048,7 @@ class Api
 
     private function learn(): array
     {
-        Auth::requireAdmin();
+        [, $lg] = $this->featScope();
         $status = (string)$this->in('status', '');
         $q = trim((string)$this->in('q', ''));
         $where = [];
@@ -2045,13 +2061,16 @@ class Api
         }
         $rows = DB::all('SELECT * FROM learn_progress' . ($where ? ' WHERE ' . implode(' AND ', $where) : '') . ' ORDER BY updated_at DESC LIMIT 100', $p);
         $count = fn($st) => (int)DB::val('SELECT COUNT(*) FROM learn_progress WHERE status = ?', [$st]);
+        if ($lg) { $rows = []; } // chế độ nhóm: không xem tiến độ chung
         return [
-            'config' => Learn::config(),
+            'config' => Learn::config($lg),
+            'scope' => $this->featInfo('learn', $lg),
             'defaults' => Learn::DEFAULTS,
             'scopes' => Learn::SCOPES,
             'modes' => Learn::MODES,
-            'questions' => array_map([Learn::class, 'questionRow'], Learn::questions(false)),
-            'groups' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title']], DB::all('SELECT id, title FROM tg_groups WHERE active = 1 ORDER BY title')),
+            'questions' => $lg ? [] : array_map([Learn::class, 'questionRow'], Learn::questions(false)),
+            'question_count' => count(Learn::questions(true)),
+            'groups' => $this->featGroups($lg),
             'bots' => array_map(fn($b) => $b['username'], DB::all('SELECT username FROM tg_bots WHERE enabled = 1 AND username IS NOT NULL ORDER BY id')),
             'cmd' => Commands::name('learn'),
             'stats' => ['done' => $count('done'), 'learning' => $count('learning'), 'required' => $count('required')],
@@ -2061,9 +2080,9 @@ class Api
 
     private function learnSave(): array
     {
-        $u = Auth::requireAdmin();
-        $c = Learn::save((array)$this->in('config', []));
-        Repo::log(null, $u['username'], 'system', null, 'Cài đặt Học tập: ' . ($c['enabled'] ? 'bật' : 'tắt'));
+        [$u, $g] = $this->featScope();
+        $c = Learn::save((array)$this->in('config', []), $g, $u['username']);
+        Repo::log($g ? (int)$g['id'] : null, $u['username'], 'system', null, 'Cài đặt Học tập: ' . ($c['enabled'] ? 'bật' : 'tắt'));
         return ['config' => $c];
     }
 
@@ -2149,7 +2168,7 @@ class Api
         return [
             'config' => BotKeyboard::config(),
             'actions' => array_map(fn($a) => ['name' => $a[0], 'desc' => $a[1]], BotKeyboard::ACTIONS),
-            'learn_enabled' => Learn::config()['enabled'],
+            'learn_enabled' => GroupFeature::anyEnabled('learn'),
             'bots' => array_map(fn($b) => $b['username'], DB::all('SELECT username FROM tg_bots WHERE enabled = 1 AND username IS NOT NULL ORDER BY id')),
             'max' => BotKeyboard::MAX,
         ];
@@ -2222,15 +2241,16 @@ class Api
         $groups = [];
         if ($u['tg_user_id']) {
             foreach (DB::all("SELECT m.points, m.status, g.id, g.title FROM tg_members m JOIN tg_groups g ON g.id = m.group_id WHERE g.active = 1 AND m.tg_user_id = ? AND m.status IN ('member','muted') ORDER BY g.title", [$u['tg_user_id']]) as $r) {
-                if (!Checkin::applies($c, (int)$r['id'])) continue;
+                $gc = Checkin::config(['id' => (int)$r['id']]); // nhóm có thể có cài đặt riêng
+                if (!$gc['enabled'] || !Checkin::applies($gc, (int)$r['id'])) continue;
                 $st = Checkin::streak($u['tg_user_id'], (int)$r['id']);
                 $days = array_column(DB::all('SELECT day FROM checkins WHERE tg_user_id = ? AND group_id = ? AND day >= ?', [$u['tg_user_id'], $r['id'], date('Y-m-d', strtotime('-6 day'))]), 'day');
                 $groups[] = ['id' => (int)$r['id'], 'title' => $r['title'], 'points' => (int)$r['points'], 'today' => $st['today'], 'streak' => $st['streak'],
-                    'reward' => Checkin::reward($c, $st['streak'] + 1), 'week' => $days,
+                    'reward' => Checkin::reward($gc, $st['streak'] + 1), 'week' => $days,
                     'total_days' => (int)DB::val('SELECT COUNT(*) FROM checkins WHERE tg_user_id = ? AND group_id = ?', [$u['tg_user_id'], $r['id']])];
             }
         }
-        $out = ['enabled' => $c['enabled'], 'linked' => (bool)$u['tg_user_id'], 'points' => $c['points'], 'streak_bonus' => $c['streak_bonus'], 'streak_max' => $c['streak_max'],
+        $out = ['enabled' => $c['enabled'] || (bool)$groups || GroupFeature::anyEnabled('checkin'), 'linked' => (bool)$u['tg_user_id'], 'points' => $c['points'], 'streak_bonus' => $c['streak_bonus'], 'streak_max' => $c['streak_max'],
             'groups' => $groups, 'today' => date('Y-m-d'), 'week' => array_map(fn($i) => date('Y-m-d', strtotime("-$i day")), range(6, 0))];
         if (Access::isWebAdmin($u)) {
             $out['admin'] = [
@@ -2244,6 +2264,16 @@ class Api
         return $out;
     }
 
+    /** Cài đặt điểm danh của 1 nhóm (hoặc chung) */
+    private function checkinConfig(): array
+    {
+        [, $g] = $this->featScope();
+        $w = $g ? ' AND group_id = ' . (int)$g['id'] : '';
+        return ['config' => Checkin::config($g), 'scope' => $this->featInfo('checkin', $g), 'default_text' => Checkin::DEFAULTS['notify_text'],
+            'today_count' => (int)DB::val('SELECT COUNT(*) FROM checkins WHERE day = ?' . $w, [date('Y-m-d')]),
+            'today_points' => (int)DB::val('SELECT COALESCE(SUM(points),0) FROM checkins WHERE day = ?' . $w, [date('Y-m-d')])];
+    }
+
     private function checkinDo(): array
     {
         $u = Auth::requireUser();
@@ -2252,9 +2282,9 @@ class Api
 
     private function checkinSave(): array
     {
-        $u = Auth::requireAdmin();
-        $c = Checkin::save((array)$this->in('config', []));
-        Repo::log(null, $u['username'], 'system', null, 'Điểm danh: ' . ($c['enabled'] ? "bật · {$c['points']} điểm" : 'tắt'));
+        [$u, $g] = $this->featScope();
+        $c = Checkin::save((array)$this->in('config', []), $g, $u['username']);
+        Repo::log($g ? (int)$g['id'] : null, $u['username'], 'system', null, 'Điểm danh: ' . ($c['enabled'] ? "bật · {$c['points']} điểm" : 'tắt'));
         return ['config' => $c];
     }
 
@@ -2488,32 +2518,184 @@ class Api
         return ['until' => $until];
     }
 
+    // ================= Cài đặt tính năng theo nhóm =================
+    /**
+     * Phạm vi cài đặt tính năng: có group_id → cài đặt riêng của nhóm đó (quản trị viên nhóm có quyền "Cài đặt nhóm");
+     * không có → cài đặt chung (chỉ admin web). Trả về [user, group|null].
+     */
+    private function featScope(): array
+    {
+        $gid = $this->int('group_id');
+        if (!$gid) return [Auth::requireAdmin(), null];
+        $g = Repo::group($gid) ?: fail('Không tìm thấy nhóm', 404);
+        return [$this->gate('settings', $g), $g];
+    }
+
+    /** Danh sách nhóm hiển thị trên trang tính năng: chế độ nhóm chỉ có chính nhóm đó */
+    private function featGroups(?array $g): array
+    {
+        $rows = $g ? [$g] : DB::all('SELECT id, title, bot_is_admin FROM tg_groups WHERE active = 1 ORDER BY title');
+        return array_map(fn($r) => ['id' => (int)$r['id'], 'title' => $r['title'], 'bot_admin' => (int)$r['bot_is_admin']], $rows);
+    }
+
+    /** Thông tin phạm vi cho giao diện */
+    private function featInfo(string $key, ?array $g): array
+    {
+        $over = array_map(fn($r) => ['id' => (int)$r['id'], 'title' => $r['title'], 'enabled' => !empty((json_decode((string)$r['config'], true) ?: [])['enabled'])],
+            DB::all('SELECT g.id, g.title, f.config FROM group_features f JOIN tg_groups g ON g.id = f.group_id WHERE f.feature = ? AND g.active = 1 ORDER BY g.title', [$key]));
+        return [
+            'key' => $key,
+            'group' => $g ? ['id' => (int)$g['id'], 'title' => $g['title']] : null,
+            'custom' => $g ? GroupFeature::get($key, (int)$g['id']) !== null : false,
+            'overrides' => $g ? [] : $over,
+            'all_groups' => $g ? [] : array_map(fn($r) => ['id' => (int)$r['id'], 'title' => $r['title']], DB::all('SELECT id, title FROM tg_groups WHERE active = 1 ORDER BY title')),
+            'global_enabled' => (bool)(json_decode((string)Settings::get($key), true)['enabled'] ?? false),
+        ];
+    }
+
+    /** Bỏ cài đặt riêng của nhóm → dùng lại cài đặt chung */
+    private function featureReset(): array
+    {
+        $key = (string)$this->in('feature');
+        if (!isset(GroupFeature::FEATURES[$key])) fail('Tính năng không hợp lệ');
+        [$u, $g] = $this->featScope();
+        if (!$g) fail('Thiếu nhóm');
+        GroupFeature::reset($key, (int)$g['id']);
+        Repo::log((int)$g['id'], $u['username'], 'settings', null, GroupFeature::FEATURES[$key][1] . ': dùng lại cài đặt chung');
+        return [];
+    }
+
+    /** Các tính năng của 1 nhóm (tab Tính năng trong trang nhóm) */
+    private function groupFeatures(): array
+    {
+        $g = $this->loadGroup();
+        $this->gate('settings', $g);
+        return ['features' => GroupFeature::summary($g)];
+    }
+
+    // ================= Xuất / nhập cài đặt =================
+    const EXPORT_APP = 'tg-group-manager';
+
+    /** Xuất cài đặt: có group_id → cài đặt của nhóm đó; không có → cài đặt chung (admin web). Không chứa token / mật khẩu / ví. */
+    private function settingsExport(): array
+    {
+        [$u, $g] = $this->featScope();
+        $features = [];
+        foreach (GroupFeature::FEATURES as $key => [$cls]) {
+            $c = $cls::config($g);
+            unset($c['_custom'], $c['groups'], $c['allow_ids']);
+            $features[$key] = $c;
+        }
+        $rules = DB::all('SELECT * FROM tg_rules WHERE ' . ($g ? 'group_id = ' . (int)$g['id'] : 'group_id IS NULL') . ' ORDER BY priority DESC, id');
+        $out = [
+            'app' => self::EXPORT_APP, 'type' => $g ? 'group' : 'global', 'version' => trim((string)@file_get_contents(ROOT . '/VERSION')),
+            'exported_at' => date('c'), 'source' => $g ? $g['title'] : (string)Settings::get('site_name'),
+            'features' => $features,
+            'rules' => array_map(function ($r) {
+                $x = Rules::row($r);
+                return array_intersect_key($x, array_flip(['name', 'trigger_type', 'trigger_value', 'conditions', 'actions', 'enabled', 'show_in_menu', 'priority']));
+            }, $rules),
+        ];
+        if ($g) {
+            $st = Repo::settings($g);
+            $out['settings'] = $st;
+        } else {
+            $out['commands'] = json_decode((string)Settings::get('builtin_cmds'), true) ?: null;
+            $out['keyboard'] = json_decode((string)Settings::get('bot_keyboard'), true) ?: null;
+        }
+        Repo::log($g ? (int)$g['id'] : null, $u['username'], 'settings', null, 'Xuất file cài đặt');
+        return ['file' => $out, 'name' => 'cai-dat-' . ($g ? preg_replace('/[^a-z0-9]+/', '-', strtolower(iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $g['title']) ?: 'nhom')) : 'chung') . '-' . date('Ymd') . '.json'];
+    }
+
+    /**
+     * Nhập cài đặt từ file đã xuất (của nhóm này, nhóm khác hoặc cài đặt chung).
+     * parts: settings (cài đặt nhóm) / features (tính năng) / rules (lệnh tự tạo). dry = true → chỉ xem trước.
+     */
+    private function settingsImport(): array
+    {
+        [$u, $g] = $this->featScope();
+        $f = $this->in('file');
+        if (is_string($f)) $f = json_decode($f, true);
+        if (!is_array($f) || ($f['app'] ?? '') !== self::EXPORT_APP) fail('File không đúng định dạng cài đặt của hệ thống này');
+        $parts = array_values(array_intersect((array)$this->in('parts', ['settings', 'features', 'rules']), ['settings', 'features', 'rules', 'commands']));
+        $feats = array_intersect_key(is_array($f['features'] ?? null) ? $f['features'] : [], GroupFeature::FEATURES);
+        $rules = is_array($f['rules'] ?? null) ? array_slice($f['rules'], 0, 300) : [];
+        $preview = [
+            'type' => $f['type'] ?? '?', 'source' => (string)($f['source'] ?? ''), 'version' => (string)($f['version'] ?? ''), 'exported_at' => (string)($f['exported_at'] ?? ''),
+            'features' => array_map(fn($k) => ['key' => $k, 'name' => GroupFeature::FEATURES[$k][1], 'enabled' => !empty($feats[$k]['enabled'])], array_keys($feats)),
+            'rules' => count($rules), 'has_settings' => $g && is_array($f['settings'] ?? null), 'has_commands' => !$g && is_array($f['commands'] ?? null),
+        ];
+        if ($this->in('dry')) return ['preview' => $preview];
+
+        $done = []; $errors = [];
+        if (in_array('settings', $parts, true) && $g && is_array($f['settings'] ?? null)) {
+            Repo::saveSettings($g, $f['settings']);
+            $done[] = 'Cài đặt nhóm';
+        }
+        if (in_array('features', $parts, true)) {
+            foreach ($feats as $key => $cfg) {
+                if (!is_array($cfg)) continue;
+                $cls = GroupFeature::FEATURES[$key][0];
+                unset($cfg['groups'], $cfg['_custom']);
+                try { $cls::save($cfg, $g, $u['username']); $done[] = GroupFeature::FEATURES[$key][1]; }
+                catch (Throwable $e) { $errors[] = GroupFeature::FEATURES[$key][1] . ': ' . $e->getMessage(); }
+            }
+        }
+        if (in_array('rules', $parts, true) && $rules) {
+            if ($g) Access::require($u, 'rules', (int)$g['id']);
+            $mode = $this->in('rules_mode') === 'replace' ? 'replace' : 'add';
+            $scope = $g ? 'group_id = ' . (int)$g['id'] : 'group_id IS NULL';
+            if ($mode === 'replace') DB::run("DELETE FROM tg_rules WHERE $scope");
+            $added = 0; $skipped = 0;
+            foreach ($rules as $r) {
+                if (!is_array($r)) continue;
+                try {
+                    $data = Rules::sanitize(['group_id' => $g ? (int)$g['id'] : null] + $r);
+                    $data['group_id'] = $g ? (int)$g['id'] : null;
+                    if ($data['trigger_type'] === 'command' && DB::val("SELECT id FROM tg_rules WHERE trigger_type = 'command' AND trigger_value = ? AND $scope", [$data['trigger_value']])) { $skipped++; continue; }
+                    $data['created_at'] = now();
+                    DB::insert('tg_rules', $data);
+                    $added++;
+                } catch (Throwable $e) { $errors[] = 'Lệnh “' . ($r['name'] ?? '?') . '”: ' . $e->getMessage(); }
+            }
+            $done[] = "$added lệnh tự tạo" . ($skipped ? " (bỏ qua $skipped lệnh trùng tên)" : '');
+            Rules::syncMenus();
+        }
+        if (in_array('commands', $parts, true) && !$g) {
+            if (is_array($f['commands'] ?? null)) { Settings::set('builtin_cmds', json_encode($f['commands'], JSON_UNESCAPED_UNICODE)); $done[] = 'Lệnh mặc định'; }
+            if (is_array($f['keyboard'] ?? null)) { Settings::set('bot_keyboard', json_encode($f['keyboard'], JSON_UNESCAPED_UNICODE)); $done[] = 'Nút bàn phím bot'; }
+            Rules::syncMenus();
+        }
+        Repo::log($g ? (int)$g['id'] : null, $u['username'], 'settings', null, 'Nhập cài đặt từ file “' . mb_substr($preview['source'], 0, 60) . '”: ' . implode(', ', $done));
+        return ['done' => $done, 'errors' => array_slice($errors, 0, 20)];
+    }
+
     // ================= Cấm tên chứa từ cấm =================
     private function nameGuard(): array
     {
-        Auth::requireAdmin();
+        [, $g] = $this->featScope();
         $err = (string)Settings::get('name_guard_error');
         $since = now() - 7 * 86400;
         return [
-            'config' => NameGuard::config(), 'actions' => NameGuard::ACTIONS, 'suggest' => NameGuard::SUGGEST, 'error' => $err !== '' ? $err : null,
-            'week' => (int)DB::val("SELECT COUNT(*) FROM app_logs WHERE created_at >= ? AND (action = 'name_ban' OR meta LIKE ?)", [$since, '%"name_guard":1%']),
-            'groups' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title'], 'bot_admin' => (int)$g['bot_is_admin']], DB::all('SELECT id, title, bot_is_admin FROM tg_groups WHERE active = 1 ORDER BY title')),
+            'config' => NameGuard::config($g), 'scope' => $this->featInfo('name_guard', $g), 'actions' => NameGuard::ACTIONS, 'suggest' => NameGuard::SUGGEST, 'error' => $err !== '' ? $err : null,
+            'week' => (int)DB::val("SELECT COUNT(*) FROM app_logs WHERE created_at >= ? AND (action = 'name_ban' OR meta LIKE ?)" . ($g ? ' AND group_id = ' . (int)$g['id'] : ''), [$since, '%"name_guard":1%']),
+            'groups' => $this->featGroups($g),
         ];
     }
 
     private function nameGuardSave(): array
     {
-        $u = Auth::requireAdmin();
-        $c = NameGuard::save((array)$this->in('config', []));
+        [$u, $g] = $this->featScope();
+        $c = NameGuard::save((array)$this->in('config', []), $g, $u['username']);
         Settings::set('name_guard_error', '');
-        Repo::log(null, $u['username'], 'system', null, 'Cấm tên chứa từ cấm: ' . ($c['enabled'] ? 'bật · ' . count($c['words']) . ' từ · ' . NameGuard::ACTIONS[$c['action']] : 'tắt'));
+        Repo::log($g ? (int)$g['id'] : null, $u['username'], 'system', null, 'Cấm tên chứa từ cấm: ' . ($c['enabled'] ? 'bật · ' . count($c['words']) . ' từ · ' . NameGuard::ACTIONS[$c['action']] : 'tắt'));
         return ['config' => $c];
     }
 
     /** Thử 1 tên với cấu hình đang sửa (chưa lưu) */
     private function nameGuardTest(): array
     {
-        Auth::requireAdmin();
+        $this->featScope();
         $c = $this->nameGuardDraft();
         $name = trim(mb_substr((string)$this->in('name', ''), 0, 128));
         $uname = ltrim(trim(mb_substr((string)$this->in('username', ''), 0, 64)), '@');
@@ -2524,27 +2706,32 @@ class Api
 
     private function nameGuardDraft(): array
     {
-        $c = NameGuard::config();
+        $gid = $this->int('group_id');
+        $c = NameGuard::config($gid ? Repo::group($gid) : null);
         $d = (array)$this->in('config', []);
         foreach (['smart', 'check_name', 'check_username', 'impersonate'] as $k) if (array_key_exists($k, $d)) $c[$k] = !empty($d[$k]);
         if (isset($d['words'])) $c['words'] = array_values(array_filter(array_map('trim', preg_split('/[\r\n,]+/u', (string)$d['words'])), 'strlen'));
         if (isset($d['allow_ids'])) { preg_match_all('/\d{3,20}/', (string)$d['allow_ids'], $mm); $c['allow_ids'] = $mm[0]; }
         if (isset($d['groups'])) $c['groups'] = array_map('intval', (array)$d['groups']);
+        if ($gid) $c['groups'] = [$gid]; // chế độ nhóm: chỉ quét nhóm này
         return $c;
     }
 
     private function nameGuardScan(): array
     {
-        Auth::requireAdmin();
+        $this->featScope();
         $c = $this->nameGuardDraft();
         if (!$c['words'] && !$c['impersonate']) fail('Chưa có từ cấm nào để quét');
-        return ['items' => NameGuard::scan($c), 'action' => NameGuard::ACTIONS[NameGuard::config()['action']]];
+        $gid = $this->int('group_id');
+        return ['items' => NameGuard::scan($c, $gid ?: null), 'action' => NameGuard::ACTIONS[$c['action']]];
     }
 
     private function nameGuardPunish(): array
     {
-        $u = Auth::requireAdmin();
-        $r = NameGuard::punishMembers((array)$this->in('ids', []), $this->nameGuardDraft());
+        [$u, $g] = $this->featScope();
+        $ids = (array)$this->in('ids', []);
+        if ($g) $ids = array_column(DB::all('SELECT id FROM tg_members WHERE group_id = ? AND id IN (' . (implode(',', array_map('intval', $ids)) ?: '0') . ')', [$g['id']]), 'id'); // chỉ thành viên nhóm mình
+        $r = NameGuard::punishMembers($ids, $this->nameGuardDraft());
         Repo::log(null, $u['username'], 'system', null, 'Cấm tên chứa từ cấm: xử lý ' . $r['ok'] . ' thành viên từ danh sách quét');
         return $r;
     }
@@ -2552,30 +2739,30 @@ class Api
     // ================= Đóng dấu ảnh chống copy =================
     private function watermark(): array
     {
-        Auth::requireAdmin();
+        [, $g] = $this->featScope();
         $err = (string)Settings::get('watermark_error');
         return [
-            'config' => Watermark::config(), 'defaults' => Watermark::DEFAULTS, 'styles' => Watermark::STYLES, 'ready' => Watermark::ready(),
+            'config' => Watermark::config($g), 'scope' => $this->featInfo('watermark', $g), 'defaults' => Watermark::DEFAULTS, 'styles' => Watermark::STYLES, 'ready' => Watermark::ready(),
             'count' => (int)Settings::get('watermark_count'), 'error' => $err !== '' ? $err : null,
-            'groups' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title'], 'bot_admin' => (int)$g['bot_is_admin']], DB::all('SELECT id, title, bot_is_admin FROM tg_groups WHERE active = 1 ORDER BY title')),
+            'groups' => $this->featGroups($g),
         ];
     }
 
     private function watermarkSave(): array
     {
-        $u = Auth::requireAdmin();
-        $c = Watermark::save((array)$this->in('config', []));
+        [$u, $g] = $this->featScope();
+        $c = Watermark::save((array)$this->in('config', []), $g, $u['username']);
         Settings::set('watermark_error', '');
-        Repo::log(null, $u['username'], 'system', null, 'Đóng dấu ảnh: ' . ($c['enabled'] ? 'bật · ' . Watermark::STYLES[$c['style']] : 'tắt'));
+        Repo::log($g ? (int)$g['id'] : null, $u['username'], 'system', null, 'Đóng dấu ảnh: ' . ($c['enabled'] ? 'bật · ' . Watermark::STYLES[$c['style']] : 'tắt'));
         return ['config' => $c];
     }
 
     /** Xem trước: trộn cấu hình đang sửa (chưa lưu) + ảnh mẫu (tuỳ chọn, base64) */
     private function watermarkPreview(): array
     {
-        Auth::requireAdmin();
+        [, $g0] = $this->featScope();
         $in = (array)$this->in('config', []);
-        $c = Watermark::config();
+        $c = Watermark::config($g0);
         foreach (['style', 'color'] as $k) if (isset($in[$k])) $c[$k] = (string)$in[$k];
         if (!isset(Watermark::STYLES[$c['style']])) $c['style'] = 'tile';
         foreach (['opacity' => [5, 100], 'size' => [2, 12]] as $k => [$a, $b]) if (isset($in[$k])) $c[$k] = max($a, min($b, (int)$in[$k]));
@@ -2595,39 +2782,40 @@ class Api
     // ================= Captcha khi vào nhóm =================
     private function captcha(): array
     {
-        Auth::requireAdmin();
+        [, $g] = $this->featScope();
         $since = now() - 7 * 86400;
-        $cnt = fn($a) => (int)DB::val('SELECT COUNT(*) FROM app_logs WHERE action = ? AND created_at >= ?', [$a, $since]);
+        $gw = $g ? ' AND group_id = ' . (int)$g['id'] : '';
+        $cnt = fn($a) => (int)DB::val('SELECT COUNT(*) FROM app_logs WHERE action = ? AND created_at >= ?' . $gw, [$a, $since]);
         return [
-            'config' => Captcha::config(), 'defaults' => Captcha::DEFAULTS, 'modes' => Captcha::MODES, 'fail' => Captcha::FAIL,
-            'groups' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title'], 'bot_admin' => (int)$g['bot_is_admin']], DB::all('SELECT id, title, bot_is_admin FROM tg_groups WHERE active = 1 ORDER BY title')),
-            'stats' => ['asked' => $cnt('captcha'), 'passed' => $cnt('captcha_ok'), 'failed' => $cnt('captcha_fail'), 'pending' => (int)DB::val('SELECT COUNT(*) FROM captcha_pending')],
+            'config' => Captcha::config($g), 'scope' => $this->featInfo('captcha', $g), 'defaults' => Captcha::DEFAULTS, 'modes' => Captcha::MODES, 'fail' => Captcha::FAIL,
+            'groups' => $this->featGroups($g),
+            'stats' => ['asked' => $cnt('captcha'), 'passed' => $cnt('captcha_ok'), 'failed' => $cnt('captcha_fail'), 'pending' => (int)DB::val('SELECT COUNT(*) FROM captcha_pending WHERE 1=1' . $gw)],
         ];
     }
 
     private function captchaSave(): array
     {
-        $u = Auth::requireAdmin();
-        $c = Captcha::save((array)$this->in('config', []));
-        Repo::log(null, $u['username'], 'system', null, 'Captcha: ' . ($c['enabled'] ? 'bật · ' . Captcha::MODES[$c['mode']] . ' · ' . $c['timeout'] . 's' : 'tắt'));
+        [$u, $g] = $this->featScope();
+        $c = Captcha::save((array)$this->in('config', []), $g, $u['username']);
+        Repo::log($g ? (int)$g['id'] : null, $u['username'], 'system', null, 'Captcha: ' . ($c['enabled'] ? 'bật · ' . Captcha::MODES[$c['mode']] . ' · ' . $c['timeout'] . 's' : 'tắt'));
         return ['config' => $c];
     }
 
     // ================= Chống raid + duyệt yêu cầu tham gia =================
     private function antiRaid(): array
     {
-        Auth::requireAdmin();
+        [, $sg] = $this->featScope();
         $groups = [];
-        foreach (DB::all('SELECT * FROM tg_groups WHERE active = 1 ORDER BY title') as $g) {
+        foreach ($sg ? [$sg] : DB::all('SELECT * FROM tg_groups WHERE active = 1 ORDER BY title') as $g) {
             $st = AntiRaid::state((int)$g['id']);
             $groups[] = ['id' => (int)$g['id'], 'title' => $g['title'], 'bot_admin' => (int)$g['bot_is_admin'], 'public' => (bool)$g['username'],
                 'locked' => $st && (int)$st['until'] > now(), 'until' => $st ? (int)$st['until'] : null, 'why' => $st['why'] ?? null,
                 'pending' => (int)DB::val("SELECT COUNT(*) FROM join_requests WHERE group_id = ? AND status = 'pending'", [$g['id']]),
                 'joins_hour' => (int)DB::val('SELECT COUNT(*) FROM join_events WHERE group_id = ? AND created_at > ?', [$g['id'], now() - 3600])];
         }
-        $reqs = DB::all("SELECT r.*, g.title FROM join_requests r JOIN tg_groups g ON g.id = r.group_id WHERE r.status = 'pending' ORDER BY r.id DESC LIMIT 200");
+        $reqs = DB::all("SELECT r.*, g.title FROM join_requests r JOIN tg_groups g ON g.id = r.group_id WHERE r.status = 'pending'" . ($sg ? ' AND r.group_id = ' . (int)$sg['id'] : '') . " ORDER BY r.id DESC LIMIT 200");
         return [
-            'config' => AntiRaid::config(), 'defaults' => AntiRaid::DEFAULTS, 'actions' => AntiRaid::ACTIONS, 'groups' => $groups,
+            'config' => AntiRaid::config($sg), 'scope' => $this->featInfo('antiraid', $sg), 'defaults' => AntiRaid::DEFAULTS, 'actions' => AntiRaid::ACTIONS, 'groups' => $groups,
             'requests' => array_map(fn($r) => ['id' => (int)$r['id'], 'group_id' => (int)$r['group_id'], 'group' => $r['title'], 'tg_user_id' => (string)$r['tg_user_id'],
                 'name' => $r['name'], 'username' => $r['username'], 'bio' => $r['bio'], 'created_at' => (int)$r['created_at']], $reqs),
             'decided' => (int)DB::val("SELECT COUNT(*) FROM join_requests WHERE status = 'approved' AND decided_by = 'Bot (tự duyệt)' AND decided_at > ?", [now() - 86400]),
@@ -2636,17 +2824,17 @@ class Api
 
     private function antiRaidSave(): array
     {
-        $u = Auth::requireAdmin();
-        $c = AntiRaid::save((array)$this->in('config', []));
-        Repo::log(null, $u['username'], 'system', null, 'Chống raid: ' . ($c['enabled'] ? "bật · {$c['threshold']} người / {$c['window']}s → khoá {$c['lock_minutes']} phút" : 'tắt'));
+        [$u, $g] = $this->featScope();
+        $c = AntiRaid::save((array)$this->in('config', []), $g, $u['username']);
+        Repo::log($g ? (int)$g['id'] : null, $u['username'], 'system', null, 'Chống raid: ' . ($c['enabled'] ? "bật · {$c['threshold']} người / {$c['window']}s → khoá {$c['lock_minutes']} phút" : 'tắt'));
         return ['config' => $c];
     }
 
     /** Khoá / mở khoá tay (minutes = 0 → mở) */
     private function antiRaidLock(): array
     {
-        $u = Auth::requireAdmin();
         $g = $this->loadGroup();
+        $u = $this->gate('moderate', $g);
         $api = Repo::apiForGroup($g) ?: fail('Nhóm chưa có bot hoạt động');
         $min = $this->int('minutes');
         if ($min > 0) AntiRaid::lock($api, $g, min(1440, $min), 'Admin khoá tay', 0, $u['username']);
@@ -2656,9 +2844,9 @@ class Api
 
     private function antiRaidDecide(): array
     {
-        $u = Auth::requireAdmin();
         $r = DB::get('SELECT * FROM join_requests WHERE id = ?', [$this->int('id')]) ?: fail('Không tìm thấy yêu cầu', 404);
         $g = Repo::group((int)$r['group_id']) ?: fail('Không tìm thấy nhóm', 404);
+        $u = $this->gate('moderate', $g);
         $api = Repo::apiForGroup($g) ?: fail('Nhóm chưa có bot hoạt động');
         AntiRaid::decide($api, $g, (int)$r['id'], (bool)$this->in('approve'), $u['username']);
         return [];
@@ -2666,8 +2854,8 @@ class Api
 
     private function antiRaidDecideAll(): array
     {
-        $u = Auth::requireAdmin();
         $g = $this->loadGroup();
+        $u = $this->gate('moderate', $g);
         $api = Repo::apiForGroup($g) ?: fail('Nhóm chưa có bot hoạt động');
         @set_time_limit(120);
         $ok = 0; $err = 0;
