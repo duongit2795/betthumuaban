@@ -26,7 +26,10 @@ class BotHandler
         elseif (isset($u['message_reaction'])) $this->onReaction($u['message_reaction']);
         elseif (isset($u['chat_join_request'])) {
             $jr = $u['chat_join_request'];
-            if ($this->isGroup($jr['chat'])) AntiRaid::onRequest($this->api, Repo::upsertGroup($jr['chat'], (int)$this->bot['id']), $jr);
+            if ($this->isGroup($jr['chat'])) {
+                $g = Repo::upsertGroup($jr['chat'], (int)$this->bot['id']);
+                if (!NameGuard::onRequest($this->api, $g, $jr)) AntiRaid::onRequest($this->api, $g, $jr); // tên chứa từ cấm → từ chối luôn
+            }
         }
         elseif (isset($u['callback_query'])) {
             $cbq = $u['callback_query'];
@@ -89,6 +92,7 @@ class BotHandler
         $isIn = $st === 'member' || ($st === 'restricted' && !empty($nm['is_member']));
         if ($wasOut && $isIn && empty($user['is_bot'])) {
             $by = (int)($cm['from']['id'] ?? 0);
+            if (!NameGuard::check($this->api, $group, $user, in_array($st, ['administrator', 'creator'], true) || $this->isAdmin($group, (int)$user['id']), 'join'))
             if (!AntiRaid::onJoin($this->api, $group, $user, in_array($st, ['administrator', 'creator'], true), $by && $by != $user['id'] ? $by : null, fn(int $id) => $this->isAdmin($group, $id)))
             Captcha::start($this->api, (int)$this->bot['id'], $group, $user, $by && $by != $user['id'] ? $by : null, fn(int $id) => $this->isAdmin($group, $id));
         } elseif (in_array($st, ['left', 'kicked'], true)) {
@@ -193,6 +197,9 @@ class BotHandler
 
         if ($edited) return;
 
+        // Tên / @username chứa từ cấm (người đổi tên sau khi vào, thành viên cũ)
+        if (empty($msg['sender_chat']) && NameGuard::check($this->api, $group, $from, $isAdmin, 'message', $msg)) return;
+
         // Yêu cầu đặt Username Telegram (Lệnh mặc định → Tính năng mặc định)
         if (empty($msg['sender_chat']) && UsernameGuard::check($this->api, (int)$this->bot['id'], $group, $from, $msg, $isAdmin)) return;
 
@@ -267,8 +274,10 @@ class BotHandler
         $gid = (int)$group['id'];
         $names = [];
         $captcha = []; // người phải xác minh: chào sau khi qua captcha
+        $nameHit = []; // bị xử lý vì tên chứa từ cấm
         foreach ($msg['new_chat_members'] as $u) {
             if ($u['id'] == $this->botTgId) continue;
+            if (NameGuard::check($this->api, $group, $u, $this->isAdmin($group, (int)$u['id']), 'join')) { $nameHit[$u['id']] = true; continue; } // tên chứa từ cấm
             $addedBy = !empty($msg['from']) && $msg['from']['id'] != $u['id'] ? (int)$msg['from']['id'] : null;
             if (AntiRaid::onJoin($this->api, $group, $u, $this->isAdmin($group, (int)$u['id']), $addedBy, fn(int $id) => $this->isAdmin($group, $id))) { $captcha[$u['id']] = true; continue; } // chống raid đã xử lý
             if (Captcha::start($this->api, (int)$this->bot['id'], $group, $u, $addedBy, fn(int $id) => $this->isAdmin($group, $id))) $captcha[$u['id']] = true;
@@ -284,7 +293,7 @@ class BotHandler
             if (empty($u['is_bot'])) $names[] = $m;
         }
         DB::run('UPDATE tg_groups SET member_count = member_count + ? WHERE id = ?', [count($names), $gid]);
-        if ($s['delete_service_messages'] || ($captcha && Captcha::config()['delete_join'])) $this->del($msg['chat']['id'], $msg['message_id']);
+        if ($s['delete_service_messages'] || ($captcha && Captcha::config()['delete_join']) || ($nameHit && NameGuard::config()['delete_msg'])) $this->del($msg['chat']['id'], $msg['message_id']);
         if ($s['welcome_enabled'] && $names) {
             foreach ($names as $m) {
                 if (isset($captcha[$m['tg_user_id']])) continue;
@@ -293,6 +302,7 @@ class BotHandler
         }
         // Thành viên mới chưa có username → xử lý theo cài đặt "Yêu cầu đặt Username"
         foreach ($msg['new_chat_members'] as $u) {
+            if (isset($nameHit[$u['id']])) continue;
             if ($u['id'] != $this->botTgId && !isset($captcha[$u['id']])) UsernameGuard::check($this->api, (int)$this->bot['id'], $group, $u, null, false, true);
             if ($u['id'] != $this->botTgId) Learn::onJoin($group, $u);
         }

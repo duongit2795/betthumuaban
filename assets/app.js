@@ -121,7 +121,7 @@
     settings: ['Cài đặt', 'settings', ''], bot_added: ['Thêm bot vào nhóm', 'bot', 'green'], bot_removed: ['Bot rời nhóm', 'bot', 'red'],
     bot_add: ['Thêm bot', 'bot', 'blue'], bot_delete: ['Xoá bot', 'bot', 'red'], bot_on: ['Bật bot', 'power', 'green'], bot_off: ['Tắt bot', 'power', ''],
     rule: ['Lệnh tự tạo', 'terminal', 'blue'], ad_post: ['Quảng cáo', 'megaphone', 'blue'], username: ['Nhắc đặt username', 'user', 'amber'], login: ['Đăng nhập', 'key', 'green'], update: ['Cập nhật hệ thống', 'download', 'blue'], system: ['Hệ thống', 'settings', ''], pin: ['Ghim tin', 'pin', 'blue'], unpin: ['Bỏ ghim', 'pin', ''],
-    gate: ['Chưa đủ điều kiện chat', 'lock', 'amber'], captcha: ['Captcha', 'shield', 'blue'], call_admin: ['Gọi admin', 'alert', 'amber'], raid: ['Khoá chống raid', 'shield', 'red'], raid_end: ['Mở khoá chống raid', 'shield', 'green'], captcha_ok: ['Qua captcha', 'shield', 'green'], captcha_fail: ['Không qua captcha', 'shield', 'red'], exchange: ['Đổi điểm', 'refresh', 'green'], gift: ['Mã quà tặng', 'star', 'green'], vip: ['VIP', 'trophy', 'amber'], checkin: ['Điểm danh', 'calendar', 'green'], tag: ['Đổi tag', 'tagi', 'blue'], learn: ['Nhắc học tập', 'book', 'amber'], learn_done: ['Hoàn thành bài học', 'book', 'green'],
+    gate: ['Chưa đủ điều kiện chat', 'lock', 'amber'], captcha: ['Captcha', 'shield', 'blue'], name_ban: ['Tên chứa từ cấm', 'shield', 'red'], call_admin: ['Gọi admin', 'alert', 'amber'], raid: ['Khoá chống raid', 'shield', 'red'], raid_end: ['Mở khoá chống raid', 'shield', 'green'], captcha_ok: ['Qua captcha', 'shield', 'green'], captcha_fail: ['Không qua captcha', 'shield', 'red'], exchange: ['Đổi điểm', 'refresh', 'green'], gift: ['Mã quà tặng', 'star', 'green'], vip: ['VIP', 'trophy', 'amber'], checkin: ['Điểm danh', 'calendar', 'green'], tag: ['Đổi tag', 'tagi', 'blue'], learn: ['Nhắc học tập', 'book', 'amber'], learn_done: ['Hoàn thành bài học', 'book', 'green'],
     payments_settings: ['Cài đặt nạp tiền', 'bank', ''], wallet_assign: ['Cộng tiền tay', 'wallet', 'green'], wallet_adjust: ['Điều chỉnh số dư', 'wallet', 'blue'],
   };
 
@@ -350,7 +350,7 @@
     if (isWebAdmin()) {
       return {
         tab: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/logs', 'list', 'Nhật ký'], ['/more', 'grid', 'Thêm']],
-        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh'], ['/ads', 'megaphone', 'Quảng cáo'], ['/learn', 'book', 'Học tập'], ['/antiraid', 'shield', 'Chống raid'], ['/captcha', 'shield', 'Captcha vào nhóm'], ['/watermark', 'image', 'Đóng dấu ảnh'], ['/gates', 'lock', 'Điều kiện chat'], ['/tags', 'tagi', 'Tag thành viên'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/payments', 'bank', 'Nạp tiền & ân xá'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ['/checkin', 'calendar', 'Điểm danh'], ['/exchange', 'refresh', 'Đổi điểm'], ['/vip', 'trophy', 'Gói VIP'], ['/giftcode', 'star', 'Mã quà tặng'], ...payNav(), ['/account', 'user', 'Tài khoản']],
+        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh'], ['/ads', 'megaphone', 'Quảng cáo'], ['/learn', 'book', 'Học tập'], ['/antiraid', 'shield', 'Chống raid'], ['/captcha', 'shield', 'Captcha vào nhóm'], ['/watermark', 'image', 'Đóng dấu ảnh'], ['/nameguard', 'shield', 'Cấm tên chứa từ cấm'], ['/gates', 'lock', 'Điều kiện chat'], ['/tags', 'tagi', 'Tag thành viên'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/payments', 'bank', 'Nạp tiền & ân xá'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ['/checkin', 'calendar', 'Điểm danh'], ['/exchange', 'refresh', 'Đổi điểm'], ['/vip', 'trophy', 'Gói VIP'], ['/giftcode', 'star', 'Mã quà tặng'], ...payNav(), ['/account', 'user', 'Tài khoản']],
       };
     }
     const ck = S.pay?.checkin ? [['/checkin', 'calendar', 'Điểm danh']] : [];
@@ -380,7 +380,7 @@
     const path = current();
     const direct = (p) => (p === '/' ? path === '/' : path === p || path.startsWith(p + '/') || (p === '/groups' && path.startsWith('/group/')) || (p === '/rules' && path === '/commands'));
     const inTabs = items.tab.some(([p]) => p !== '/more' && direct(p));
-    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments', '/learn', '/keyboard', '/gates', '/mylogs', '/checkin', '/tags', '/tagshop', '/exchange', '/giftcode', '/vip', '/captcha', '/antiraid', '/watermark'].some((x) => path.startsWith(x)));
+    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments', '/learn', '/keyboard', '/gates', '/mylogs', '/checkin', '/tags', '/tagshop', '/exchange', '/giftcode', '/vip', '/captcha', '/antiraid', '/watermark', '/nameguard'].some((x) => path.startsWith(x)));
     $('#tabbar').innerHTML = items.tab.map(([p, ic, t]) => `<a href="#${p}" class="${isActive(p) ? 'active' : ''}">${icon(ic)}<span>${t}</span></a>`).join('');
     $('#sidebar').innerHTML = `<div class="brand"><img src="assets/icon.svg" alt="">${esc(S.site)}</div>`
       + items.side.map(([p, ic, t]) => `<a href="#${p}" class="nav ${isActive(p) && !(p === '/more') ? 'active' : ''}">${icon(ic)}${t}</a>`).join('')
@@ -2785,6 +2785,7 @@
         <a class="list-item" href="#/learn">${icon('book')}<div class="grow">Học tập bắt buộc</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/antiraid">${icon('shield')}<div class="grow">Chống raid & duyệt thành viên</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/captcha">${icon('shield')}<div class="grow">Captcha khi vào nhóm</div><span class="chev">${icon('chevron')}</span></a>
+        <a class="list-item" href="#/nameguard">${icon('shield')}<div class="grow">Cấm tên chứa từ cấm</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/watermark">${icon('image')}<div class="grow">Đóng dấu ảnh chống copy</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/gates">${icon('lock')}<div class="grow">Điều kiện nhắn tin giữa các nhóm</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/tags">${icon('tagi')}<div class="grow">Tag thành viên</div><span class="chev">${icon('chevron')}</span></a>` : ''}
@@ -4244,6 +4245,120 @@
       },
     };
   }, { title: 'Gói VIP' });
+
+  // ================= Cấm tên chứa từ cấm =================
+  route('/nameguard', async () => {
+    const d = await api('nameguard');
+    const c = d.config;
+    let sel = [...c.groups], action = c.action, timer = 0, scanned = [];
+    const draft = () => { const v = formData($('#fng')); return { ...v, groups: sel }; };
+    const test = async (root) => {
+      const name = $('[data-tname]', root).value, username = $('[data-tuser]', root).value, out = $('[data-tres]', root);
+      if (!name.trim() && !username.trim()) { out.innerHTML = '<span class="muted">Nhập tên để thử…</span>'; return; }
+      try {
+        const r = await api('nameguard/test', { config: draft(), name, username, group_id: sel[0] || 0 });
+        out.innerHTML = r.why ? `<span style="color:var(--danger)">🚫 ${esc(r.why)}</span> → ${esc(d.actions[action])}` : '<span style="color:var(--success)">✅ Tên hợp lệ</span>';
+        if (r.norm) out.innerHTML += `<div class="xs muted" style="margin-top:4px">Bot đọc tên thành: <code>${esc(r.norm) || '(trống)'}</code></div>`;
+      } catch (err) { out.textContent = err.message; }
+    };
+    const scanList = () => scanned.length ? `
+      <label class="row" style="gap:8px;margin:8px 0"><input type="checkbox" data-sall checked> <b class="small">Chọn tất cả (${scanned.length})</b></label>
+      <div class="list" style="max-height:360px;overflow:auto">${scanned.map((m) => `<label class="list-item" style="gap:10px"><input type="checkbox" data-sid="${m.id}" checked>
+        <div class="grow" style="min-width:0"><div class="small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${esc(m.name || '(không tên)')}</b>${m.username ? ` <span class="muted">@${esc(m.username)}</span>` : ''}</div>
+        <div class="xs muted">${esc(m.group)} · ID ${esc(m.tg_user_id)}${m.status === 'muted' ? ' · đang cấm chat' : ''}</div><div class="xs" style="color:var(--danger)">${esc(m.why)}</div></div></label>`).join('')}</div>
+      <button type="button" class="btn danger block" data-spunish style="margin-top:8px">Xử lý các thành viên đã chọn (${esc(d.actions[action])})</button>` : '';
+    return {
+      title: 'Cấm tên chứa từ cấm',
+      html: `
+      <div class="alert info" style="margin-bottom:12px">${icon('shield')}<div class="xs">Người có <b>tên hoặc @username chứa từ cấm</b> (VD “Admin”, “Hỗ trợ”, “CSKH”) sẽ bị xử lý ngay khi <b>vào nhóm</b>, khi <b>nhắn tin</b> (người đổi tên sau khi vào) và bị <b>từ chối yêu cầu tham gia</b>. Chặn kẻ giả mạo admin để lừa đảo. Bot cần quyền <b>Cấm thành viên</b> và <b>Xoá tin nhắn</b>.</div></div>
+      ${d.error ? `<div class="alert warn" style="margin-bottom:12px">${icon('alert')}<div class="xs">Lỗi gần nhất: ${esc(d.error)}</div></div>` : ''}
+      <div class="xs muted" style="margin:-4px 0 12px">Đã xử lý 7 ngày qua: <b>${num(d.week)}</b> người</div>
+      <div class="kb-layout">
+      <form class="stack" id="fng">
+        <div class="card">${sw('enabled', c.enabled, 'Bật cấm tên chứa từ cấm')}</div>
+        <div class="card card-pad stack">
+          <label class="field"><span class="lbl">Danh sách từ cấm <span class="xs muted">(mỗi dòng 1 từ)</span></span><textarea class="input" name="words" rows="6" placeholder="admin&#10;hỗ trợ&#10;cskh">${esc(c.words.join('\n'))}</textarea>
+            <div class="hint">Không phân biệt hoa thường, có dấu / không dấu. Tránh từ quá ngắn (VD “ad”) vì dễ trúng tên người bình thường.</div></label>
+          <div class="field"><span class="lbl">Gợi ý (bấm để thêm)</span><div class="chips" style="flex-wrap:wrap">${d.suggest.map((w) => `<button type="button" class="chip" data-sg="${esc(w)}">+ ${esc(w)}</button>`).join('')}</div></div>
+        </div>
+        <div class="card">${sw('smart', c.smart, 'So khớp thông minh (chống lách luật)')}<div class="xs muted" style="padding:0 16px 12px;margin-top:-4px">Bắt được cả “A.d.m.i.n”, “4dm1n”, “𝐀𝐝𝐦𝐢𝐧”, “Аdmin” (chữ Nga), “Ho Tro” = “Hỗ Trợ”, nhưng không bắt nhầm “Hồ Trọng”.</div>
+          ${sw('check_name', c.check_name, 'Kiểm tra tên hiển thị')}${sw('check_username', c.check_username, 'Kiểm tra @username')}${sw('impersonate', c.impersonate, 'Chặn tên trùng / giả quản trị viên của nhóm')}</div>
+        <div class="card card-pad stack">
+          <div class="field"><span class="lbl">Xử lý người vi phạm</span><div class="segmented">${Object.entries({ ban: '⛔ Cấm', kick: '👢 Đuổi', mute: '🔇 Cấm chat' }).map(([k, l]) => `<button type="button" data-na="${k}" class="${action === k ? 'active' : ''}" title="${esc(d.actions[k])}">${l}</button>`).join('')}</div>
+            <div class="hint" data-nahint>${esc(d.actions[action])}</div></div>
+          <label class="field" data-mutef style="${action === 'mute' ? '' : 'display:none'}"><span class="lbl">Thời gian cấm chat (phút, 0 = vĩnh viễn)</span><input class="input" name="mute_minutes" inputmode="numeric" value="${c.mute_minutes}"></label>
+        </div>
+        <div class="card">${sw('on_join', c.on_join, 'Kiểm tra khi vào nhóm')}${sw('on_message', c.on_message, 'Kiểm tra khi nhắn tin (bắt người đổi tên sau khi vào)')}${sw('on_request', c.on_request, 'Từ chối yêu cầu tham gia có tên vi phạm')}${sw('delete_msg', c.delete_msg, 'Xoá tin nhắn / tin “đã tham gia” của người vi phạm')}${sw('notify', c.notify, 'Báo vào nhóm khi xử lý')}</div>
+        <div class="card card-pad stack">
+          <div class="field"><span class="lbl">Áp dụng cho nhóm <span class="xs muted">(không chọn = tất cả)</span></span><div class="chips" style="flex-wrap:wrap">${d.groups.map((g) => `<button type="button" class="chip ${sel.includes(g.id) ? 'active' : ''}" data-ng="${g.id}">${esc(g.title)}${g.bot_admin ? '' : ' ⚠️'}</button>`).join('') || '<span class="xs muted">Chưa có nhóm</span>'}</div>
+            ${d.groups.some((g) => !g.bot_admin) ? '<div class="hint">⚠️ = bot chưa là quản trị viên ở nhóm đó, không xử lý được.</div>' : ''}</div>
+          <label class="field"><span class="lbl">Bỏ qua các ID Telegram <span class="xs muted">(người tên bị trùng nhầm)</span></span><textarea class="input" name="allow_ids" rows="2" placeholder="123456789, 987654321">${esc(c.allow_ids.join(', '))}</textarea>
+            <div class="hint">Quản trị viên và bot luôn được bỏ qua.</div></label>
+        </div>
+        <button class="btn primary block">Lưu cài đặt</button>
+      </form>
+      <div class="kb-side stack">
+        <div class="card card-pad stack"><div class="pv-label" style="margin:0">🧪 Thử một tên</div>
+          <input class="input" data-tname placeholder="Tên hiển thị, VD: 𝐀𝐝𝐦𝐢𝐧 H.ỗ T.r.ợ">
+          <input class="input" data-tuser placeholder="@username (không bắt buộc)">
+          <div class="small" data-tres><span class="muted">Nhập tên để thử…</span></div></div>
+        <div class="card card-pad"><div class="pv-label" style="margin:0 0 6px">🔍 Quét thành viên hiện có</div>
+          <div class="xs muted">Tìm trong danh sách thành viên bot đã lưu những người đang có tên vi phạm (theo cài đặt đang sửa).</div>
+          <button type="button" class="btn block" data-scan style="margin-top:8px">${icon('search')} Quét ngay</button>
+          <div data-slist></div></div>
+      </div>
+      </div>`,
+      mount: (root) => {
+        const later = () => { clearTimeout(timer); timer = setTimeout(() => test(root), 300); };
+        root.addEventListener('input', (e) => { if (e.target.closest('[data-slist]')) return; later(); });
+        root.addEventListener('change', (e) => {
+          if (e.target.matches('[data-sall]')) $$('[data-sid]', root).forEach((x) => { x.checked = e.target.checked; });
+          else if (e.target.closest('#fng')) later();
+        });
+        root.addEventListener('click', async (e) => {
+          const sg = e.target.closest('[data-sg]');
+          if (sg) {
+            const ta = $('#fng [name=words]'), cur = ta.value.split('\n').map((x) => x.trim()).filter(Boolean);
+            if (!cur.some((x) => x.toLowerCase() === sg.dataset.sg.toLowerCase())) ta.value = [...cur, sg.dataset.sg].join('\n');
+            sg.disabled = true; later(); return;
+          }
+          const a = e.target.closest('[data-na]');
+          if (a) { action = a.dataset.na; $$('[data-na]', root).forEach((x) => x.classList.toggle('active', x === a)); $('[data-mutef]', root).style.display = action === 'mute' ? '' : 'none'; $('[data-nahint]', root).textContent = d.actions[action]; later(); return; }
+          const g = e.target.closest('[data-ng]');
+          if (g) { const id = +g.dataset.ng; sel = sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id]; g.classList.toggle('active'); later(); return; }
+          const sc = e.target.closest('[data-scan]');
+          if (sc) {
+            withBtn(sc, async () => {
+              try {
+                const r = await api('nameguard/scan', { config: draft() });
+                scanned = r.items;
+                $('[data-slist]', root).innerHTML = scanned.length ? scanList() : '<div class="small" style="margin-top:8px;color:var(--success)">✅ Không có thành viên nào có tên vi phạm.</div>';
+              } catch (err) { toast(err.message, 'err'); }
+            });
+            return;
+          }
+          const sp = e.target.closest('[data-spunish]');
+          if (sp) {
+            const ids = $$('[data-sid]', root).filter((x) => x.checked).map((x) => +x.dataset.sid);
+            if (!ids.length) return toast('Chưa chọn ai', 'err');
+            if (!(await confirmBox(`Xử lý ${ids.length} thành viên?`, `Hành động: ${d.actions[action]}. Không gửi thông báo vào nhóm.`, { danger: true, ok: 'Xử lý' }))) return;
+            withBtn(sp, async () => {
+              try {
+                const r = await api('nameguard/punish', { ids, config: draft() });
+                toast(`Đã xử lý ${r.ok} người` + (r.errors.length ? ` · ${r.errors.length} lỗi` : ''), r.errors.length ? 'err' : undefined);
+                if (r.errors.length) console.warn(r.errors);
+                scanned = scanned.filter((m) => !ids.includes(m.id)); $('[data-slist]', root).innerHTML = scanList();
+              } catch (err) { toast(err.message, 'err'); }
+            });
+          }
+        });
+        $('#fng', root).onsubmit = (e) => {
+          e.preventDefault();
+          withBtn(e.target.querySelector('button.primary'), async () => { try { await api('nameguard/save', { config: { ...formData(e.target), action, groups: sel } }); toast('Đã lưu'); render(); } catch (err) { toast(err.message, 'err'); } });
+        };
+      },
+    };
+  }, { webAdmin: true, title: 'Cấm tên chứa từ cấm', back: '/more' });
 
   // ================= Đóng dấu ảnh chống copy =================
   route('/watermark', async () => {
