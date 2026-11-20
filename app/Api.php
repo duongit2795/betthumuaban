@@ -148,6 +148,11 @@ class Api
             'antiraid/lock' => 'antiRaidLock',
             'antiraid/decide' => 'antiRaidDecide',
             'antiraid/decide-all' => 'antiRaidDecideAll',
+            'nameguard' => 'nameGuard',
+            'nameguard/save' => 'nameGuardSave',
+            'nameguard/test' => 'nameGuardTest',
+            'nameguard/scan' => 'nameGuardScan',
+            'nameguard/punish' => 'nameGuardPunish',
             'watermark' => 'watermark',
             'watermark/save' => 'watermarkSave',
             'watermark/preview' => 'watermarkPreview',
@@ -2481,6 +2486,67 @@ class Api
             DB::run('UPDATE vip_members SET until = ?, notified = 0 WHERE tg_user_id = ?', [$until, $tg]);
         }
         return ['until' => $until];
+    }
+
+    // ================= Cấm tên chứa từ cấm =================
+    private function nameGuard(): array
+    {
+        Auth::requireAdmin();
+        $err = (string)Settings::get('name_guard_error');
+        $since = now() - 7 * 86400;
+        return [
+            'config' => NameGuard::config(), 'actions' => NameGuard::ACTIONS, 'suggest' => NameGuard::SUGGEST, 'error' => $err !== '' ? $err : null,
+            'week' => (int)DB::val("SELECT COUNT(*) FROM app_logs WHERE created_at >= ? AND (action = 'name_ban' OR meta LIKE ?)", [$since, '%"name_guard":1%']),
+            'groups' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title'], 'bot_admin' => (int)$g['bot_is_admin']], DB::all('SELECT id, title, bot_is_admin FROM tg_groups WHERE active = 1 ORDER BY title')),
+        ];
+    }
+
+    private function nameGuardSave(): array
+    {
+        $u = Auth::requireAdmin();
+        $c = NameGuard::save((array)$this->in('config', []));
+        Settings::set('name_guard_error', '');
+        Repo::log(null, $u['username'], 'system', null, 'Cấm tên chứa từ cấm: ' . ($c['enabled'] ? 'bật · ' . count($c['words']) . ' từ · ' . NameGuard::ACTIONS[$c['action']] : 'tắt'));
+        return ['config' => $c];
+    }
+
+    /** Thử 1 tên với cấu hình đang sửa (chưa lưu) */
+    private function nameGuardTest(): array
+    {
+        Auth::requireAdmin();
+        $c = $this->nameGuardDraft();
+        $name = trim(mb_substr((string)$this->in('name', ''), 0, 128));
+        $uname = ltrim(trim(mb_substr((string)$this->in('username', ''), 0, 64)), '@');
+        $gid = (int)$this->in('group_id', 0);
+        return ['why' => NameGuard::match($c, ['id' => 0, 'first_name' => $name, 'username' => $uname], $gid ? ['id' => $gid] : null),
+            'norm' => $c['smart'] ? NameGuard::norm($name, true) : null];
+    }
+
+    private function nameGuardDraft(): array
+    {
+        $c = NameGuard::config();
+        $d = (array)$this->in('config', []);
+        foreach (['smart', 'check_name', 'check_username', 'impersonate'] as $k) if (array_key_exists($k, $d)) $c[$k] = !empty($d[$k]);
+        if (isset($d['words'])) $c['words'] = array_values(array_filter(array_map('trim', preg_split('/[\r\n,]+/u', (string)$d['words'])), 'strlen'));
+        if (isset($d['allow_ids'])) { preg_match_all('/\d{3,20}/', (string)$d['allow_ids'], $mm); $c['allow_ids'] = $mm[0]; }
+        if (isset($d['groups'])) $c['groups'] = array_map('intval', (array)$d['groups']);
+        return $c;
+    }
+
+    private function nameGuardScan(): array
+    {
+        Auth::requireAdmin();
+        $c = $this->nameGuardDraft();
+        if (!$c['words'] && !$c['impersonate']) fail('Chưa có từ cấm nào để quét');
+        return ['items' => NameGuard::scan($c), 'action' => NameGuard::ACTIONS[NameGuard::config()['action']]];
+    }
+
+    private function nameGuardPunish(): array
+    {
+        $u = Auth::requireAdmin();
+        $r = NameGuard::punishMembers((array)$this->in('ids', []), $this->nameGuardDraft());
+        Repo::log(null, $u['username'], 'system', null, 'Cấm tên chứa từ cấm: xử lý ' . $r['ok'] . ' thành viên từ danh sách quét');
+        return $r;
     }
 
     // ================= Đóng dấu ảnh chống copy =================
