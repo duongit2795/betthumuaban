@@ -19,11 +19,12 @@ class Amnesty
 
     const DEFAULT_MESSAGE = "🕊 <b>ÂN XÁ THÀNH VIÊN</b>\n👤 Thành viên: {member}\n{icon} Đã được: <b>{kind}</b>\n💝 Người ân xá: {payer}\n💰 Phí ân xá: <b>{price}</b>\n🕒 Lúc: {time}";
 
-    public static function config(): array
+    public static function config(int $sp = 0): array
     {
-        $g = fn($k, $d) => Settings::get($k) ?? $d;
+        $g = fn($k, $d) => Space::get($k, $sp, $d);
         return [
-            'enabled' => $g('amnesty_enabled', '0') === '1',
+            'enabled' => $g('amnesty_enabled', '0') === '1' && Space::allows($sp, 'amnesty') && ($sp === 0 || Wallet::config($sp)['enabled']),
+            'enabled_raw' => $g('amnesty_enabled', '0') === '1',
             'price' => max(1000, (int)$g('amnesty_price', '50000')), // 1 giá duy nhất: gỡ toàn bộ hình phạt
             'allow_others' => $g('amnesty_allow_others', '1') === '1',
             'notify' => $g('amnesty_notify', '1') === '1',
@@ -33,22 +34,22 @@ class Amnesty
         ];
     }
 
-    public static function saveConfig(array $in): array
+    public static function saveConfig(array $in, int $sp = 0): array
     {
         foreach (['enabled', 'allow_others', 'notify', 'invite'] as $k) {
-            if (array_key_exists($k, $in)) Settings::set("amnesty_$k", !empty($in[$k]) ? '1' : '0');
+            if (array_key_exists($k, $in)) Space::set("amnesty_$k", $sp, !empty($in[$k]) ? '1' : '0');
         }
         if (isset($in['price'])) {
             $p = (int)$in['price'];
             if ($p < 1000) throw new HttpError('Giá ân xá tối thiểu 1.000đ');
-            Settings::set('amnesty_price', (string)min(1000000000, $p));
+            Space::set('amnesty_price', $sp, (string)min(1000000000, $p));
         }
         if (isset($in['message'])) {
             $m = trim((string)$in['message']);
-            Settings::set('amnesty_message', $m === self::DEFAULT_MESSAGE ? '' : mb_substr($m, 0, 2000));
+            Space::set('amnesty_message', $sp, $m === self::DEFAULT_MESSAGE ? '' : mb_substr($m, 0, 2000));
         }
-        if (isset($in['note'])) Settings::set('amnesty_note', mb_substr(trim((string)$in['note']), 0, 500));
-        return self::config();
+        if (isset($in['note'])) Space::set('amnesty_note', $sp, mb_substr(trim((string)$in['note']), 0, 500));
+        return self::config($sp);
     }
 
     /**
@@ -69,7 +70,7 @@ class Amnesty
     /** Ân xá toàn bộ: các hình phạt sẽ gỡ + giá. null nếu không có hình phạt nào. */
     public static function combo(array $m, ?array $cfg = null): ?array
     {
-        $cfg ??= self::config();
+        $cfg ??= self::config(Space::ofGroupId((int)$m['group_id']));
         $parts = self::punishments($m, $cfg);
         return $parts ? ['parts' => $parts, 'price' => $cfg['price']] : null;
     }
@@ -126,7 +127,8 @@ class Amnesty
         }
         $m = self::syncTelegram($group, $tgId);
         if (!$m) throw new HttpError("ID $tgId không bị cấm và chưa từng ở trong nhóm này. Kiểm tra lại ID.", 404);
-        $cfg = self::config();
+        $cfg = self::config(Space::ofGroup($group));
+        if (!$cfg['enabled']) throw new HttpError('Nhóm này chưa bật ân xá');
         if (!self::canTarget($u, $m, $cfg, true)) throw new HttpError('Admin chỉ cho phép tự ân xá cho chính mình', 403);
         return $m;
     }
@@ -164,13 +166,13 @@ class Amnesty
      */
     public static function perform(array $u, int $memberId, string $kind, bool $byId = false): array
     {
-        $cfg = self::config();
-        if (!$cfg['enabled']) throw new HttpError('Tính năng ân xá đang tắt');
         $kind = 'all'; // chỉ còn 1 gói: gỡ toàn bộ hình phạt
         $m = DB::get('SELECT * FROM tg_members WHERE id = ?', [$memberId]) ?: throw new HttpError('Không tìm thấy thành viên', 404);
         $group = Repo::group((int)$m['group_id']);
         if (!$group || !$group['active']) throw new HttpError('Nhóm không còn hoạt động');
-        if (Tenant::groupOwner($group)) throw new HttpError('Nhóm này không áp dụng ân xá');
+        $sp = Space::ofGroup($group); // tiền vào ví của chủ nhóm (chủ web hoặc khách thuê)
+        $cfg = self::config($sp);
+        if (!$cfg['enabled']) throw new HttpError('Nhóm này chưa bật ân xá');
         if (!self::canTarget($u, $m, $cfg, $byId)) throw new HttpError('Bạn không thể ân xá thành viên này', 403);
         // Kiểm tra lại trạng thái thật trên Telegram trước khi trừ tiền (tránh trả tiền cho hình phạt đã hết)
         if ($kind !== 'unwarn') $m = self::syncTelegram($group, $m['tg_user_id']) ?: $m;
@@ -187,7 +189,7 @@ class Amnesty
 
         // 1. Trừ tiền 1 lần (nguyên tử, không đủ thì báo lỗi)
         $balance = Wallet::debit((int)$u['id'], $price, 'amnesty', "Ân xá: $kindText — $who ({$group['title']})",
-            ['group_id' => (int)$group['id'], 'member_id' => (int)$m['id'], 'tg_user_id' => (string)$m['tg_user_id'], 'kind' => $kind, 'parts' => array_keys($parts)]);
+            ['group_id' => (int)$group['id'], 'member_id' => (int)$m['id'], 'tg_user_id' => (string)$m['tg_user_id'], 'kind' => $kind, 'parts' => array_keys($parts)], $sp);
         $txId = (int)DB::val("SELECT MAX(id) FROM wallet_tx WHERE user_id = ? AND type = 'amnesty'", [$u['id']]);
 
         // 2. Thực hiện từng phần; phần đầu (thao tác Telegram) lỗi → hoàn toàn bộ tiền
@@ -204,7 +206,7 @@ class Amnesty
             } catch (Throwable $e) {
                 if (!$done) {
                     DB::run("UPDATE wallet_tx SET type = 'amnesty_fail' WHERE id = ?", [$txId]); // không tính vào doanh thu ân xá
-                    $balance = Wallet::credit((int)$u['id'], $price, 'refund', "Hoàn tiền ân xá thất bại — $who", null, ['error' => mb_substr($e->getMessage(), 0, 200)]);
+                    $balance = Wallet::credit((int)$u['id'], $price, 'refund', "Hoàn tiền ân xá thất bại — $who", null, ['error' => mb_substr($e->getMessage(), 0, 200)], $sp);
                     throw new HttpError('Không thực hiện được trên Telegram (' . $e->getMessage() . '). Đã hoàn lại ' . Wallet::money($price) . ' vào ví.');
                 }
                 // Phần sau lỗi (hiếm, chỉ là thao tác database): ghi nhật ký để admin xử lý
@@ -240,6 +242,6 @@ class Amnesty
                 $api->trySend($u['tg_user_id'], "🕊 Bạn đã ân xá <b>" . tg_esc($who) . "</b> ($kindText) — " . Wallet::money($price) . "\n💳 Số dư còn: <b>" . Wallet::money($balance) . '</b>');
             }
         }
-        return ['member' => $after, 'balance' => $balance, 'price' => $price, 'invite_link' => $invite, 'label' => $kindText];
+        return ['member' => $after, 'balance' => $balance, 'price' => $price, 'invite_link' => $invite, 'label' => $kindText, 'space' => $sp];
     }
 }

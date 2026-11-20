@@ -21,6 +21,12 @@ class Tenant
         'require_username' => 'Yêu cầu đặt Username',
         'watermark' => 'Đóng dấu ảnh',
         'checkin' => 'Điểm danh nhận điểm',
+        // Tính năng tiền của khách (ví riêng, tiền vào tài khoản ngân hàng của khách)
+        'wallet' => 'Ví & nạp tiền cho thành viên',
+        'amnesty' => 'Ân xá thành viên',
+        'vip' => 'Gói VIP cho thành viên',
+        'exchange' => 'Đổi điểm ↔ tiền',
+        'giftcode' => 'Mã quà tặng',
     ];
     const DEFAULTS = [
         'enabled' => false,        // bật cho thuê (hiện trang Gói thuê cho mọi tài khoản)

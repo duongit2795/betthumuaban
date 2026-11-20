@@ -131,6 +131,7 @@ class Api
             'payments/sync' => 'paymentsSync',
             'payments/assign' => 'paymentsAssign',
             'payments/ignore' => 'paymentsIgnore',
+            'payments/adjust' => 'paymentsAdjust',
             'users/balance' => 'userBalance',
             'users/tx' => 'userTx',
             'checkin' => 'checkin',
@@ -216,7 +217,7 @@ class Api
             'site_name' => $inst ? Settings::get('site_name') : 'Tele Manager',
             'allow_register' => $inst ? Settings::get('allow_register') === '1' : false,
             'tg_login' => $inst && TgLogin::enabled() ? ['bots' => TgLogin::bots(), 'cmd' => Commands::name('login')] : null,
-            'pay' => $inst ? ['wallet' => Wallet::config()['enabled'] && Wallet::config()['account_no'] !== '', 'amnesty' => Amnesty::config()['enabled'], 'checkin' => GroupFeature::anyEnabled('checkin'), 'tagshop' => MemberTag::config()['shop'], 'exchange' => Exchange::config()['enabled'], 'vip' => Vip::config()['enabled']] : null,
+            'pay' => $inst ? $this->payFlags(Auth::user()) : null,
             'tenant' => $inst ? (function () {
                 $u = Auth::user();
                 $on = Tenant::config()['enabled'];
@@ -232,6 +233,22 @@ class Api
                 'mbstring' => extension_loaded('mbstring'),
                 'writable' => is_writable(DATA_DIR) || is_writable(ROOT),
             ],
+        ];
+    }
+
+    /** Cờ hiện menu tiền: bật ở bất kỳ không gian nào người này liên quan (web chính / khách thuê có nhóm họ đang ở) */
+    private function payFlags(?array $u): array
+    {
+        $sps = $u ? array_column(Space::forUser($u), 'id') : [0];
+        $any = fn(callable $f) => (bool)array_filter($sps, $f);
+        return [
+            'wallet' => $any(fn($sp) => ($w = Wallet::config($sp))['enabled'] && $w['account_no'] !== ''),
+            'amnesty' => $any(fn($sp) => Amnesty::config($sp)['enabled']),
+            'checkin' => GroupFeature::anyEnabled('checkin'),
+            'tagshop' => MemberTag::config()['shop'],
+            'exchange' => $any(fn($sp) => Exchange::config($sp)['enabled']),
+            'vip' => $any(fn($sp) => Vip::config($sp)['enabled']),
+            'spaces' => count($sps) > 1,
         ];
     }
 
@@ -1819,30 +1836,63 @@ class Api
         ];
     }
 
+    // ---- Không gian tiền (0 = chủ web, N = khách thuê) ----
+    /** Trang thành viên: không gian theo tham số sp */
+    private function memberSp(): int
+    {
+        $sp = $this->int('sp');
+        if ($sp && !Space::valid($sp)) fail('Không tìm thấy', 404);
+        return $sp;
+    }
+
+    /** Người này có quản lý không gian $sp không: admin web → 0; khách thuê → không gian của mình */
+    private function isSpaceAdmin(array $u, int $sp): bool
+    {
+        return $sp === 0 ? Access::isWebAdmin($u) : Access::isTenant($u) && (int)$u['id'] === $sp;
+    }
+
+    /** Trang quản trị tiền: [user, sp] */
+    private function spAdmin(): array
+    {
+        $u = Auth::requireUser();
+        if (Access::isWebAdmin($u)) return [$u, 0];
+        if (Access::isTenant($u)) return [$u, (int)$u['id']];
+        fail('Chỉ admin web hoặc khách thuê được vào mục này', 403);
+    }
+
+    /** Thông tin không gian gửi cho giao diện */
+    private function spaceInfo(array $u, int $sp): array
+    {
+        return ['id' => $sp, 'title' => Space::title($sp), 'spaces' => Space::forUser($u), 'admin' => $this->isSpaceAdmin($u, $sp),
+            'allowed' => array_combine(array_keys(Space::FEATURES), array_map(fn($f) => Space::allows($sp, $f), array_keys(Space::FEATURES)))];
+    }
+
     private function wallet(): array
     {
         $u = Auth::requireUser();
-        $c = Wallet::config();
+        $sp = $this->memberSp();
+        $c = Wallet::config($sp);
         $before = $this->int('before');
-        $rows = DB::all('SELECT * FROM wallet_tx WHERE user_id = ?' . ($before ? ' AND id < ' . $before : '') . ' ORDER BY id DESC LIMIT 30', [$u['id']]);
+        $rows = DB::all('SELECT * FROM wallet_tx WHERE user_id = ? AND space_id = ?' . ($before ? ' AND id < ' . $before : '') . ' ORDER BY id DESC LIMIT 30', [$u['id'], $sp]);
         $amount = max(0, $this->int('amount'));
         return [
-            'balance' => Wallet::balance((int)$u['id']),
+            'space' => $this->spaceInfo($u, $sp),
+            'balance' => Wallet::balance((int)$u['id'], $sp),
             'enabled' => $c['enabled'] && $c['account_no'] !== '',
             'auto' => $c['enabled'] && $c['has_api'],
             'bank' => $c['bank'],
             'bank_name' => Wallet::BANKS[$c['bank']] ?? $c['bank'],
             'account_no' => $c['account_no'],
             'account_name' => $c['account_name'],
-            'code' => Wallet::code($u),
+            'code' => Wallet::code($u, $sp),
             'min' => $c['min'],
-            'qr' => Wallet::qrUrl($u, $amount),
+            'qr' => Wallet::qrUrl($u, $amount, $sp),
             'last_sync' => $c['last_sync'],
             'history' => array_map([$this, 'txRow'], $rows),
             'has_more' => count($rows) === 30,
             'stats' => [
-                'deposit' => (int)DB::val("SELECT COALESCE(SUM(amount),0) FROM wallet_tx WHERE user_id = ? AND type = 'deposit'", [$u['id']]),
-                'spent' => -(int)DB::val("SELECT COALESCE(SUM(amount),0) FROM wallet_tx WHERE user_id = ? AND type IN ('amnesty','tag')", [$u['id']]),
+                'deposit' => (int)DB::val("SELECT COALESCE(SUM(amount),0) FROM wallet_tx WHERE user_id = ? AND space_id = ? AND type = 'deposit'", [$u['id'], $sp]),
+                'spent' => -(int)DB::val("SELECT COALESCE(SUM(amount),0) FROM wallet_tx WHERE user_id = ? AND space_id = ? AND amount < 0", [$u['id'], $sp]),
             ],
         ];
     }
@@ -1851,14 +1901,15 @@ class Api
     private function walletCheck(): array
     {
         $u = Auth::requireUser();
-        $before = Wallet::balance((int)$u['id']);
+        $sp = $this->memberSp();
+        $before = Wallet::balance((int)$u['id'], $sp);
         $key = 'pay_check_' . $u['id'];
         $last = (int)($_SESSION[$key] ?? 0);
         if (now() - $last >= 10) {
             $_SESSION[$key] = now();
-            if (now() - (int)Wallet::config()['last_sync'] >= 5) Wallet::sync(true);
+            if (now() - (int)Wallet::config($sp)['last_sync'] >= 5) Wallet::sync(true, $sp);
         }
-        $after = Wallet::balance((int)$u['id']);
+        $after = Wallet::balance((int)$u['id'], $sp);
         return ['balance' => $after, 'added' => $after - $before];
     }
 
@@ -1879,11 +1930,12 @@ class Api
     private function amnesty(): array
     {
         $u = Auth::requireUser();
+        $sp = $this->memberSp();
         Repo::sweepMutes();
-        $cfg = Amnesty::config();
+        $cfg = Amnesty::config($sp);
         $mine = [];
         if ($u['tg_user_id']) {
-            foreach (DB::all('SELECT m.*, g.title FROM tg_members m JOIN tg_groups g ON g.id = m.group_id WHERE g.active = 1 AND ' . Tenant::ownerGroupsSql('g') . ' AND m.tg_user_id = ? AND ' . Amnesty::punishedSql('m'), [$u['tg_user_id']]) as $m) {
+            foreach (DB::all('SELECT m.*, g.title FROM tg_members m JOIN tg_groups g ON g.id = m.group_id WHERE g.active = 1 AND ' . Space::groupsSql($sp, 'g') . ' AND m.tg_user_id = ? AND ' . Amnesty::punishedSql('m'), [$u['tg_user_id']]) as $m) {
                 $r = $this->amnestyMember($m, $cfg);
                 if ($r['punishments']) $mine[] = $r;
             }
@@ -1893,20 +1945,21 @@ class Api
             $ids = Amnesty::groupIds($u);
             $groups = array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title'],
                 'punished' => (int)DB::val('SELECT COUNT(*) FROM tg_members WHERE is_bot = 0 AND group_id = ? AND ' . Amnesty::punishedSql(), [$g['id']])],
-                DB::all('SELECT g.id, g.title FROM tg_groups g WHERE g.active = 1 AND ' . Tenant::ownerGroupsSql('g') . ' AND ' . Access::sqlIn($ids, 'g.id') . ' ORDER BY g.title'));
+                DB::all('SELECT g.id, g.title FROM tg_groups g WHERE g.active = 1 AND ' . Space::groupsSql($sp, 'g') . ' AND ' . Access::sqlIn($ids, 'g.id') . ' ORDER BY g.title'));
         }
-        $recent = DB::all("SELECT t.*, u.display_name, u.username FROM wallet_tx t JOIN app_users u ON u.id = t.user_id WHERE t.type = 'amnesty' ORDER BY t.id DESC LIMIT 10");
+        $recent = DB::all("SELECT t.*, u.display_name, u.username FROM wallet_tx t JOIN app_users u ON u.id = t.user_id WHERE t.type = 'amnesty' AND t.space_id = ? ORDER BY t.id DESC LIMIT 10", [$sp]);
         return [
+            'space' => $this->spaceInfo($u, $sp),
             'enabled' => $cfg['enabled'],
             'price' => $cfg['price'],
             'kinds' => array_map(fn($k) => ['label' => $k[1], 'icon' => $k[2]], Amnesty::KINDS),
             'allow_others' => $cfg['allow_others'] || Access::isWebAdmin($u),
             'note' => $cfg['note'],
-            'balance' => Wallet::balance((int)$u['id']),
+            'balance' => Wallet::balance((int)$u['id'], $sp),
             'linked' => (bool)$u['tg_user_id'],
             'mine' => $mine,
             'groups' => $groups,
-            'all_groups' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title']], DB::all('SELECT id, title FROM tg_groups WHERE active = 1 ORDER BY title')),
+            'all_groups' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title']], DB::all('SELECT g.id, g.title FROM tg_groups g WHERE g.active = 1 AND ' . Space::groupsSql($sp, 'g') . ' ORDER BY g.title')),
             'recent' => array_map(fn($t) => ['payer' => $t['display_name'] ?: $t['username'], 'note' => preg_replace('/^Ân xá: /u', '', (string)$t['note']), 'amount' => -(int)$t['amount'], 'created_at' => (int)$t['created_at']], $recent),
         ];
     }
@@ -1914,8 +1967,8 @@ class Api
     private function amnestySearch(): array
     {
         $u = Auth::requireUser();
-        $cfg = Amnesty::config();
         $gid = $this->int('group_id');
+        $cfg = Amnesty::config(Space::ofGroupId($gid));
         if (!$cfg['allow_others'] && !Access::isWebAdmin($u)) fail('Admin chưa cho phép ân xá người khác', 403);
         $ids = Amnesty::groupIds($u);
         if ($ids !== null && !in_array($gid, $ids, true)) fail('Bạn không thuộc nhóm này', 403);
@@ -1937,10 +1990,10 @@ class Api
     private function amnestyLookup(): array
     {
         $u = Auth::requireUser();
-        $cfg = Amnesty::config();
-        if (!$cfg['enabled']) fail('Tính năng ân xá đang tắt');
         $g = Repo::group($this->int('group_id'));
         if (!$g || !$g['active']) fail('Chọn nhóm', 404);
+        $cfg = Amnesty::config(Space::ofGroup($g));
+        if (!$cfg['enabled']) fail('Tính năng ân xá đang tắt');
         $key = 'amnesty_lookup_' . $u['id'];
         $hits = array_filter((array)($_SESSION[$key] ?? []), fn($t) => $t > now() - 60);
         if (count($hits) >= 15) fail('Tra cứu quá nhanh, thử lại sau 1 phút', 429);
@@ -1971,23 +2024,24 @@ class Api
 
     private function payments(): array
     {
-        Auth::requireAdmin();
+        [$u, $sp] = $this->spAdmin();
         $status = (string)$this->in('status', '');
-        $where = in_array($status, ['credited', 'unmatched', 'below_min', 'ignored'], true) ? 'WHERE b.status = ?' : '';
-        $rows = DB::all("SELECT b.*, u.display_name, u.username FROM bank_tx b LEFT JOIN app_users u ON u.id = b.user_id $where ORDER BY b.id DESC LIMIT 100", $where ? [$status] : []);
-        $sum = fn($type) => (int)DB::val('SELECT COALESCE(SUM(amount),0) FROM wallet_tx WHERE type = ?', [$type]);
+        $where = 'WHERE b.space_id = ' . $sp . (in_array($status, ['credited', 'unmatched', 'below_min', 'ignored'], true) ? ' AND b.status = ?' : '');
+        $rows = DB::all("SELECT b.*, u.display_name, u.username FROM bank_tx b LEFT JOIN app_users u ON u.id = b.user_id $where ORDER BY b.id DESC LIMIT 100", str_contains($where, '?') ? [$status] : []);
+        $sum = fn($type) => (int)DB::val('SELECT COALESCE(SUM(amount),0) FROM wallet_tx WHERE type = ? AND space_id = ?', [$type, $sp]);
         return [
-            'wallet' => Wallet::config(),
-            'amnesty' => Amnesty::config() + ['default_message' => Amnesty::DEFAULT_MESSAGE],
+            'space' => $this->spaceInfo($u, $sp),
+            'wallet' => Wallet::config($sp),
+            'amnesty' => Amnesty::config($sp) + ['default_message' => Amnesty::DEFAULT_MESSAGE],
             'banks' => Wallet::BANKS,
             'bank_tx' => array_map([$this, 'bankRow'], $rows),
             'stats' => [
                 'deposit' => $sum('deposit'),
                 'amnesty' => -$sum('amnesty'),
                 'refund' => $sum('refund'),
-                'balances' => (int)DB::val('SELECT COALESCE(SUM(balance),0) FROM app_users'),
-                'unmatched' => (int)DB::val("SELECT COUNT(*) FROM bank_tx WHERE status IN ('unmatched','below_min')"),
-                'amnesty_count' => (int)DB::val("SELECT COUNT(*) FROM wallet_tx WHERE type = 'amnesty'"),
+                'balances' => (int)($sp ? DB::val('SELECT COALESCE(SUM(balance),0) FROM space_wallets WHERE space_id = ?', [$sp]) : DB::val('SELECT COALESCE(SUM(balance),0) FROM app_users')),
+                'unmatched' => (int)DB::val("SELECT COUNT(*) FROM bank_tx WHERE space_id = ? AND status IN ('unmatched','below_min')", [$sp]),
+                'amnesty_count' => (int)DB::val("SELECT COUNT(*) FROM wallet_tx WHERE type = 'amnesty' AND space_id = ?", [$sp]),
                 'tag' => -$sum('tag'),
             ],
         ];
@@ -1995,19 +2049,19 @@ class Api
 
     private function paymentsSave(): array
     {
-        $me = Auth::requireAdmin();
-        if (is_array($this->in('wallet'))) Wallet::saveConfig($this->in('wallet'));
-        if (is_array($this->in('amnesty'))) Amnesty::saveConfig($this->in('amnesty'));
-        Repo::log(null, $me['username'], 'payments_settings', null, 'Cập nhật cài đặt nạp tiền / ân xá');
-        return ['wallet' => Wallet::config(), 'amnesty' => Amnesty::config()];
+        [$me, $sp] = $this->spAdmin();
+        if (is_array($this->in('wallet'))) Wallet::saveConfig($this->in('wallet'), $sp);
+        if (is_array($this->in('amnesty'))) Amnesty::saveConfig($this->in('amnesty'), $sp);
+        Repo::log(null, $me['username'], 'payments_settings', null, 'Cập nhật cài đặt nạp tiền / ân xá' . ($sp ? ' (khách thuê)' : ''));
+        return ['wallet' => Wallet::config($sp), 'amnesty' => Amnesty::config($sp)];
     }
 
     /** Gọi thử API ngân hàng: chỉ hiện số giao dịch đọc được và vài dòng mẫu, không cộng tiền */
     private function paymentsTest(): array
     {
-        Auth::requireAdmin();
+        [, $sp] = $this->spAdmin();
         try {
-            $list = Wallet::fetch();
+            $list = Wallet::fetch($sp);
         } catch (HttpError $e) {
             return ['ok' => false, 'error' => $e->getMessage()];
         }
@@ -2016,15 +2070,15 @@ class Api
             'ok' => true,
             'total' => count($list),
             'incoming' => count($in),
-            'sample' => array_map(fn($t) => $t + ['match' => ($m = Wallet::matchUser($t['description'])) ? ($m['display_name'] ?: $m['username']) : null], array_slice($in, 0, 5)),
+            'sample' => array_map(fn($t) => $t + ['match' => ($m = Wallet::matchUser($t['description'], $sp)) ? ($m['display_name'] ?: $m['username']) : null], array_slice($in, 0, 5)),
         ];
     }
 
     private function paymentsSync(): array
     {
-        Auth::requireAdmin();
-        $r = Wallet::sync(true);
-        $c = Wallet::config();
+        [, $sp] = $this->spAdmin();
+        $r = Wallet::sync(true, $sp);
+        $c = Wallet::config($sp);
         return $r + ['error' => $c['last_error']];
     }
 
@@ -2038,8 +2092,9 @@ class Api
 
     private function paymentsAssign(): array
     {
-        $me = Auth::requireAdmin();
+        [$me, $sp] = $this->spAdmin();
         $u = $this->findUser();
+        if ((int)DB::val('SELECT space_id FROM bank_tx WHERE id = ?', [$this->int('id')]) !== $sp) fail('Không tìm thấy giao dịch', 404);
         Wallet::assign($this->int('id'), (int)$u['id'], $me['username']);
         Repo::log(null, $me['username'], 'wallet_assign', null, 'Gán giao dịch #' . $this->int('id') . ' cho ' . $u['username']);
         return ['ok' => true];
@@ -2047,9 +2102,22 @@ class Api
 
     private function paymentsIgnore(): array
     {
-        Auth::requireAdmin();
-        DB::run("UPDATE bank_tx SET status = 'ignored' WHERE id = ? AND status <> 'credited'", [$this->int('id')]);
+        [, $sp] = $this->spAdmin();
+        DB::run("UPDATE bank_tx SET status = 'ignored' WHERE id = ? AND space_id = ? AND status <> 'credited'", [$this->int('id'), $sp]);
         return ['ok' => true];
+    }
+
+    /** Chủ không gian (admin web / khách thuê) cộng / trừ số dư ví thành viên trong không gian của mình */
+    private function paymentsAdjust(): array
+    {
+        [$me, $sp] = $this->spAdmin();
+        $u = $this->findUser();
+        $amount = $this->int('amount');
+        if ($amount === 0) fail('Nhập số tiền (số âm để trừ)');
+        $note = (trim((string)$this->in('note', '')) ?: 'Điều chỉnh') . " (bởi {$me['username']})";
+        $bal = $amount > 0 ? Wallet::credit((int)$u['id'], $amount, 'admin', $note, null, [], $sp) : Wallet::debit((int)$u['id'], -$amount, 'admin', $note, [], $sp);
+        Repo::log(null, $me['username'], 'wallet_adjust', null, ($amount > 0 ? '+' : '') . Wallet::money($amount) . " cho {$u['username']} · $note" . ($sp ? ' (ví khách thuê)' : ''));
+        return ['balance' => $bal];
     }
 
     /** Admin cộng / trừ số dư */
@@ -2420,23 +2488,24 @@ class Api
     private function exchange(): array
     {
         $u = Auth::requireUser();
-        $c = Exchange::config();
+        $sp = $this->memberSp();
+        $c = Exchange::config($sp);
         $groups = [];
         if ($u['tg_user_id']) {
             foreach (DB::all("SELECT m.*, g.title FROM tg_members m JOIN tg_groups g ON g.id = m.group_id WHERE g.active = 1 AND m.tg_user_id = ? AND m.status IN ('member','muted') ORDER BY g.title", [$u['tg_user_id']]) as $m) {
-                if (!Exchange::applies($c, (int)$m['group_id'])) continue;
+                if (!Exchange::applies($c, (int)$m['group_id'], $sp)) continue;
                 $groups[] = ['id' => (int)$m['group_id'], 'title' => $m['title'], 'total' => (int)$m['points'], 'open' => Exchange::open($m), 'spent' => (int)$m['points_spent']];
             }
         }
-        $out = ['enabled' => $c['enabled'], 'linked' => (bool)$u['tg_user_id'], 'balance' => Wallet::balance((int)$u['id']),
+        $out = ['space' => $this->spaceInfo($u, $sp), 'enabled' => $c['enabled'], 'linked' => (bool)$u['tg_user_id'], 'balance' => Wallet::balance((int)$u['id'], $sp),
             'rate_points' => $c['rate_points'], 'rate_money' => $c['rate_money'], 'min_points' => $c['min_points'], 'daily_max' => $c['daily_max'],
             'buy' => $c['buy'], 'buy_money' => $c['buy_money'], 'buy_points' => $c['buy_points'],
-            'today' => (int)DB::val("SELECT COALESCE(SUM(amount),0) FROM wallet_tx WHERE user_id = ? AND type = 'exchange' AND created_at >= ?", [$u['id'], strtotime('today')]),
+            'today' => (int)DB::val("SELECT COALESCE(SUM(amount),0) FROM wallet_tx WHERE user_id = ? AND space_id = ? AND type = 'exchange' AND created_at >= ?", [$u['id'], $sp, strtotime('today')]),
             'groups' => $groups,
-            'history' => array_map([$this, 'txRow'], DB::all("SELECT * FROM wallet_tx WHERE user_id = ? AND type IN ('exchange','buy_points') ORDER BY id DESC LIMIT 10", [$u['id']]))];
-        if (Access::isWebAdmin($u)) {
-            $out['admin'] = ['config' => $c, 'all_groups' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title']], DB::all('SELECT id, title FROM tg_groups WHERE active = 1 ORDER BY title')),
-                'paid' => (int)DB::val("SELECT COALESCE(SUM(amount),0) FROM wallet_tx WHERE type = 'exchange'"), 'paid_today' => (int)DB::val("SELECT COALESCE(SUM(amount),0) FROM wallet_tx WHERE type = 'exchange' AND created_at >= ?", [strtotime('today')])];
+            'history' => array_map([$this, 'txRow'], DB::all("SELECT * FROM wallet_tx WHERE user_id = ? AND space_id = ? AND type IN ('exchange','buy_points') ORDER BY id DESC LIMIT 10", [$u['id'], $sp]))];
+        if ($this->isSpaceAdmin($u, $sp)) {
+            $out['admin'] = ['config' => ['enabled' => $c['enabled_raw']] + $c, 'all_groups' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title']], DB::all('SELECT g.id, g.title FROM tg_groups g WHERE g.active = 1 AND ' . Space::groupsSql($sp, 'g') . ' ORDER BY g.title')),
+                'paid' => (int)DB::val("SELECT COALESCE(SUM(amount),0) FROM wallet_tx WHERE type = 'exchange' AND space_id = ?", [$sp]), 'paid_today' => (int)DB::val("SELECT COALESCE(SUM(amount),0) FROM wallet_tx WHERE type = 'exchange' AND space_id = ? AND created_at >= ?", [$sp, strtotime('today')])];
         }
         return $out;
     }
@@ -2455,8 +2524,8 @@ class Api
 
     private function exchangeSave(): array
     {
-        $u = Auth::requireAdmin();
-        $c = Exchange::save((array)$this->in('config', []));
+        [$u, $sp] = $this->spAdmin();
+        $c = Exchange::save((array)$this->in('config', []), $sp);
         Repo::log(null, $u['username'], 'system', null, 'Đổi điểm: ' . ($c['enabled'] ? "bật · {$c['rate_points']} điểm = " . Wallet::money($c['rate_money']) : 'tắt'));
         return ['config' => $c];
     }
@@ -2465,18 +2534,20 @@ class Api
     private function gift(): array
     {
         $u = Auth::requireUser();
+        $sp = $this->memberSp();
         $who = $u['tg_user_id'] ? (string)$u['tg_user_id'] : 'u' . $u['id'];
         $out = ['mine' => array_map(fn($r) => ['code' => $r['code'], 'type' => $r['type'], 'amount' => (int)$r['amount'], 'created_at' => (int)$r['created_at']],
             DB::all('SELECT r.created_at, c.code, c.type, c.amount FROM gift_redemptions r JOIN gift_codes c ON c.id = r.code_id WHERE r.who = ? ORDER BY r.id DESC LIMIT 20', [$who])),
-            'linked' => (bool)$u['tg_user_id'], 'cmd' => Commands::name('giftcode'), 'bot' => DB::val('SELECT username FROM tg_bots WHERE enabled = 1 ORDER BY id LIMIT 1')];
-        if (Access::isWebAdmin($u)) {
+            'linked' => (bool)$u['tg_user_id'], 'cmd' => Commands::name('giftcode'),
+            'bot' => DB::val('SELECT username FROM tg_bots WHERE enabled = 1 AND ' . ($sp ? 'owner_id = ' . $sp : 'owner_id IS NULL') . ' ORDER BY id LIMIT 1'), 'space' => $this->spaceInfo($u, $sp)];
+        if ($this->isSpaceAdmin($u, $sp)) {
             $out['admin'] = [
                 'codes' => array_map(function ($r) { $x = GiftCode::row($r); $x['group_title'] = $r['group_title']; $x['cond_text'] = GiftCode::describe($x['conditions']); return $x; },
-                    DB::all('SELECT c.*, g.title AS group_title FROM gift_codes c LEFT JOIN tg_groups g ON g.id = c.group_id ORDER BY c.id DESC LIMIT 200')),
+                    DB::all('SELECT c.*, g.title AS group_title FROM gift_codes c LEFT JOIN tg_groups g ON g.id = c.group_id WHERE c.space_id = ? ORDER BY c.id DESC LIMIT 200', [$sp])),
                 'types' => GiftCode::TYPES,
-                'groups' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title']], DB::all('SELECT id, title FROM tg_groups WHERE active = 1 ORDER BY title')),
+                'groups' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title']], DB::all('SELECT g.id, g.title FROM tg_groups g WHERE g.active = 1 AND ' . Space::groupsSql($sp, 'g') . ' ORDER BY g.title')),
                 'recent' => array_map(fn($r) => ['code' => $r['code'], 'who' => $r['display_name'] ?: ($r['tg_user_id'] ?: $r['who']), 'created_at' => (int)$r['created_at']],
-                    DB::all('SELECT r.*, c.code, u.display_name FROM gift_redemptions r JOIN gift_codes c ON c.id = r.code_id LEFT JOIN app_users u ON u.id = r.user_id ORDER BY r.id DESC LIMIT 30')),
+                    DB::all('SELECT r.*, c.code, u.display_name FROM gift_redemptions r JOIN gift_codes c ON c.id = r.code_id LEFT JOIN app_users u ON u.id = r.user_id WHERE c.space_id = ? ORDER BY r.id DESC LIMIT 30', [$sp])),
             ];
         }
         return $out;
@@ -2486,21 +2557,22 @@ class Api
     {
         $u = Auth::requireUser();
         $r = GiftCode::redeem($u, $u['tg_user_id'] ?: null, (string)$this->in('code', ''));
-        return $r + ['balance' => Wallet::balance((int)$u['id'])];
+        return $r + ['balance' => Wallet::balance((int)$u['id'], (int)$r['space'])];
     }
 
     private function giftSave(): array
     {
-        $u = Auth::requireAdmin();
-        $r = GiftCode::save((array)$this->in('code', []));
+        [$u, $sp] = $this->spAdmin();
+        if ($sp && !Space::allows($sp, 'giftcode')) fail('Gói thuê của bạn chưa có tính năng Mã quà tặng', 402);
+        $r = GiftCode::save((array)$this->in('code', []), $sp);
         Repo::log(null, $u['username'], 'system', null, "Lưu mã quà tặng {$r['code']}");
         return ['code' => $r];
     }
 
     private function giftDelete(): array
     {
-        Auth::requireAdmin();
-        DB::run('DELETE FROM gift_codes WHERE id = ?', [$this->int('id')]);
+        [, $sp] = $this->spAdmin();
+        if (!DB::run('DELETE FROM gift_codes WHERE id = ? AND space_id = ?', [$this->int('id'), $sp])) fail('Không tìm thấy mã', 404);
         DB::run('DELETE FROM gift_redemptions WHERE code_id = ?', [$this->int('id')]);
         return [];
     }
@@ -2509,17 +2581,19 @@ class Api
     private function vip(): array
     {
         $u = Auth::requireUser();
-        $c = Vip::config();
-        $until = Vip::until($u['tg_user_id']);
-        $out = ['enabled' => $c['enabled'], 'linked' => (bool)$u['tg_user_id'], 'balance' => Wallet::balance((int)$u['id']), 'until' => $until, 'active' => $until && $until > now(),
+        $sp = $this->memberSp();
+        $c = Vip::config($sp);
+        $until = Vip::until($u['tg_user_id'], $sp);
+        $out = ['space' => $this->spaceInfo($u, $sp), 'enabled' => $c['enabled'], 'linked' => (bool)$u['tg_user_id'], 'balance' => Wallet::balance((int)$u['id'], $sp), 'until' => $until, 'active' => $until && $until > now(),
             'plans' => $c['plans'], 'perks' => ['tag' => $c['tag'], 'gates' => $c['perk_gates'], 'learn' => $c['perk_learn'], 'links' => $c['perk_links'], 'multiplier' => $c['multiplier']]];
-        if (Access::isWebAdmin($u)) {
-            $out['admin'] = ['config' => $c, 'groups' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title']], DB::all('SELECT id, title FROM tg_groups WHERE active = 1 ORDER BY title')),
+        if ($this->isSpaceAdmin($u, $sp)) {
+            $c['enabled'] = $c['enabled_raw'];
+            $out['admin'] = ['config' => $c, 'groups' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title']], DB::all('SELECT g.id, g.title FROM tg_groups g WHERE g.active = 1 AND ' . Space::groupsSql($sp, 'g') . ' ORDER BY g.title')),
                 'members' => array_map(function ($v) {
                     $m = DB::get('SELECT first_name, last_name, username FROM tg_members WHERE tg_user_id = ? ORDER BY last_active DESC', [$v['tg_user_id']]);
                     return ['tg_user_id' => (string)$v['tg_user_id'], 'name' => $m ? Repo::name($m + ['tg_user_id' => $v['tg_user_id']]) : (string)$v['tg_user_id'], 'until' => (int)$v['until'], 'active' => (int)$v['until'] > now()];
-                }, DB::all('SELECT * FROM vip_members ORDER BY until DESC LIMIT 100')),
-                'revenue' => -(int)DB::val("SELECT COALESCE(SUM(amount),0) FROM wallet_tx WHERE type = 'vip'")];
+                }, $sp ? DB::all('SELECT * FROM space_vip WHERE space_id = ? ORDER BY until DESC LIMIT 100', [$sp]) : DB::all('SELECT * FROM vip_members ORDER BY until DESC LIMIT 100')),
+                'revenue' => -(int)DB::val("SELECT COALESCE(SUM(amount),0) FROM wallet_tx WHERE type = 'vip' AND space_id = ?", [$sp])];
         }
         return $out;
     }
@@ -2527,13 +2601,13 @@ class Api
     private function vipBuy(): array
     {
         $u = Auth::requireUser();
-        return Vip::buy($u, $this->int('plan'));
+        return Vip::buy($u, $this->int('plan'), $this->memberSp());
     }
 
     private function vipSave(): array
     {
-        $u = Auth::requireAdmin();
-        $c = Vip::save((array)$this->in('config', []));
+        [$u, $sp] = $this->spAdmin();
+        $c = Vip::save((array)$this->in('config', []), $sp);
         Repo::log(null, $u['username'], 'system', null, 'Gói VIP: ' . ($c['enabled'] ? 'bật · ' . count($c['plans']) . ' gói' : 'tắt'));
         return ['config' => $c];
     }
@@ -2541,17 +2615,18 @@ class Api
     /** Admin tặng / trừ ngày VIP theo ID Telegram (số âm để rút ngắn) */
     private function vipGrant(): array
     {
-        $u = Auth::requireAdmin();
+        [$u, $sp] = $this->spAdmin();
         $tg = ltrim(trim((string)$this->in('who', '')), '@');
         if (!preg_match('/^\d{3,15}$/', $tg)) $tg = (string)DB::val('SELECT tg_user_id FROM tg_members WHERE LOWER(username) = LOWER(?) ORDER BY last_active DESC', [$tg]);
         if (!$tg) fail('Không tìm thấy thành viên (nhập ID hoặc @username)', 404);
         $days = $this->int('days');
         if ($days === 0) fail('Nhập số ngày');
-        if ($days > 0) $until = Vip::extend($tg, $days, 'admin ' . $u['username'] . ' tặng');
+        if ($days > 0) $until = Vip::extend($tg, $days, 'admin ' . $u['username'] . ' tặng', $sp);
         else {
-            $cur = Vip::until($tg) ?? now();
+            $cur = Vip::until($tg, $sp) ?? now();
             $until = max(now() - 1, $cur + $days * 86400);
-            DB::run('UPDATE vip_members SET until = ?, notified = 0 WHERE tg_user_id = ?', [$until, $tg]);
+            if ($sp) DB::run('UPDATE space_vip SET until = ?, notified = 0 WHERE space_id = ? AND tg_user_id = ?', [$until, $sp, $tg]);
+            else DB::run('UPDATE vip_members SET until = ?, notified = 0 WHERE tg_user_id = ?', [$until, $tg]);
         }
         return ['until' => $until];
     }

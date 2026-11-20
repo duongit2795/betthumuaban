@@ -6,7 +6,7 @@ class DB
 {
     private static ?PDO $pdo = null;
     private static string $driver = 'sqlite';
-    const SCHEMA_VERSION = 21;
+    const SCHEMA_VERSION = 22;
 
     public static function connect(?array $c = null): PDO
     {
@@ -394,6 +394,22 @@ class DB
                 tg_user_id $big NOT NULL,
                 created_at INT NOT NULL
             )",
+            "CREATE TABLE IF NOT EXISTS space_wallets (
+                space_id INT NOT NULL,
+                user_id INT NOT NULL,
+                balance $big NOT NULL DEFAULT 0,
+                updated_at INT NOT NULL,
+                PRIMARY KEY (space_id, user_id)
+            )",
+            "CREATE TABLE IF NOT EXISTS space_vip (
+                space_id INT NOT NULL,
+                tg_user_id $big NOT NULL,
+                until INT NOT NULL,
+                notified INT NOT NULL DEFAULT 0,
+                created_at INT NOT NULL,
+                updated_at INT NOT NULL,
+                PRIMARY KEY (space_id, tg_user_id)
+            )",
             "CREATE TABLE IF NOT EXISTS plans (
                 id $pk,
                 name $str NOT NULL,
@@ -477,6 +493,10 @@ class DB
             } catch (PDOException $e) { /* đã tồn tại */ }
         }
 
+        // v22: ví / ân xá / VIP / đổi điểm / mã quà riêng của từng khách thuê (space_id: 0 = chủ web)
+        self::addColumn('wallet_tx', 'space_id', 'INT NOT NULL DEFAULT 0');
+        self::addColumn('bank_tx', 'space_id', 'INT NOT NULL DEFAULT 0');
+        self::addColumn('gift_codes', 'space_id', 'INT NOT NULL DEFAULT 0');
         // v21: cho thuê (khách thuê có bot riêng, gói thuê)
         self::addColumn('tg_bots', 'owner_id', 'INT');
         self::addColumn('app_users', 'plan_id', 'INT');

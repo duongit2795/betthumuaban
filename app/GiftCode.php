@@ -81,9 +81,11 @@ class GiftCode
         }
     }
 
-    public static function save(array $in): array
+    /** $sp: không gian sở hữu mã (0 = chủ web, N = khách thuê) */
+    public static function save(array $in, int $sp = 0): array
     {
         $id = (int)($in['id'] ?? 0);
+        if ($id && (int)DB::val('SELECT space_id FROM gift_codes WHERE id = ?', [$id]) !== $sp) throw new HttpError('Không tìm thấy mã', 404);
         $code = strtoupper(preg_replace('/[^A-Za-z0-9_-]/', '', (string)($in['code'] ?? '')));
         if ($code === '') $code = strtoupper(substr(bin2hex(random_bytes(5)), 0, 8));
         if (strlen($code) < 3 || strlen($code) > 32) throw new HttpError('Mã 3–32 ký tự (chữ, số, - _)');
@@ -95,6 +97,7 @@ class GiftCode
         if ($type === 'money' && $amount > 100000000) throw new HttpError('Số tiền quá lớn');
         $gid = (int)($in['group_id'] ?? 0);
         if ($type === 'points' && (!$gid || !Repo::group($gid))) throw new HttpError('Mã thưởng điểm cần chọn nhóm');
+        if ($type === 'points' && Space::ofGroupId($gid) !== $sp) throw new HttpError('Nhóm thưởng điểm phải là nhóm của bạn');
         $exp = trim((string)($in['expires'] ?? ''));
         $expires = $exp !== '' ? strtotime($exp . (strlen($exp) <= 10 ? ' 23:59:59' : '')) : null;
         if ($exp !== '' && !$expires) throw new HttpError('Ngày hết hạn không hợp lệ');
@@ -109,8 +112,9 @@ class GiftCode
         if (($cd['member'] || $cd['min_points'] || $cd['min_messages'] || $cd['min_days']) && (!$cd['group_id'] || !Repo::group($cd['group_id']))) {
             throw new HttpError('Điều kiện theo nhóm: chọn nhóm để xét');
         }
+        if ($cd['group_id'] && Space::ofGroupId((int)$cd['group_id']) !== $sp) throw new HttpError('Nhóm xét điều kiện phải là nhóm của bạn');
         if ($id) DB::update('gift_codes', $data, 'id = ?', [$id]);
-        else $id = DB::insert('gift_codes', $data + ['uses' => 0, 'created_at' => now()]);
+        else $id = DB::insert('gift_codes', $data + ['uses' => 0, 'created_at' => now(), 'space_id' => $sp]);
         return self::row(DB::get('SELECT * FROM gift_codes WHERE id = ?', [$id]));
     }
 
@@ -128,6 +132,8 @@ class GiftCode
         $g = DB::get('SELECT * FROM gift_codes WHERE code = ?', [$code]);
         $bad = function (string $msg) use ($key, $tries) { $tries[] = now(); Settings::set($key, json_encode(array_values($tries))); throw new HttpError($msg); };
         if (!$g || !$g['enabled']) $bad('Mã không tồn tại hoặc đã bị tắt');
+        $sp = (int)($g['space_id'] ?? 0); // phần thưởng thuộc không gian của người tạo mã
+        if ($sp && !Space::allows($sp, 'giftcode')) $bad('Mã không tồn tại hoặc đã bị tắt');
         if ($g['expires_at'] && (int)$g['expires_at'] < now()) $bad('Mã đã hết hạn');
         if ($g['max_uses'] > 0 && (int)$g['uses'] >= (int)$g['max_uses']) $bad('Mã đã hết lượt sử dụng');
         if (!$tgUserId && $g['type'] !== 'money') throw new HttpError('Hãy liên kết Telegram ở trang Tài khoản để nhận phần thưởng này');
@@ -148,8 +154,8 @@ class GiftCode
         try {
             $amount = (int)$g['amount'];
             if ($g['type'] === 'money') {
-                Wallet::credit((int)$u['id'], $amount, 'gift', "Mã quà tặng $code", $code);
-                $text = '+' . Wallet::money($amount) . ' vào ví';
+                Wallet::credit((int)$u['id'], $amount, 'gift', "Mã quà tặng $code", $code, [], $sp);
+                $text = '+' . Wallet::money($amount) . ' vào ví' . ($sp ? ' ' . Space::title($sp) : '');
             } elseif ($g['type'] === 'points') {
                 $grp = Repo::group((int)$g['group_id']);
                 if (!$grp) throw new HttpError('Nhóm của mã không còn tồn tại');
@@ -157,10 +163,10 @@ class GiftCode
                 if (!$m || !in_array($m['status'], ['member', 'muted'], true)) throw new HttpError('Mã này dành cho thành viên nhóm ' . $grp['title'] . '. Hãy vào nhóm trước.');
                 DB::run('UPDATE tg_members SET points = points + ? WHERE id = ?', [$amount, $m['id']]);
                 Repo::log((int)$grp['id'], Repo::name($m), 'points', $m, "+$amount điểm (mã quà tặng $code)", ['source' => 'web', 'amount' => $amount, 'before' => (int)$m['points'], 'after' => (int)$m['points'] + $amount]);
-                MemberTag::auto($grp, $tgUserId);
+                if (!$sp) MemberTag::auto($grp, $tgUserId);
                 $text = '+' . number_format($amount, 0, ',', '.') . ' điểm ở nhóm ' . $grp['title'];
             } else {
-                $until = Vip::extend($tgUserId, $amount, "mã quà tặng $code");
+                $until = Vip::extend($tgUserId, $amount, "mã quà tặng $code", $sp);
                 $text = "+$amount ngày VIP (đến " . date('d/m/Y', $until) . ')';
             }
         } catch (Throwable $e) {
@@ -169,6 +175,6 @@ class GiftCode
             throw $e instanceof HttpError ? $e : new HttpError($e->getMessage());
         }
         Repo::log($g['type'] === 'points' ? (int)$g['group_id'] : null, $u ? ($u['display_name'] ?: $u['username']) : (string)$tgUserId, 'gift', null, "Dùng mã $code: $text", ['source' => 'web']);
-        return ['type' => $g['type'], 'amount' => (int)$g['amount'], 'text' => $text, 'code' => $code];
+        return ['type' => $g['type'], 'amount' => (int)$g['amount'], 'text' => $text, 'code' => $code, 'space' => $sp];
     }
 }
