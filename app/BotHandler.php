@@ -675,7 +675,8 @@ class BotHandler
             if (!$u && $type === 'money') $u = TgLogin::createUser((int)$from['id'], trim(($from['first_name'] ?? '') . ' ' . ($from['last_name'] ?? '')), (string)($from['username'] ?? ''));
             try {
                 $r = GiftCode::redeem($u, $from['id'], $arg);
-                $this->reply($msg, "🎁 <b>Nhận quà thành công!</b>\nMã <code>{$r['code']}</code>: " . tg_esc($r['text']), $this->webButton('💳 Mở web', $r['type'] === 'money' ? '/wallet' : ($r['type'] === 'vip' ? '/vip' : '/')));
+                $sfx = $r['space'] ? '/' . $r['space'] : '';
+                $this->reply($msg, "🎁 <b>Nhận quà thành công!</b>\nMã <code>{$r['code']}</code>: " . tg_esc($r['text']), $this->webButton('💳 Mở web', $r['type'] === 'money' ? '/wallet' . $sfx : ($r['type'] === 'vip' ? '/vip' . $sfx : '/')));
             } catch (HttpError $e) {
                 $this->reply($msg, '❌ ' . tg_esc($e->getMessage()));
             }
@@ -684,18 +685,21 @@ class BotHandler
         if ($key === 'balance') {
             $u = DB::get('SELECT * FROM app_users WHERE tg_user_id = ? AND disabled = 0', [$from['id']]);
             if (!$u) { $this->reply($msg, "💳 Bạn chưa có tài khoản web liên kết với Telegram.\nĐăng nhập web bằng Telegram (" . $c('login') . " MÃ) để có ví và nạp tiền."); return; }
-            $wc = Wallet::config();
-            $t = "💳 <b>Ví của bạn</b>\n💰 Số dư: <b>" . Wallet::money((int)$u['balance']) . '</b>';
+            $sp = $this->space();
+            $wc = Wallet::config($sp);
+            if ($sp && !$wc['enabled']) { $this->reply($msg, '💳 Nhóm này chưa bật ví.'); return; }
+            $t = "💳 <b>Ví của bạn</b>" . ($sp ? ' · ' . tg_esc(Space::title($sp)) : '') . "\n💰 Số dư: <b>" . Wallet::money(Wallet::balance((int)$u['id'], $sp)) . '</b>';
             if ($wc['enabled'] && $wc['account_no']) {
                 $t .= "\n\n🏦 <b>Nạp tiền</b> (" . tg_esc(Wallet::BANKS[$wc['bank']] ?? $wc['bank']) . ")\nSố TK: <code>{$wc['account_no']}</code>" . ($wc['account_name'] ? "\nChủ TK: " . tg_esc($wc['account_name']) : '')
-                    . "\nNội dung: <code>" . Wallet::code($u) . "</code>\nTối thiểu: " . Wallet::money($wc['min']) . ($wc['has_api'] ? "\n⚡ Tiền tự cộng sau 1–2 phút." : '');
+                    . "\nNội dung: <code>" . Wallet::code($u, $sp) . "</code>\nTối thiểu: " . Wallet::money($wc['min']) . ($wc['has_api'] ? "\n⚡ Tiền tự cộng sau 1–2 phút." : '');
             }
             $pun = [];
-            foreach (DB::all('SELECT m.*, g.title FROM tg_members m JOIN tg_groups g ON g.id = m.group_id WHERE g.active = 1 AND m.tg_user_id = ? AND ' . Amnesty::punishedSql('m'), [$from['id']]) as $m) {
+            foreach (DB::all('SELECT m.*, g.title FROM tg_members m JOIN tg_groups g ON g.id = m.group_id WHERE g.active = 1 AND m.tg_user_id = ? AND ' . Space::groupsSql($sp, 'g') . ' AND ' . Amnesty::punishedSql('m'), [$from['id']]) as $m) {
                 if ($p = Amnesty::punishments($m)) $pun[] = '• ' . tg_esc($m['title']) . ': ' . tg_esc(implode(', ', $p));
             }
-            if ($pun && Amnesty::config()['enabled']) $t .= "\n\n🕊 <b>Có thể ân xá</b> (gỡ toàn bộ: " . Wallet::money(Amnesty::config()['price']) . ")\n" . implode("\n", $pun);
-            $this->reply($msg, $t, $this->webButton('💳 Mở ví trên web', '/wallet'));
+            $ac = Amnesty::config($sp);
+            if ($pun && $ac['enabled']) $t .= "\n\n🕊 <b>Có thể ân xá</b> (gỡ toàn bộ: " . Wallet::money($ac['price']) . ")\n" . implode("\n", $pun);
+            $this->reply($msg, $t, $this->webButton('💳 Mở ví trên web', '/wallet' . ($sp ? "/$sp" : '')));
             return;
         }
         if ($key === 'pme') {
@@ -787,9 +791,16 @@ class BotHandler
     }
 
     /** Nội dung lệnh /anxa trong nhóm */
+    /** Không gian tiền của bot này: bot khách thuê → ví / ân xá / VIP của khách đó */
+    private function space(): int
+    {
+        return Tenant::botOwner((int)$this->bot['id']) ?? 0;
+    }
+
     private function amnestyText(array $group, array $msg): string
     {
-        $cfg = Amnesty::config();
+        $sp = Space::ofGroup($group);
+        $cfg = Amnesty::config($sp);
         if (!$cfg['enabled']) return '🕊 Tính năng ân xá chưa được bật.';
         $t = "🕊 <b>ÂN XÁ THÀNH VIÊN</b>\nDùng số dư ví trên web để gỡ <b>toàn bộ</b> hình phạt (cấm chat / cấm khỏi nhóm + cảnh cáo) cho mình hoặc người khác.\n\n💰 Giá ân xá: <b>" . Wallet::money($cfg['price']) . '</b>';
         $from = $msg['reply_to_message']['from'] ?? null;
@@ -799,7 +810,7 @@ class BotHandler
             $t .= "\n\n👤 " . ($m ? Repo::mention($m) : tg_esc($from['first_name'] ?? '')) . ': ' . ($p ? tg_esc(implode(', ', $p)) : 'không có hình phạt nào.');
         }
         if ($cfg['note'] !== '') $t .= "\n\nℹ️ " . tg_esc($cfg['note']);
-        $t .= "\n\n💳 Nạp tiền & ân xá tại: " . tg_esc(site_url()) . '/#/amnesty';
+        $t .= "\n\n💳 Nạp tiền & ân xá tại: " . tg_esc(site_url()) . '/#/amnesty' . ($sp ? "/$sp" : '');
         return $t;
     }
 

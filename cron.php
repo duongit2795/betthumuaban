@@ -46,7 +46,7 @@ try { Tenant::remind(); } catch (Throwable $e) {}
 // Gỡ tag đã mua hết hạn
 try { MemberTag::expire(); } catch (Throwable $e) {}
 // Nạp tiền tự động: đọc lịch sử giao dịch ngân hàng, cộng tiền vào ví
-try { Wallet::sync(); } catch (Throwable $e) { Settings::set('pay_last_error', mb_substr($e->getMessage(), 0, 300)); }
+try { Wallet::syncAll(); } catch (Throwable $e) { Settings::set('pay_last_error', mb_substr($e->getMessage(), 0, 300)); }
 // Quảng cáo xoay vòng: chạy liên tục ~55 giây (cron gọi lại mỗi phút)
 Ads::run(55);
 echo "ok\n";
