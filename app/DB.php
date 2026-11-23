@@ -6,7 +6,7 @@ class DB
 {
     private static ?PDO $pdo = null;
     private static string $driver = 'sqlite';
-    const SCHEMA_VERSION = 22;
+    const SCHEMA_VERSION = 23;
 
     public static function connect(?array $c = null): PDO
     {
@@ -394,6 +394,23 @@ class DB
                 tg_user_id $big NOT NULL,
                 created_at INT NOT NULL
             )",
+            "CREATE TABLE IF NOT EXISTS unban_requests (
+                id $pk,
+                group_id INT NOT NULL,
+                tg_user_id $big NOT NULL,
+                username $str,
+                name $str,
+                reason TEXT,
+                requester_id INT,
+                requester_name $str,
+                status VARCHAR(16) NOT NULL DEFAULT 'pending',
+                admin_note $str,
+                decided_by $str,
+                decided_at INT,
+                tag_pending INT NOT NULL DEFAULT 0,
+                invite_link $str,
+                created_at INT NOT NULL
+            )",
             "CREATE TABLE IF NOT EXISTS space_wallets (
                 space_id INT NOT NULL,
                 user_id INT NOT NULL,
@@ -485,6 +502,7 @@ class DB
             'idx_join_events' => 'join_events (group_id, created_at)',
             'idx_join_req' => 'join_requests (group_id, status)',
             'idx_group_feat' => 'group_features (group_id, feature)',
+            'idx_unban_req' => 'unban_requests (group_id, status)',
             'idx_tenant_orders' => 'tenant_orders (user_id, created_at)',
         ];
         foreach ($indexes as $name => $def) {

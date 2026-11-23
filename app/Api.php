@@ -155,6 +155,12 @@ class Api
             'features/username' => 'usernameFeature',
             'settings/export' => 'settingsExport',
             'settings/import' => 'settingsImport',
+            'unban' => 'unban',
+            'unban/submit' => 'unbanSubmit',
+            'unban/list' => 'unbanList',
+            'unban/decide' => 'unbanDecide',
+            'unbanreq' => 'unbanReq',
+            'unbanreq/save' => 'unbanReqSave',
             'plan' => 'plan',
             'plan/buy' => 'planBuy',
             'admin' => 'adminPanel',
@@ -200,7 +206,7 @@ class Api
         $writeRoutes = ['install', 'auth/login', 'auth/register', 'auth/logout', 'me/update', 'me/link-code', 'me/unlink'];
         if (!isset($map[$route])) fail('Không tìm thấy API', 404);
         $fn = $map[$route];
-        $isWrite = in_array($route, $writeRoutes, true) || str_contains($route, '/') && !in_array($route, ['system/check-update', 'chat/poll', 'ads/image', 'me/logs', 'amnesty/search', 'users/tx', 'chat/media', 'features/group', 'features/username', 'checkin/config'], true);
+        $isWrite = in_array($route, $writeRoutes, true) || str_contains($route, '/') && !in_array($route, ['system/check-update', 'chat/poll', 'ads/image', 'me/logs', 'amnesty/search', 'users/tx', 'chat/media', 'features/group', 'features/username', 'checkin/config', 'unban/list'], true);
         if ($isWrite && $this->method !== 'POST') fail('Phương thức không hợp lệ', 405);
         json_out(['ok' => true, 'data' => $this->$fn()]);
     }
@@ -2684,6 +2690,68 @@ class Api
         $g = $this->loadGroup();
         $this->gate('settings', $g);
         return ['features' => GroupFeature::summary($g)];
+    }
+
+    // ================= Yêu cầu mở band =================
+    /** Trang thành viên: các nhóm đang nhận yêu cầu + yêu cầu của tôi */
+    private function unban(): array
+    {
+        $u = Auth::requireUser();
+        $groups = [];
+        foreach (DB::all('SELECT * FROM tg_groups WHERE active = 1 ORDER BY title') as $g) {
+            if (!UnbanRequest::applies($g)) continue;
+            $groups[] = ['id' => (int)$g['id'], 'title' => $g['title'], 'username' => $g['username'],
+                'bot' => DB::val('SELECT username FROM tg_bots WHERE id = ?', [$g['bot_id']])];
+        }
+        return [
+            'groups' => $groups,
+            'me' => ['tg_user_id' => $u['tg_user_id'] ? (string)$u['tg_user_id'] : null, 'username' => null],
+            'mine' => array_map([UnbanRequest::class, 'row'], DB::all('SELECT r.*, g.title AS group_title FROM unban_requests r JOIN tg_groups g ON g.id = r.group_id WHERE r.requester_id = ? ORDER BY r.id DESC LIMIT 30', [$u['id']])),
+        ];
+    }
+
+    private function unbanSubmit(): array
+    {
+        $u = Auth::requireUser();
+        return ['request' => UnbanRequest::submit($u, $this->int('group_id'), (string)$this->in('tg_user_id', ''), (string)$this->in('username', ''), (string)$this->in('reason', ''))];
+    }
+
+    /** Quản lý: yêu cầu ở các nhóm mình có quyền xử lý thành viên */
+    private function unbanList(): array
+    {
+        $u = $this->gate('moderate');
+        $ids = Access::groupIds($u);
+        if ($ids !== null) $ids = array_values(array_filter($ids, fn($id) => Access::can($u, 'moderate', $id)));
+        $status = (string)$this->in('status', 'pending');
+        $where = Access::sqlIn($ids, 'r.group_id') . (isset(UnbanRequest::STATUS[$status]) ? " AND r.status = '$status'" : '');
+        return [
+            'rows' => array_map([UnbanRequest::class, 'row'], DB::all("SELECT r.*, g.title AS group_title FROM unban_requests r JOIN tg_groups g ON g.id = r.group_id WHERE $where ORDER BY r.id DESC LIMIT 100")),
+            'pending' => (int)DB::val("SELECT COUNT(*) FROM unban_requests r WHERE r.status = 'pending' AND " . Access::sqlIn($ids, 'r.group_id')),
+        ];
+    }
+
+    private function unbanDecide(): array
+    {
+        $r = DB::get('SELECT * FROM unban_requests WHERE id = ?', [$this->int('id')]) ?: fail('Không tìm thấy yêu cầu', 404);
+        $g = Repo::group((int)$r['group_id']) ?: fail('Không tìm thấy nhóm', 404);
+        $u = $this->gate('moderate', $g);
+        return ['request' => UnbanRequest::decide((int)$r['id'], (bool)$this->in('approve'), $u['display_name'] ?: $u['username'], (string)$this->in('note', ''))];
+    }
+
+    /** Cài đặt tính năng (chung / riêng nhóm) */
+    private function unbanReq(): array
+    {
+        [, $g] = $this->featScope();
+        return ['config' => UnbanRequest::config($g), 'defaults' => UnbanRequest::DEFAULTS, 'scope' => $this->featInfo(UnbanRequest::KEY, $g), 'groups' => $this->featGroups($g),
+            'link' => $g ? UnbanRequest::link($g) : site_url() . '/#/unban'];
+    }
+
+    private function unbanReqSave(): array
+    {
+        [$u, $g] = $this->featScope();
+        $c = UnbanRequest::save((array)$this->in('config', []), $g, $u['username']);
+        Repo::log($g ? (int)$g['id'] : null, $u['username'], 'system', null, 'Yêu cầu mở band: ' . ($c['enabled'] ? 'bật' : 'tắt'));
+        return ['config' => $c];
     }
 
     // ================= Cho thuê: gói thuê của khách =================

@@ -21,6 +21,7 @@ class Tenant
         'require_username' => 'Yêu cầu đặt Username',
         'watermark' => 'Đóng dấu ảnh',
         'checkin' => 'Điểm danh nhận điểm',
+        'unban_request' => 'Yêu cầu mở band',
         // Tính năng tiền của khách (ví riêng, tiền vào tài khoản ngân hàng của khách)
         'wallet' => 'Ví & nạp tiền cho thành viên',
         'amnesty' => 'Ân xá thành viên',
