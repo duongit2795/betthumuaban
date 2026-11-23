@@ -34,6 +34,7 @@ class BotHandler
         }
         elseif (isset($u['callback_query'])) {
             $cbq = $u['callback_query'];
+            if (UnbanRequest::onCallback($this->api, $cbq)) return; // admin duyệt / từ chối yêu cầu mở band
             if ($cap = Captcha::onCallback($this->api, $cbq)) { $this->afterCaptcha($cap); return; }
             if (!UsernameGuard::onCallback($this->api, $cbq) && !UpdateNotifier::onCallback($this->api, $cbq)) TgLogin::onCallback($this->api, $cbq);
         }
@@ -128,6 +129,7 @@ class BotHandler
         $wasOut = in_array($oldSt, ['left', 'kicked'], true) || ($oldSt === 'restricted' && empty($cm['old_chat_member']['is_member']));
         $isIn = $st === 'member' || ($st === 'restricted' && !empty($nm['is_member']));
         if ($wasOut && $isIn && empty($user['is_bot'])) {
+            UnbanRequest::onJoin($group, $user);
             $by = (int)($cm['from']['id'] ?? 0);
             if (!NameGuard::check($this->api, $group, $user, in_array($st, ['administrator', 'creator'], true) || $this->isAdmin($group, (int)$user['id']), 'join'))
             if (!AntiRaid::onJoin($this->api, $group, $user, in_array($st, ['administrator', 'creator'], true), $by && $by != $user['id'] ? $by : null, fn(int $id) => $this->isAdmin($group, $id)))
@@ -340,6 +342,7 @@ class BotHandler
         // Thành viên mới chưa có username → xử lý theo cài đặt "Yêu cầu đặt Username"
         foreach ($msg['new_chat_members'] as $u) {
             if (isset($nameHit[$u['id']])) continue;
+            if ($u['id'] != $this->botTgId) UnbanRequest::onJoin($group, $u); // vào lại sau khi được mở band → tag "Từng Bị Band"
             if ($u['id'] != $this->botTgId && !isset($captcha[$u['id']])) UsernameGuard::check($this->api, (int)$this->bot['id'], $group, $u, null, false, true);
             if ($u['id'] != $this->botTgId) Learn::onJoin($group, $u);
         }

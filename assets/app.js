@@ -303,8 +303,17 @@
       if (S.status && !S.status.installed) return renderInstall();
     }
     const publicPaths = ['/login', '/register'];
-    if (!S.user && !publicPaths.includes(path)) return go('/login');
-    if (S.user && publicPaths.includes(path)) return go('/');
+    if (!S.user && !publicPaths.includes(path)) {
+      if (path !== '/') { try { sessionStorage.setItem('afterLogin', path); } catch {} } // VD link xin mở band trong nhóm → đăng nhập xong quay lại
+      return go('/login');
+    }
+    if (S.user && publicPaths.includes(path)) {
+      let next = '/';
+      try { next = sessionStorage.getItem('afterLogin') || '/'; sessionStorage.removeItem('afterLogin'); } catch {}
+      return go(next);
+    }
+    if (S.user && path !== '/' ) { try { sessionStorage.removeItem('afterLogin'); } catch {} }
+    else if (S.user) { let next = null; try { next = sessionStorage.getItem('afterLogin'); sessionStorage.removeItem('afterLogin'); } catch {} if (next) return go(next); }
     if (publicPaths.includes(path)) return path === '/login' ? renderLogin() : renderRegister();
 
     let r, params = {};
@@ -346,26 +355,26 @@
     if (!isWebAdmin() && isTenant()) {
       return {
         tab: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/plan', 'star', 'Gói'], ['/more', 'grid', 'Thêm']],
-        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm của tôi'], ['/bots', 'bot', 'Bot của tôi'], ['/plan', 'star', 'Gói thuê'], ...(can('rules') ? [['/rules', 'terminal', 'Lệnh']] : []), ['/logs', 'list', 'Nhật ký'],
+        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm của tôi'], ['/bots', 'bot', 'Bot của tôi'], ['/plan', 'star', 'Gói thuê'], ...(can('rules') ? [['/rules', 'terminal', 'Lệnh']] : []), ['/logs', 'list', 'Nhật ký'], ['/unbans', 'lock', 'Yêu cầu mở band'],
           ['/payments', 'bank', 'Thanh toán'], [`/vip/${S.user.id}`, 'trophy', 'VIP nhóm tôi'], [`/exchange/${S.user.id}`, 'refresh', 'Đổi điểm nhóm tôi'], [`/giftcode/${S.user.id}`, 'star', 'Mã quà nhóm tôi'], ...payNav(), ['/account', 'user', 'Tài khoản']],
       };
     }
     if (!isWebAdmin() && isManager()) {
       return {
         tab: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/rules', 'terminal', 'Lệnh'], ...(can('logs') ? [['/logs', 'list', 'Nhật ký']] : []), ['/more', 'grid', 'Thêm']],
-        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm của tôi'], ...planNav, ['/rules', 'terminal', 'Lệnh'], ...(can('logs') ? [['/logs', 'list', 'Nhật ký']] : []), ['/me', 'star', 'Điểm của tôi'], ...(S.pay?.checkin ? [['/checkin', 'calendar', 'Điểm danh']] : []), ['/rank', 'trophy', 'Xếp hạng'], ...payNav(), ['/account', 'user', 'Tài khoản']],
+        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm của tôi'], ...planNav, ['/rules', 'terminal', 'Lệnh'], ...(can('moderate') ? [['/unbans', 'lock', 'Yêu cầu mở band']] : []), ...(can('logs') ? [['/logs', 'list', 'Nhật ký']] : []), ['/me', 'star', 'Điểm của tôi'], ...(S.pay?.checkin ? [['/checkin', 'calendar', 'Điểm danh']] : []), ['/rank', 'trophy', 'Xếp hạng'], ...payNav(), ['/account', 'user', 'Tài khoản']],
       };
     }
     if (isWebAdmin()) {
       return {
         tab: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/logs', 'list', 'Nhật ký'], ['/more', 'grid', 'Thêm']],
-        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh'], ['/ads', 'megaphone', 'Quảng cáo'], ['/learn', 'book', 'Học tập'], ['/antiraid', 'shield', 'Chống raid'], ['/captcha', 'shield', 'Captcha vào nhóm'], ['/watermark', 'image', 'Đóng dấu ảnh'], ['/nameguard', 'shield', 'Cấm tên chứa từ cấm'], ['/gates', 'lock', 'Điều kiện chat'], ['/tags', 'tagi', 'Tag thành viên'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/admin', 'star', 'Quản lý cho thuê'], ['/payments', 'bank', 'Nạp tiền & ân xá'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ['/checkin', 'calendar', 'Điểm danh'], ['/exchange', 'refresh', 'Đổi điểm'], ['/vip', 'trophy', 'Gói VIP'], ['/giftcode', 'star', 'Mã quà tặng'], ...payNav(), ['/account', 'user', 'Tài khoản']],
+        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh'], ['/ads', 'megaphone', 'Quảng cáo'], ['/learn', 'book', 'Học tập'], ['/antiraid', 'shield', 'Chống raid'], ['/captcha', 'shield', 'Captcha vào nhóm'], ['/watermark', 'image', 'Đóng dấu ảnh'], ['/nameguard', 'shield', 'Cấm tên chứa từ cấm'], ['/unbans', 'lock', 'Yêu cầu mở band'], ['/gates', 'lock', 'Điều kiện chat'], ['/tags', 'tagi', 'Tag thành viên'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/admin', 'star', 'Quản lý cho thuê'], ['/payments', 'bank', 'Nạp tiền & ân xá'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ['/checkin', 'calendar', 'Điểm danh'], ['/exchange', 'refresh', 'Đổi điểm'], ['/vip', 'trophy', 'Gói VIP'], ['/giftcode', 'star', 'Mã quà tặng'], ...payNav(), ['/account', 'user', 'Tài khoản']],
       };
     }
     const ck = S.pay?.checkin ? [['/checkin', 'calendar', 'Điểm danh']] : [];
     const m = [['/', 'star', 'Của tôi'], ...ck, ['/rank', 'trophy', 'Xếp hạng'], ...payNav(), ['/account', 'user', 'Tài khoản']];
     const tab = m.length > 5 ? m.filter(([p]) => p !== '/rank') : m;
-    return { tab, side: [...m.slice(0, -1), ...planNav, ...shopNav(), ['/mylogs', 'list', 'Nhật ký của tôi'], m[m.length - 1]] };
+    return { tab, side: [...m.slice(0, -1), ...planNav, ...shopNav(), ['/unban', 'lock', 'Xin mở band'], ['/mylogs', 'list', 'Nhật ký của tôi'], m[m.length - 1]] };
   }
 
   function shell(nav, title, back) {
@@ -389,7 +398,7 @@
     const path = current();
     const direct = (p) => (p === '/' ? path === '/' : path === p || path.startsWith(p + '/') || (p === '/groups' && path.startsWith('/group/')) || (p === '/rules' && path === '/commands'));
     const inTabs = items.tab.some(([p]) => p !== '/more' && direct(p));
-    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments', '/learn', '/keyboard', '/gates', '/mylogs', '/checkin', '/tags', '/tagshop', '/exchange', '/giftcode', '/vip', '/captcha', '/antiraid', '/watermark', '/nameguard', '/admin', '/plan', '/username'].some((x) => path.startsWith(x)));
+    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments', '/learn', '/keyboard', '/gates', '/mylogs', '/checkin', '/tags', '/tagshop', '/exchange', '/giftcode', '/vip', '/captcha', '/antiraid', '/watermark', '/nameguard', '/admin', '/plan', '/username', '/unban'].some((x) => path.startsWith(x)));
     $('#tabbar').innerHTML = items.tab.map(([p, ic, t]) => `<a href="#${p}" class="${isActive(p) ? 'active' : ''}">${icon(ic)}<span>${t}</span></a>`).join('');
     $('#sidebar').innerHTML = `<div class="brand"><img src="assets/icon.svg" alt="">${esc(S.site)}</div>`
       + items.side.map(([p, ic, t]) => `<a href="#${p}" class="nav ${isActive(p) && !(p === '/more') ? 'active' : ''}">${icon(ic)}${t}</a>`).join('')
@@ -2799,6 +2808,7 @@
         <a class="list-item" href="#/antiraid">${icon('shield')}<div class="grow">Chống raid & duyệt thành viên</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/captcha">${icon('shield')}<div class="grow">Captcha khi vào nhóm</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/nameguard">${icon('shield')}<div class="grow">Cấm tên chứa từ cấm</div><span class="chev">${icon('chevron')}</span></a>
+        <a class="list-item" href="#/unbanreq">${icon('lock')}<div class="grow">Yêu cầu mở band (cài đặt)</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/watermark">${icon('image')}<div class="grow">Đóng dấu ảnh chống copy</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/gates">${icon('lock')}<div class="grow">Điều kiện nhắn tin giữa các nhóm</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/tags">${icon('tagi')}<div class="grow">Tag thành viên</div><span class="chev">${icon('chevron')}</span></a>` : ''}
@@ -2813,6 +2823,8 @@
         ${S.pay?.wallet || isWebAdmin() ? `<a class="list-item" href="#/wallet">${icon('wallet')}<div class="grow">Ví của tôi</div><span class="small muted">${money(S.user.balance || 0)}</span><span class="chev">${icon('chevron')}</span></a>` : ''}
         ${S.pay?.amnesty || isWebAdmin() ? `<a class="list-item" href="#/amnesty">${icon('heart')}<div class="grow">Ân xá thành viên</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         <a class="list-item" href="#/me">${icon('star')}<div class="grow">Điểm của tôi</div><span class="chev">${icon('chevron')}</span></a>
+        ${isManager() && can('moderate') ? `<a class="list-item" href="#/unbans">${icon('lock')}<div class="grow">Duyệt yêu cầu mở band</div><span class="chev">${icon('chevron')}</span></a>` : ''}
+        <a class="list-item" href="#/unban">${icon('lock')}<div class="grow">Xin mở band</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/mylogs">${icon('list')}<div class="grow">Nhật ký của tôi</div><span class="chev">${icon('chevron')}</span></a>
         ${S.pay?.tagshop || isWebAdmin() ? `<a class="list-item" href="#/tagshop">${icon('tagi')}<div class="grow">Mua tag bằng số dư ví</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         ${S.pay?.exchange || isWebAdmin() ? `<a class="list-item" href="#/exchange">${icon('refresh')}<div class="grow">Đổi điểm lấy tiền</div><span class="chev">${icon('chevron')}</span></a>` : ''}
@@ -4658,6 +4670,137 @@
       };
     });
   }
+
+  // ================= Yêu cầu mở band =================
+  const UB_ST = { pending: ['Chờ duyệt', 'amber'], approved: ['Đã mở band', 'green'], rejected: ['Từ chối', 'red'], processing: ['Đang xử lý', 'blue'] };
+  const ubWho = (r) => `${r.username ? '@' + esc(r.username) : esc(r.name || '')} <span class="mono xs muted">${esc(r.tg_user_id)}</span>`;
+
+  async function unbanView(p = {}) {
+    const d = await api('unban');
+    const gid = +p.gid || 0;
+    const sel = d.groups.find((g) => g.id === gid) || d.groups[0];
+    const item = (r) => { const [l, c] = UB_ST[r.status] || [r.status, '']; return `<div class="list-item" style="align-items:flex-start"><div class="grow" style="min-width:0">
+      <div class="row wrap" style="gap:6px"><b class="ellipsis">${esc(r.group)}</b><span class="badge ${c}">${l}</span></div>
+      <div class="small">${ubWho(r)}</div><div class="xs muted">Lý do: ${esc(r.reason)}</div>
+      ${r.admin_note ? `<div class="xs">📝 Admin: ${esc(r.admin_note)}</div>` : ''}
+      ${r.status === 'approved' && r.invite_link ? `<a class="btn sm soft" style="margin-top:6px" href="${esc(r.invite_link)}" target="_blank" rel="noopener">🔗 Link vào lại nhóm</a>` : ''}
+      <div class="xs muted">${fmtDate(r.created_at, true)}${r.decided_by ? ' · xử lý bởi ' + esc(r.decided_by) : ''}</div></div></div>`; };
+    return {
+      title: 'Xin mở band',
+      html: `
+      <div class="alert info" style="margin-bottom:12px">${icon('info')}<div class="xs">Bị <b>band (cấm khỏi nhóm)</b>? Gửi yêu cầu để admin xem xét. Bạn có thể gửi giúp người khác. Khi được duyệt, bot gỡ band và gửi <b>link vào lại nhóm</b>; người được mở band sẽ có tag <b>“Từng Bị Band”</b>.</div></div>
+      ${d.groups.length ? `<form class="card card-pad stack" id="fub">
+        <label class="field"><span class="lbl">Nhóm bị band</span><select class="input" name="group_id">${d.groups.map((g) => `<option value="${g.id}" ${sel && g.id === sel.id ? 'selected' : ''}>${esc(g.title)}</option>`).join('')}</select></label>
+        <label class="field"><span class="lbl">ID Telegram cần mở band</span><input class="input mono" name="tg_user_id" inputmode="numeric" required placeholder="VD 123456789">
+          ${d.me.tg_user_id ? `<button type="button" class="btn sm ghost" data-myid style="margin-top:4px;align-self:flex-start">Dùng ID của tôi (${esc(d.me.tg_user_id)})</button>` : ''}</label>
+        <details class="card" style="box-shadow:none;padding:10px 12px"><summary class="small" style="cursor:pointer;font-weight:600">❓ Cách lấy ID Telegram</summary>
+          <div class="xs text-2 stack" style="gap:6px;margin-top:8px">
+            <div>1. Mở chat riêng với bot của nhóm <b data-ubbot>${sel?.bot ? '@' + esc(sel.bot) : ''}</b> rồi gửi <code>/start</code> → bot trả lời <b>“ID của bạn: …”</b>.</div>
+            <div>2. Hoặc nhắn cho <a href="https://t.me/userinfobot" target="_blank" rel="noopener">@userinfobot</a>, bot sẽ gửi lại ID (dãy số).</div>
+            <div>3. Gửi giúp người khác: nhờ họ làm 1 trong 2 cách trên rồi gửi ID cho bạn.</div>
+            <div class="muted">ID là <b>dãy số</b> (VD 123456789), không phải @username. ID không bao giờ đổi, còn @username có thể đổi.</div></div></details>
+        <label class="field"><span class="lbl">@username <span class="xs muted">(nếu có)</span></span><input class="input" name="username" placeholder="@tencuaban" autocomplete="off"></label>
+        <label class="field"><span class="lbl">Lý do bị band</span><textarea class="input" name="reason" rows="3" required maxlength="1000" placeholder="VD: gửi link nhầm, bị nhận nhầm là spam…"></textarea>
+          <div class="hint">Viết rõ để admin dễ xem xét.</div></label>
+        <button class="btn primary block">${icon('send', 'sm')}Gửi yêu cầu</button>
+      </form>` : `<div class="card">${empty('lock', 'Hiện chưa có nhóm nào nhận yêu cầu mở band.')}</div>`}
+      ${d.mine.length ? `<div class="section-title"><h2>Yêu cầu đã gửi</h2></div><div class="list">${d.mine.map(item).join('')}</div>` : ''}`,
+      mount: (root) => {
+        const f = $('#fub', root);
+        if (!f) return;
+        f.group_id.onchange = () => { const g = d.groups.find((x) => x.id === +f.group_id.value); $('[data-ubbot]', root).textContent = g?.bot ? '@' + g.bot : ''; };
+        $('[data-myid]', root)?.addEventListener('click', () => { f.tg_user_id.value = d.me.tg_user_id; });
+        f.onsubmit = (e) => {
+          e.preventDefault();
+          const v = formData(f);
+          withBtn(f.querySelector('button.primary'), async () => {
+            try { await api('unban/submit', { group_id: +v.group_id, tg_user_id: v.tg_user_id.trim(), username: v.username, reason: v.reason }); toast('Đã gửi yêu cầu, admin sẽ xem xét sớm'); render(); }
+            catch (err) { toast(err.message, 'err'); }
+          });
+        };
+      },
+    };
+  }
+  route('/unban', unbanView, { title: 'Xin mở band' });
+  route('/unban/:gid', unbanView, { title: 'Xin mở band' });
+
+  route('/unbans', async () => {
+    let st = sessionStorage.getItem('ubSt') || 'pending';
+    const d = await api('unban/list', undefined, { query: { status: st } });
+    const item = (r) => { const [l, c] = UB_ST[r.status] || [r.status, '']; return `<div class="card card-pad stack" style="gap:6px;margin-bottom:10px">
+      <div class="row wrap" style="gap:6px"><b class="grow ellipsis">${esc(r.group)}</b><span class="badge ${c}">${l}</span></div>
+      <div>${ubWho(r)}${r.name && r.username ? ' · ' + esc(r.name) : ''}</div>
+      <div class="small"><b>Lý do:</b> ${esc(r.reason)}</div>
+      <div class="xs muted">Gửi bởi ${esc(r.requester || '?')} · ${fmtDate(r.created_at, true)}${r.decided_by ? ' · xử lý: ' + esc(r.decided_by) : ''}${r.admin_note ? ' · ' + esc(r.admin_note) : ''}</div>
+      ${r.status === 'pending' ? `<div class="grid grid-2"><button class="btn soft-danger" data-ubno="${r.id}">❌ Từ chối</button><button class="btn primary" data-ubok="${r.id}">✅ Duyệt mở band</button></div>` : ''}</div>`; };
+    return {
+      title: 'Yêu cầu mở band',
+      html: `
+      <div class="chips" style="margin-bottom:12px">${[['pending', `Chờ duyệt (${d.pending})`], ['approved', 'Đã mở band'], ['rejected', 'Từ chối'], ['', 'Tất cả']].map(([k, l]) => `<button class="chip ${st === k ? 'active' : ''}" data-ubst="${k}">${l}</button>`).join('')}</div>
+      ${d.rows.length ? d.rows.map(item).join('') : `<div class="card">${empty('lock', st === 'pending' ? 'Không có yêu cầu nào đang chờ.' : 'Không có yêu cầu')}</div>`}
+      <div class="xs muted" style="margin-top:8px">Admin nhóm cũng nhận tin riêng qua bot (kèm nút duyệt) nếu đã mở chat với bot. Duyệt → bot gỡ band, gửi link vào lại cho người đó và gắn tag khi họ vào lại. Cài đặt ở <a href="#/unbanreq">Yêu cầu mở band (cài đặt)</a>${isWebAdmin() ? '' : ' hoặc tab ⚙️ Tính năng của nhóm'}.</div>`,
+      mount: (root) => {
+        root.addEventListener('click', (e) => {
+          const t = e.target.closest('[data-ubst]');
+          if (t) { sessionStorage.setItem('ubSt', t.dataset.ubst); return render(); }
+          const b = e.target.closest('[data-ubok], [data-ubno]');
+          if (!b) return;
+          const ok = !!b.dataset.ubok, id = +(b.dataset.ubok || b.dataset.ubno);
+          sheet(`<div class="sheet-head"><h2>${ok ? 'Duyệt mở band?' : 'Từ chối yêu cầu?'}</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
+            <form class="stack" id="fubd"><label class="field"><span class="lbl">Ghi chú gửi cho người bị band <span class="xs muted">(không bắt buộc)</span></span><input class="input" name="note" maxlength="190" placeholder="${ok ? 'VD: Lần sau chú ý nội quy nhé' : 'VD: Vi phạm lừa đảo, không mở'}"></label>
+            <button class="btn ${ok ? 'primary' : 'danger'} block">${ok ? '✅ Duyệt & gỡ band' : '❌ Từ chối'}</button></form>`, (el, close) => {
+            $('#fubd', el).onsubmit = (ev) => {
+              ev.preventDefault();
+              withBtn(ev.target.querySelector('button'), async () => {
+                try { await api('unban/decide', { id, approve: ok, note: ev.target.note.value }); close(); toast(ok ? 'Đã gỡ band ✅' : 'Đã từ chối'); render(); } catch (err) { toast(err.message, 'err'); }
+              });
+            };
+          });
+        });
+      },
+    };
+  }, { manage: true, perm: 'moderate', title: 'Yêu cầu mở band' });
+
+  featureRoute('/unbanreq', async (p = {}) => {
+    const gid = +p.gid || 0;
+    const d = await api('unbanreq', undefined, gq(gid));
+    const c = d.config;
+    let sel = [...c.groups];
+    return {
+      title: 'Yêu cầu mở band',
+      html: `${scopeBar(d.scope, '/unbanreq')}
+      <div class="alert info" style="margin-bottom:12px">${icon('info')}<div class="xs">Thành viên bị band gửi yêu cầu trên web (chọn nhóm, ID, @username, lý do). Admin duyệt ở <a href="#/unbans">Yêu cầu mở band</a> hoặc bấm nút trong tin riêng của bot. Link gửi yêu cầu: <span class="mono">${esc(d.link)}</span> <button type="button" class="btn icon sm ghost" data-copy="${esc(d.link)}">${icon('copy', 'sm')}</button></div></div>
+      <form class="stack" id="fubr">
+        <div class="card">${sw('enabled', c.enabled, 'Nhận yêu cầu mở band')}${sw('need_banned', c.need_banned, 'Chỉ nhận khi ID đang bị band thật', 'Bot kiểm tra trên Telegram, tránh gửi nhầm / spam')}</div>
+        <div class="card card-pad ${d.scope?.group ? 'hidden' : ''}"><div class="field"><span class="lbl">Áp dụng cho nhóm <span class="xs muted">(không chọn = tất cả)</span></span><div class="chips" style="flex-wrap:wrap">${d.groups.map((g) => `<button type="button" class="chip ${sel.includes(g.id) ? 'active' : ''}" data-ubg="${g.id}">${esc(g.title)}</button>`).join('')}</div></div></div>
+        <div class="card">${sw('notify_admins', c.notify_admins, 'Nhắn riêng cho admin nhóm', 'Kèm nút ✅ Duyệt / ❌ Từ chối (admin cần mở chat với bot)')}${sw('notify_group', c.notify_group, 'Thông báo vào nhóm khi có yêu cầu mới', 'Để mọi người biết chỗ gửi yêu cầu mở band')}</div>
+        <div class="card card-pad stack">
+          <label class="field"><span class="lbl">Thông báo trong nhóm khi có yêu cầu</span><textarea class="input" name="group_text" rows="3">${esc(c.group_text)}</textarea>
+            <div class="hint">Biến: <code>{who}</code> @username + ID · <code>{name}</code> · <code>{link}</code> link gửi yêu cầu · <code>{group}</code></div></label>
+          ${sw('notify_done', c.notify_done, 'Thông báo vào nhóm khi được duyệt')}
+          <label class="field"><span class="lbl">Thông báo khi duyệt</span><textarea class="input" name="done_text" rows="2">${esc(c.done_text)}</textarea></label>
+          <label class="field"><span class="lbl">Tự xoá thông báo trong nhóm sau (giây, 0 = không)</span><input class="input" name="autodel" inputmode="numeric" value="${c.autodel}"></label>
+        </div>
+        <div class="card card-pad stack">
+          <label class="field"><span class="lbl">Tag gắn cho người được mở band</span><input class="input" name="tag" value="${esc(c.tag)}" maxlength="16" placeholder="Từng Bị Band">
+            <div class="hint">Gắn khi họ vào lại nhóm (tối đa 16 ký tự, để trống = không gắn). Bot cần quyền đổi tag thành viên.</div></label>
+          ${sw('send_invite', c.send_invite, 'Gửi link vào lại nhóm (dùng 1 lần, hạn 7 ngày)')}
+        </div>
+        <button class="btn primary block">Lưu cài đặt</button>
+      </form>`,
+      mount: (root) => {
+        bindScope(root, d.scope, '/unbanreq');
+        root.addEventListener('click', (e) => {
+          const g = e.target.closest('[data-ubg]');
+          if (g) { const id = +g.dataset.ubg; sel = sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id]; g.classList.toggle('active'); }
+        });
+        $('#fubr', root).onsubmit = (e) => {
+          e.preventDefault();
+          withBtn(e.target.querySelector('button.primary'), async () => { try { await api('unbanreq/save', { group_id: gid, config: { ...formData(e.target), groups: sel } }); toast('Đã lưu'); render(); } catch (err) { toast(err.message, 'err'); } });
+        };
+      },
+    };
+  }, 'Yêu cầu mở band');
 
   // ================= Cấm tên chứa từ cấm =================
   featureRoute('/nameguard', async (p = {}) => {

@@ -16,7 +16,8 @@ class GroupFeature
         'require_username' => ['UsernameGuard', 'Yêu cầu đặt Username', '🔖', '/username'],
         'watermark' => ['Watermark', 'Đóng dấu ảnh chống copy', '🖼', '/watermark'],
         'learn' => ['Learn', 'Học tập bắt buộc', '📚', '/learn'],
-        'checkin' => ['Checkin', 'Điểm danh nhận điểm', '📅', '/checkin-admin'],
+        'checkin' => ['Checkin', 'Điểm danh nhận điểm', '📅', '/checkin'],
+        'unban_request' => ['UnbanRequest', 'Yêu cầu mở band', '🔓', '/unbanreq'],
     ];
 
     private static array $cache = [];
