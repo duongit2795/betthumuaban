@@ -1426,7 +1426,7 @@
         <div class="row">${avatar(b.name || b.username, b.tg_bot_id, 'sq')}
           <div class="grow"><div class="row" style="gap:6px"><b class="ellipsis">${esc(b.name || '')}</b>
           <span class="dot ${b.status === 'running' ? 'green' : b.status === 'error' ? 'red' : ''}"></span></div>
-          <div class="small muted"><a href="https://t.me/${esc(b.username)}" target="_blank" rel="noopener">@${esc(b.username)}</a> · ${b.groups} nhóm${isWebAdmin() && b.owner ? ` · <span class="badge amber">Khách: ${esc(b.owner.username)}</span>` : ''}</div></div>
+          <div class="small muted"><a href="https://t.me/${esc(b.username)}" target="_blank" rel="noopener">@${esc(b.username)}</a> · ${b.groups} nhóm${isWebAdmin() && b.owner ? ` · <span class="badge amber">Khách: ${esc(b.owner.username)}</span>` : ''}${b.escrow ? ' · <span class="badge blue">🤝 Bot GDTG</span>' : ''}</div></div>
           <label class="switch"><input type="checkbox" data-toggle="${b.id}" ${b.enabled ? 'checked' : ''}><span></span></label></div>
         ${b.blocked ? `<div class="alert warn" style="margin-top:12px">${icon('alert')}<div class="small">⏸ ${esc(b.blocked)}. ${isWebAdmin() ? '' : '<a href="#/plan">Gia hạn / nâng cấp</a>'}</div></div>` : ''}
         ${b.last_error ? `<div class="alert err" style="margin-top:12px">${icon('alert')}<div class="small" style="overflow-wrap:anywhere">${esc(b.last_error)}</div></div>` : ''}
@@ -4832,10 +4832,11 @@
         <div class="list">${d.rooms.length ? d.rooms.map(roomItem).join('') : empty('lock', 'Chưa có phòng nào')}</div>
         <div class="card card-pad stack" style="margin-top:12px">
           <h3>➕ Thêm phòng</h3>
+          ${c.bot_id ? `<div class="xs muted">Chỉ hiện nhóm đã có bot GDTG <b>@${esc(d.bot || '')}</b>.</div>` : ''}
           ${d.candidates.length ? `<div class="row" style="gap:8px"><select class="input grow" data-rnew>${d.candidates.map((g) => `<option value="${g.id}">${esc(g.title)}</option>`).join('')}</select><button class="btn primary" data-radd>Thêm</button></div>` : '<div class="xs muted">Chưa có nhóm nào để thêm: tạo nhóm mới rồi thêm bot vào trước.</div>'}
           <details><summary class="small" style="cursor:pointer;font-weight:600">Cách tạo 1 phòng GDTG</summary><div class="xs text-2 stack" style="gap:4px;margin-top:6px">
             <div>1. Trên Telegram tạo nhóm mới (VD "Phòng GDTG 01"), bạn là chủ nhóm.</div>
-            <div>2. Thêm <b>các trung gian</b> (ID đã cài) và <b>bot</b> vào nhóm.</div>
+            <div>2. Thêm <b>các trung gian</b> (ID đã cài) và <b>${d.bot ? '@' + esc(d.bot) : 'bot'}</b>${c.bot_id ? ' (bot GDTG)' : ''} vào nhóm.</div>
             <div>3. Cấp quyền quản trị cho bot: Mời thành viên qua link, Cấm thành viên, Ghim tin, Xoá tin, Đổi thông tin nhóm.</div>
             <div>4. Cài đặt nhóm → <b>Lịch sử chat cho thành viên mới: Ẩn</b> (để người sau không đọc được giao dịch trước).</div>
             <div>5. Quay lại đây chọn nhóm → <b>Thêm</b>, bot sẽ kiểm tra đủ điều kiện. Lặp lại cho đủ 10 phòng.</div></div></details>
@@ -4844,6 +4845,8 @@
       <form class="hidden stack" data-pane="settings" id="fesc">
         <div class="card">${sw('enabled', c.enabled, 'Bật giao dịch trung gian', 'Cho phép tạo giao dịch bằng /gdtg và trên web')}</div>
         <div class="card card-pad stack">
+          <label class="field"><span class="lbl">🤖 Bot phụ trách GDTG</span><select class="input" name="bot_id"><option value="0" ${!c.bot_id ? 'selected' : ''}>Dùng bot quản lý nhóm (không tách riêng)</option>${d.bots.map((b) => `<option value="${b.id}" ${c.bot_id === b.id ? 'selected' : ''}>@${esc(b.username || '?')}${b.name ? ' · ' + esc(b.name) : ''}${b.enabled ? '' : ' (đang tắt)'}</option>`).join('')}</select>
+            <div class="hint">Nên dùng <b>1 bot riêng</b> (thêm token ở trang <a href="#/bots">Bot</a>): bot này chỉ làm GDTG (lệnh /gdtg, phòng, nút, nhắn riêng); bot quản lý nhóm sẽ không đụng vào phòng GDTG. Phòng chỉ cần bot GDTG làm quản trị. Trung gian cần bấm Start bot GDTG để nhận thông báo.</div></label>
           <label class="field"><span class="lbl">ID Telegram trung gian <span class="xs muted">(mỗi dòng: ID Tên)</span></span><textarea class="input mono" name="middlemen" rows="3" placeholder="123456789 Admin A">${esc(c.middlemen.map((m) => (m.id + ' ' + (m.name || '')).trim()).join('\n'))}</textarea>
             <div class="hint">Chỉ các ID này được xác nhận tiền, giải ngân, hoàn tiền, huỷ. Họ phải có mặt trong mọi phòng.</div></label>
         </div>

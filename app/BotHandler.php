@@ -20,6 +20,10 @@ class BotHandler
     public function handle(array $u): void
     {
         if (!$this->tenantGate($u)) return;
+        // Bot riêng phụ trách GDTG: chỉ làm việc giao dịch trung gian
+        if (Escrow::isEscrowBot((int)$this->bot['id'])) { $this->handleEscrowBot($u); return; }
+        // Bot thường: phòng GDTG đã có bot riêng quản lý → bỏ qua hoàn toàn
+        if (Escrow::botId() && $this->inEscrowRoom($u)) return;
         if (isset($u['my_chat_member'])) $this->onMyChatMember($u['my_chat_member']);
         elseif (isset($u['chat_member'])) $this->onChatMember($u['chat_member']);
         elseif (isset($u['message'])) $this->onMessage($u['message']);
@@ -74,6 +78,69 @@ class BotHandler
             }
         }
         return false;
+    }
+
+    private function updateChat(array $u): ?array
+    {
+        return $u['message']['chat'] ?? $u['edited_message']['chat'] ?? $u['chat_member']['chat'] ?? $u['my_chat_member']['chat']
+            ?? $u['message_reaction']['chat'] ?? $u['chat_join_request']['chat'] ?? $u['callback_query']['message']['chat'] ?? null;
+    }
+
+    private function inEscrowRoom(array $u): bool
+    {
+        $chat = $this->updateChat($u);
+        if (!$chat || !$this->isGroup($chat)) return false;
+        $gid = (int)DB::val('SELECT id FROM tg_groups WHERE chat_id = ?', [$chat['id']]);
+        return $gid && Escrow::isRoom($gid);
+    }
+
+    /** Bot GDTG riêng: chat riêng (/start, /gdtg), phòng GDTG, nút bấm, duyệt vào phòng. Không quản lý nhóm thông thường. */
+    private function handleEscrowBot(array $u): void
+    {
+        $botId = (int)$this->bot['id'];
+        if (isset($u['callback_query'])) { Escrow::onCallback($this->api, $u['callback_query']); return; }
+        if (isset($u['my_chat_member'])) {
+            $cm = $u['my_chat_member'];
+            $chat = $cm['chat'];
+            $st = (string)($cm['new_chat_member']['status'] ?? '');
+            if (($chat['type'] ?? '') === 'private') { DmBroadcast::privateStatus($botId, $chat['id'], $st); return; }
+            if (!$this->isGroup($chat)) return;
+            $g = Repo::upsertGroup($chat, $botId);
+            if (in_array($st, ['left', 'kicked'], true)) { DB::run('UPDATE tg_groups SET active = 0, bot_is_admin = 0 WHERE id = ?', [$g['id']]); return; }
+            DB::run('UPDATE tg_groups SET active = 1, bot_is_admin = ? WHERE id = ?', [$st === 'administrator' ? 1 : 0, $g['id']]);
+            if (!Escrow::isRoom((int)$g['id']) && in_array($cm['old_chat_member']['status'] ?? '', ['left', 'kicked'], true)) {
+                $this->api->trySend($chat['id'], "🤝 Đây là <b>bot giao dịch trung gian</b>.\nĐể dùng nhóm này làm phòng GDTG: cấp quyền quản trị cho bot, rồi vào web → <b>Quản lý GDTG → Phòng → Thêm</b>.");
+            }
+            return;
+        }
+        $msg = $u['message'] ?? $u['edited_message'] ?? null;
+        if ($msg) {
+            $chat = $msg['chat'];
+            if (($chat['type'] ?? '') === 'private') {
+                if (isset($u['edited_message'])) return;
+                DmBroadcast::seen($botId, $msg['from']['id']);
+                $text = trim((string)($msg['text'] ?? ''));
+                if (preg_match('~^/gdtg(?:@\w+)?(?:\s|$)~i', $text)) { $this->escrowCmd($msg); return; }
+                $c = Escrow::config();
+                $this->reply($msg, "🤝 <b>Bot giao dịch trung gian</b>\nTạo giao dịch: <code>/gdtg mua @nguoiban 500k nội dung</code>\nhoặc <code>/gdtg ban @nguoimua 1.5tr nội dung</code>\n\nBot tạo <b>phòng riêng</b> cho 2 bên + trung gian; trung gian giữ tiền đến khi người mua nhận hàng OK."
+                    . ($c['enabled'] ? '' : "\n\n⏸ Hiện chưa mở giao dịch.") . (str_starts_with(site_url(), 'https://') ? "\n🌐 Hoặc tạo trên web: " . site_url() . '/#/gdtg' : '') . "\n\nID của bạn: <code>{$msg['from']['id']}</code>");
+                return;
+            }
+            if (!$this->isGroup($chat)) return;
+            $gid = (int)DB::val('SELECT id FROM tg_groups WHERE chat_id = ?', [$chat['id']]);
+            if ($gid && Escrow::isRoom($gid)) { $this->onMessage($msg, isset($u['edited_message'])); return; } // lưu bằng chứng + xử lý trong phòng
+            if (!isset($u['edited_message']) && preg_match('~^/gdtg(?:@\w+)?(?:\s|$)~i', (string)($msg['text'] ?? ''))) $this->escrowCmd($msg);
+            return;
+        }
+        if (isset($u['chat_member']) && $this->isGroup($u['chat_member']['chat'])) {
+            $gid = (int)DB::val('SELECT id FROM tg_groups WHERE chat_id = ?', [$u['chat_member']['chat']['id']]);
+            if ($gid && Escrow::isRoom($gid)) Escrow::onChatMember($this->api, Repo::group($gid), $u['chat_member']);
+            return;
+        }
+        if (isset($u['chat_join_request']) && $this->isGroup($u['chat_join_request']['chat'])) {
+            $g = Repo::upsertGroup($u['chat_join_request']['chat'], $botId);
+            Escrow::onJoinRequest($this->api, $g, $u['chat_join_request']);
+        }
     }
 
     private function isGroup(array $chat): bool
@@ -821,6 +888,11 @@ class BotHandler
     private function escrowCmd(array $msg): void
     {
         if (Tenant::botOwner((int)$this->bot['id'])) return;
+        if (Escrow::botId() && !Escrow::isEscrowBot((int)$this->bot['id'])) { // GDTG đã có bot riêng
+            $un = Escrow::botUsername();
+            $this->reply($msg, '🤝 Giao dịch trung gian do bot riêng phụ trách' . ($un ? ": @$un\nNhắn <code>/gdtg</code> cho @$un để tạo giao dịch." : '.'));
+            return;
+        }
         $c = Escrow::config();
         $text = trim((string)$msg['text']);
         $help = "🤝 <b>GIAO DỊCH TRUNG GIAN</b>\nCú pháp: <code>/gdtg mua @nguoiban 500k nội dung</code>\nhoặc: <code>/gdtg ban @nguoimua 1.5tr nội dung</code>\n\n"

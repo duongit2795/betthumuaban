@@ -235,7 +235,7 @@ class Tenant
     {
         $c = self::config();
         if (!$c['enabled'] || $c['remind_days'] <= 0) return 0;
-        $bot = DB::get('SELECT * FROM tg_bots WHERE owner_id IS NULL AND enabled = 1 ORDER BY id LIMIT 1');
+        $bot = DB::get('SELECT * FROM tg_bots WHERE owner_id IS NULL AND enabled = 1' . Escrow::notBotSql() . ' ORDER BY id LIMIT 1');
         if (!$bot) return 0;
         $api = new Telegram($bot['token']);
         $n = 0;

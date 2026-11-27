@@ -26,6 +26,7 @@ class Escrow
         'payout' => 'manual',       // manual: trung gian chuyển khoản tay · wallet: cộng vào ví web của người bán
         'prefix' => 'GDTG',
         'room_title' => 'Phòng GDTG',
+        'bot_id' => 0,              // bot riêng phụ trách GDTG (0 = dùng bot quản lý nhóm)
         'rules' => "• Chỉ giao dịch trong phòng này, không nhắn riêng ngoài.\n• Người mua chỉ chuyển tiền vào tài khoản bot gửi trong phòng, đúng nội dung.\n• Trung gian không bao giờ nhắn riêng xin tiền.\n• Có vấn đề hãy bấm Khiếu nại, trung gian sẽ xử lý.",
     ];
     const STATUS = [
@@ -70,12 +71,56 @@ class Escrow
             if ($p === Wallet::config()['prefix']) throw new HttpError('Tiền tố GDTG phải khác tiền tố nạp tiền ví');
             $c['prefix'] = $p;
         }
+        if (isset($in['bot_id'])) {
+            $bid = (int)$in['bot_id'];
+            if ($bid && !DB::val('SELECT id FROM tg_bots WHERE id = ? AND owner_id IS NULL', [$bid])) throw new HttpError('Bot không hợp lệ');
+            $c['bot_id'] = $bid;
+        }
         if (isset($in['room_title'])) $c['room_title'] = trim(mb_substr((string)$in['room_title'], 0, 40)) ?: self::DEFAULTS['room_title'];
         if (isset($in['rules'])) $c['rules'] = trim(mb_substr((string)$in['rules'], 0, 2000));
         if ($c['max_amount'] < $c['min_amount']) throw new HttpError('Số tiền tối đa phải lớn hơn tối thiểu');
         if ($c['enabled'] && !$c['middlemen']) throw new HttpError('Nhập ít nhất 1 ID trung gian');
         Settings::set('escrow', json_encode($c, JSON_UNESCAPED_UNICODE));
+        self::clearCache();
         return $c;
+    }
+
+    // ================= Bot phụ trách GDTG =================
+    /** Id bot riêng phụ trách GDTG (0 = không có, dùng bot của nhóm) */
+    private static ?int $botIdCache = null;
+
+    public static function botId(): int
+    {
+        if (self::$botIdCache === null) {
+            $bid = (int)(self::config()['bot_id'] ?? 0);
+            self::$botIdCache = $bid && DB::val('SELECT id FROM tg_bots WHERE id = ? AND enabled = 1', [$bid]) ? $bid : 0;
+        }
+        return self::$botIdCache;
+    }
+
+    /** Điều kiện SQL bỏ qua bot GDTG riêng (bot GDTG chỉ làm GDTG) */
+    public static function notBotSql(string $col = 'id'): string
+    {
+        return self::botId() ? " AND $col <> " . self::botId() : '';
+    }
+
+    public static function isEscrowBot(int $botId): bool
+    {
+        return $botId && $botId === self::botId();
+    }
+
+    /** Bot dùng để nhắn GDTG (bot riêng nếu có, không thì bot đầu tiên của chủ web) */
+    public static function botApi(): ?Telegram
+    {
+        if (Repo::$testApi) return Repo::$testApi;
+        $b = self::botId() ? DB::get('SELECT token FROM tg_bots WHERE id = ?', [self::botId()]) : DB::get('SELECT token FROM tg_bots WHERE enabled = 1 AND owner_id IS NULL ORDER BY id LIMIT 1');
+        return $b ? new Telegram($b['token']) : null;
+    }
+
+    public static function botUsername(): ?string
+    {
+        return self::botId() ? (DB::val('SELECT username FROM tg_bots WHERE id = ?', [self::botId()]) ?: null)
+            : (DB::val('SELECT username FROM tg_bots WHERE enabled = 1 AND owner_id IS NULL ORDER BY id LIMIT 1') ?: null);
     }
 
     public static function isMiddleman($tgId, ?array $c = null): bool
@@ -114,11 +159,18 @@ class Escrow
     private static function vnd(int $v): string { return Wallet::money($v); }
 
     // ================= Phòng =================
+    private static array $roomCache = [];
+
     public static function roomOfGroup(int $groupId): ?array
     {
-        static $cache = [];
-        if (!array_key_exists($groupId, $cache)) $cache[$groupId] = DB::get("SELECT * FROM escrow_rooms WHERE group_id = ? AND status <> 'off'", [$groupId]);
-        return $cache[$groupId];
+        if (!array_key_exists($groupId, self::$roomCache)) self::$roomCache[$groupId] = DB::get("SELECT * FROM escrow_rooms WHERE group_id = ? AND status <> 'off'", [$groupId]);
+        return self::$roomCache[$groupId];
+    }
+
+    public static function clearCache(): void
+    {
+        self::$roomCache = [];
+        self::$botIdCache = null;
     }
 
     public static function isRoom(int $groupId): bool
@@ -129,6 +181,7 @@ class Escrow
     private static function api(array $room): ?Telegram
     {
         if (Repo::$testApi) return Repo::$testApi;
+        if (self::botId()) return self::botApi(); // phòng do bot GDTG riêng quản lý
         $g = Repo::group((int)$room['group_id']);
         return $g ? Repo::apiForGroup($g) : null;
     }
@@ -167,6 +220,7 @@ class Escrow
         if (DB::val('SELECT id FROM escrow_rooms WHERE group_id = ?', [$groupId])) throw new HttpError('Nhóm này đã là phòng GDTG');
         $no = (int)DB::val('SELECT COALESCE(MAX(no), 0) FROM escrow_rooms') + 1;
         $id = DB::insert('escrow_rooms', ['group_id' => $groupId, 'chat_id' => $g['chat_id'], 'no' => $no, 'status' => 'free', 'created_at' => now()]);
+        self::clearCache();
         $room = DB::get('SELECT * FROM escrow_rooms WHERE id = ?', [$id]);
         self::setTitle($room, null);
         return $room + ['check' => self::check($room)];
@@ -354,7 +408,7 @@ class Escrow
     private static function dm(array $d, $tgId, string $text): void
     {
         $room = self::room($d);
-        $api = $room ? self::api($room) : (Repo::$testApi ?: (($b = DB::get('SELECT token FROM tg_bots WHERE enabled = 1 AND owner_id IS NULL ORDER BY id LIMIT 1')) ? new Telegram($b['token']) : null));
+        $api = $room ? self::api($room) : self::botApi();
         if ($api && $tgId) $api->tryCall('sendMessage', ['chat_id' => $tgId, 'text' => $text, 'parse_mode' => 'HTML', 'link_preview_options' => ['is_disabled' => true]]);
     }
 

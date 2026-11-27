@@ -221,7 +221,7 @@ class Repo
         if (self::$testApi) return self::$testApi;
         $bot = null;
         if ($group['bot_id']) $bot = DB::get('SELECT token FROM tg_bots WHERE id = ?', [$group['bot_id']]);
-        if (!$bot) $bot = DB::get('SELECT token FROM tg_bots WHERE enabled = 1 ORDER BY id LIMIT 1');
+        if (!$bot) $bot = DB::get('SELECT token FROM tg_bots WHERE enabled = 1' . Escrow::notBotSql() . ' ORDER BY id LIMIT 1');
         return $bot ? new Telegram($bot['token']) : null;
     }
 
