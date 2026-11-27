@@ -31,6 +31,8 @@ try {
     // Captcha: xử lý người hết giờ xác minh
     Captcha::sweep(5);
     AntiRaid::sweep();
+    // Giao dịch trung gian: đóng phòng đã xong, hạn giờ
+    Escrow::sweep();
     // Kiểm tra bản cập nhật mới (theo chu kỳ cài đặt) và báo cho admin qua Telegram
     UpdateNotifier::maybeCheck();
 } catch (Throwable $e) {

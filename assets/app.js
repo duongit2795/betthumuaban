@@ -355,26 +355,26 @@
     if (!isWebAdmin() && isTenant()) {
       return {
         tab: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/plan', 'star', 'Gói'], ['/more', 'grid', 'Thêm']],
-        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm của tôi'], ['/bots', 'bot', 'Bot của tôi'], ['/plan', 'star', 'Gói thuê'], ...(can('rules') ? [['/rules', 'terminal', 'Lệnh']] : []), ['/logs', 'list', 'Nhật ký'], ['/unbans', 'lock', 'Yêu cầu mở band'], ['/dm', 'send', 'Nhắn riêng thành viên'],
+        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm của tôi'], ['/bots', 'bot', 'Bot của tôi'], ['/plan', 'star', 'Gói thuê'], ...(can('rules') ? [['/rules', 'terminal', 'Lệnh']] : []), ['/logs', 'list', 'Nhật ký'], ['/unbans', 'lock', 'Yêu cầu mở band'], ['/dm', 'send', 'Nhắn riêng thành viên'], ['/gdtg', 'shield', 'Giao dịch trung gian'],
           ['/payments', 'bank', 'Thanh toán'], [`/vip/${S.user.id}`, 'trophy', 'VIP nhóm tôi'], [`/exchange/${S.user.id}`, 'refresh', 'Đổi điểm nhóm tôi'], [`/giftcode/${S.user.id}`, 'star', 'Mã quà nhóm tôi'], ...payNav(), ['/account', 'user', 'Tài khoản']],
       };
     }
     if (!isWebAdmin() && isManager()) {
       return {
         tab: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/rules', 'terminal', 'Lệnh'], ...(can('logs') ? [['/logs', 'list', 'Nhật ký']] : []), ['/more', 'grid', 'Thêm']],
-        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm của tôi'], ...planNav, ['/rules', 'terminal', 'Lệnh'], ...(can('moderate') ? [['/unbans', 'lock', 'Yêu cầu mở band']] : []), ...(can('send') ? [['/dm', 'send', 'Nhắn riêng thành viên']] : []), ...(can('logs') ? [['/logs', 'list', 'Nhật ký']] : []), ['/me', 'star', 'Điểm của tôi'], ...(S.pay?.checkin ? [['/checkin', 'calendar', 'Điểm danh']] : []), ['/rank', 'trophy', 'Xếp hạng'], ...payNav(), ['/account', 'user', 'Tài khoản']],
+        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm của tôi'], ...planNav, ['/rules', 'terminal', 'Lệnh'], ...(can('moderate') ? [['/unbans', 'lock', 'Yêu cầu mở band']] : []), ...(can('send') ? [['/dm', 'send', 'Nhắn riêng thành viên']] : []), ['/gdtg', 'shield', 'Giao dịch trung gian'], ...(can('logs') ? [['/logs', 'list', 'Nhật ký']] : []), ['/me', 'star', 'Điểm của tôi'], ...(S.pay?.checkin ? [['/checkin', 'calendar', 'Điểm danh']] : []), ['/rank', 'trophy', 'Xếp hạng'], ...payNav(), ['/account', 'user', 'Tài khoản']],
       };
     }
     if (isWebAdmin()) {
       return {
         tab: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/logs', 'list', 'Nhật ký'], ['/more', 'grid', 'Thêm']],
-        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh'], ['/ads', 'megaphone', 'Quảng cáo'], ['/learn', 'book', 'Học tập'], ['/antiraid', 'shield', 'Chống raid'], ['/captcha', 'shield', 'Captcha vào nhóm'], ['/watermark', 'image', 'Đóng dấu ảnh'], ['/nameguard', 'shield', 'Cấm tên chứa từ cấm'], ['/unbans', 'lock', 'Yêu cầu mở band'], ['/dm', 'send', 'Nhắn riêng thành viên'], ['/gates', 'lock', 'Điều kiện chat'], ['/tags', 'tagi', 'Tag thành viên'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/admin', 'star', 'Quản lý cho thuê'], ['/payments', 'bank', 'Nạp tiền & ân xá'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ['/checkin', 'calendar', 'Điểm danh'], ['/exchange', 'refresh', 'Đổi điểm'], ['/vip', 'trophy', 'Gói VIP'], ['/giftcode', 'star', 'Mã quà tặng'], ...payNav(), ['/account', 'user', 'Tài khoản']],
+        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh'], ['/ads', 'megaphone', 'Quảng cáo'], ['/learn', 'book', 'Học tập'], ['/antiraid', 'shield', 'Chống raid'], ['/captcha', 'shield', 'Captcha vào nhóm'], ['/watermark', 'image', 'Đóng dấu ảnh'], ['/nameguard', 'shield', 'Cấm tên chứa từ cấm'], ['/unbans', 'lock', 'Yêu cầu mở band'], ['/dm', 'send', 'Nhắn riêng thành viên'], ['/escrow', 'shield', 'Quản lý GDTG'], ['/gates', 'lock', 'Điều kiện chat'], ['/tags', 'tagi', 'Tag thành viên'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/admin', 'star', 'Quản lý cho thuê'], ['/payments', 'bank', 'Nạp tiền & ân xá'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ['/checkin', 'calendar', 'Điểm danh'], ['/exchange', 'refresh', 'Đổi điểm'], ['/vip', 'trophy', 'Gói VIP'], ['/giftcode', 'star', 'Mã quà tặng'], ...payNav(), ['/account', 'user', 'Tài khoản']],
       };
     }
     const ck = S.pay?.checkin ? [['/checkin', 'calendar', 'Điểm danh']] : [];
     const m = [['/', 'star', 'Của tôi'], ...ck, ['/rank', 'trophy', 'Xếp hạng'], ...payNav(), ['/account', 'user', 'Tài khoản']];
     const tab = m.length > 5 ? m.filter(([p]) => p !== '/rank') : m;
-    return { tab, side: [...m.slice(0, -1), ...planNav, ...shopNav(), ['/unban', 'lock', 'Xin mở band'], ['/mylogs', 'list', 'Nhật ký của tôi'], m[m.length - 1]] };
+    return { tab, side: [...m.slice(0, -1), ...planNav, ...shopNav(), ['/gdtg', 'shield', 'Giao dịch trung gian'], ['/unban', 'lock', 'Xin mở band'], ['/mylogs', 'list', 'Nhật ký của tôi'], m[m.length - 1]] };
   }
 
   function shell(nav, title, back) {
@@ -398,7 +398,7 @@
     const path = current();
     const direct = (p) => (p === '/' ? path === '/' : path === p || path.startsWith(p + '/') || (p === '/groups' && path.startsWith('/group/')) || (p === '/rules' && path === '/commands'));
     const inTabs = items.tab.some(([p]) => p !== '/more' && direct(p));
-    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments', '/learn', '/keyboard', '/gates', '/mylogs', '/checkin', '/tags', '/tagshop', '/exchange', '/giftcode', '/vip', '/captcha', '/antiraid', '/watermark', '/nameguard', '/admin', '/plan', '/username', '/unban', '/dm'].some((x) => path.startsWith(x)));
+    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments', '/learn', '/keyboard', '/gates', '/mylogs', '/checkin', '/tags', '/tagshop', '/exchange', '/giftcode', '/vip', '/captcha', '/antiraid', '/watermark', '/nameguard', '/admin', '/plan', '/username', '/unban', '/dm', '/gdtg', '/escrow'].some((x) => path.startsWith(x)));
     $('#tabbar').innerHTML = items.tab.map(([p, ic, t]) => `<a href="#${p}" class="${isActive(p) ? 'active' : ''}">${icon(ic)}<span>${t}</span></a>`).join('');
     $('#sidebar').innerHTML = `<div class="brand"><img src="assets/icon.svg" alt="">${esc(S.site)}</div>`
       + items.side.map(([p, ic, t]) => `<a href="#${p}" class="nav ${isActive(p) && !(p === '/more') ? 'active' : ''}">${icon(ic)}${t}</a>`).join('')
@@ -2825,6 +2825,8 @@
         <a class="list-item" href="#/me">${icon('star')}<div class="grow">Điểm của tôi</div><span class="chev">${icon('chevron')}</span></a>
         ${isManager() && can('send') ? `<a class="list-item" href="#/dm">${icon('send')}<div class="grow">Nhắn riêng thành viên qua bot</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         ${isManager() && can('moderate') ? `<a class="list-item" href="#/unbans">${icon('lock')}<div class="grow">Duyệt yêu cầu mở band</div><span class="chev">${icon('chevron')}</span></a>` : ''}
+        <a class="list-item" href="#/gdtg">${icon('shield')}<div class="grow">Giao dịch trung gian</div><span class="chev">${icon('chevron')}</span></a>
+        ${isWebAdmin() ? `<a class="list-item" href="#/escrow">${icon('shield')}<div class="grow">Quản lý GDTG (phòng, giao dịch, cài đặt)</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         <a class="list-item" href="#/unban">${icon('lock')}<div class="grow">Xin mở band</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/mylogs">${icon('list')}<div class="grow">Nhật ký của tôi</div><span class="chev">${icon('chevron')}</span></a>
         ${S.pay?.tagshop || isWebAdmin() ? `<a class="list-item" href="#/tagshop">${icon('tagi')}<div class="grow">Mua tag bằng số dư ví</div><span class="chev">${icon('chevron')}</span></a>` : ''}
@@ -4671,6 +4673,227 @@
       };
     });
   }
+
+  // ================= Giao dịch trung gian (GDTG) =================
+  const ESC_ST = { queue: 'blue', agree: 'blue', pay: 'amber', paid: 'green', delivered: 'green', confirmed: 'green', disputed: 'red', completed: 'green', refunded: '', cancelled: '' };
+  const escWho = (p) => p.username ? '@' + esc(p.username) : esc(p.name || p.tg || 'chưa rõ');
+  const escFee = (d, amount) => {
+    let fee = Math.max(d.fee_min, Math.round(amount * d.fee_percent / 100));
+    if (d.fee_max > 0) fee = Math.min(fee, d.fee_max);
+    const bp = { buyer: fee, seller: 0, half: Math.ceil(fee / 2) }[d.fee_payer];
+    return { fee, pay: amount + bp, gets: amount - (fee - bp) };
+  };
+  const parseVnd = (s) => {
+    const m = String(s || '').trim().toLowerCase().match(/^(\d+(?:[.,]\d+)*)\s*(k|tr|m|đ)?$/);
+    if (!m) return 0;
+    const mul = { k: 1e3, tr: 1e6, m: 1e6 }[m[2]] || 1;
+    return Math.round(parseFloat(mul > 1 ? m[1].replace(',', '.') : m[1].replace(/[.,]/g, '')) * mul);
+  };
+  function escTranscript(t) {
+    if (!t || !t.length) return '<div class="xs muted">Chưa có tin nhắn</div>';
+    return `<div class="esc-chat">${t.map((m) => `<div class="esc-msg"><b>${esc(m.n || '?')}</b>${m.u ? ` <span class="muted">@${esc(m.u)}</span>` : ''} <span class="muted xs">${fmtDate(m.at, true)}</span>${m.del ? ' <span class="badge red">đã xoá</span>' : ''}<div>${m.m ? `<i>${esc(m.m)}</i> ` : ''}${esc(m.t || '')}</div></div>`).join('')}</div>`;
+  }
+  function escDealSheet(id, admin, onDone) {
+    api('escrow/deal', undefined, { query: { id } }).then((d) => {
+      const acts = admin ? [['mmpaid', '🛡 Xác nhận đã nhận tiền', ['agree', 'pay']], ['release', '💰 Đã chuyển cho người bán (giải ngân)', ['paid', 'delivered', 'confirmed', 'disputed']],
+        ['refund', '↩️ Đã hoàn tiền người mua', ['paid', 'delivered', 'confirmed', 'disputed']], ['cancel', '❌ Huỷ giao dịch', ['queue', 'agree', 'pay']]].filter(([, , st]) => st.includes(d.status)) : [];
+      sheet(`<div class="sheet-head"><h2>GDTG #${d.id}</h2><span class="badge ${ESC_ST[d.status] || ''}">${esc(d.status_label)}</span><button class="btn icon ghost" data-close>${icon('x')}</button></div>
+        <div class="card card-pad stack" style="gap:4px;margin-bottom:12px">
+          <div class="small">🛒 Người mua: <b>${escWho(d.buyer)}</b>${d.buyer.ok ? ' ✅' : ''}${d.buyer.bank ? ` · 🏦 ${esc(d.buyer.bank)}` : ''}</div>
+          <div class="small">🏪 Người bán: <b>${escWho(d.seller)}</b>${d.seller.ok ? ' ✅' : ''}${d.seller.bank ? ` · 🏦 ${esc(d.seller.bank)}` : ''}</div>
+          <div class="small">📦 ${esc(d.description)}</div>
+          <div class="small">💰 ${money(d.amount)} · phí ${money(d.fee)} · người mua chuyển <b>${money(d.pay_total)}</b> · người bán nhận <b>${money(d.seller_gets)}</b></div>
+          ${d.paid_amount ? `<div class="small">🏦 Ngân hàng báo đã nhận: <b>${money(d.paid_amount)}</b>${d.bank_txid ? ` <span class="xs muted mono">${esc(d.bank_txid)}</span>` : ''}</div>` : ''}
+          <div class="xs muted">Nội dung CK: <code>${esc(d.code)}</code> · tạo ${fmtDate(d.created_at, true)}${d.room ? ' · phòng ' + d.room : ''}${d.middleman ? ' · xử lý: ' + esc(d.middleman) : ''}</div>
+          ${d.dispute_reason ? `<div class="alert err">${icon('alert')}<div class="xs">Khiếu nại (${esc(d.dispute_by || '')}): ${esc(d.dispute_reason)}</div></div>` : ''}
+          ${d.note ? `<div class="xs">📝 ${esc(d.note)}</div>` : ''}
+          ${d.invite ? `<a class="btn sm soft" href="${esc(d.invite)}" target="_blank" rel="noopener" style="align-self:flex-start">🚪 Vào phòng giao dịch</a>` : ''}
+        </div>
+        ${acts.length ? `<div class="stack" style="gap:8px;margin-bottom:12px">${acts.map(([a, l]) => `<button class="btn ${a === 'release' ? 'primary' : a === 'cancel' || a === 'refund' ? 'soft-danger' : 'soft'} block" data-escact="${a}">${l}</button>`).join('')}
+          <div class="xs muted">Giải ngân / hoàn tiền: bấm <b>sau khi</b> bạn đã chuyển khoản. Phòng sẽ tự đóng sau 5 phút.</div></div>` : ''}
+        <div class="pv-label">💬 Tin nhắn trong phòng (bằng chứng)</div>${escTranscript(d.transcript)}`, (el, close) => {
+        el.addEventListener('click', async (e) => {
+          const b = e.target.closest('[data-escact]');
+          if (!b) return;
+          const a = b.dataset.escact;
+          if (!(await confirmBox(b.textContent.trim() + '?', a === 'release' ? `Xác nhận bạn đã chuyển <b>${money(d.seller_gets)}</b> cho người bán${d.seller.bank ? ` (${esc(d.seller.bank)})` : ''}.` : a === 'refund' ? `Xác nhận bạn đã hoàn <b>${money(d.paid_amount || d.pay_total)}</b> cho người mua.` : 'Hành động này không hoàn tác được.', { danger: a !== 'mmpaid' && a !== 'release', ok: 'Xác nhận' }))) return;
+          withBtn(b, async () => { try { const r = await api('escrow/act', { id: d.id, action: a }); toast(r.message); close(); onDone?.(); } catch (err) { toast(err.message, 'err'); } });
+        });
+      });
+    }).catch((err) => toast(err.message, 'err'));
+  }
+
+  route('/gdtg', async () => {
+    const d = await api('gdtg');
+    let role = 'buy';
+    const ACTS = { agree: '✅ Tôi đồng ý', claim: '💸 Tôi đã chuyển tiền', delivered: '📦 Đã giao hàng', received: '👍 Đã nhận hàng OK', dispute: '⚠️ Khiếu nại', cancel: '❌ Huỷ' };
+    const myActs = (x) => {
+      const r = x.my_role;
+      const map = { agree: [(r === 'buyer' ? !x.buyer.ok : !x.seller.ok) && 'agree', 'cancel'], pay: [r === 'buyer' && 'claim', 'cancel'], paid: [r === 'seller' && 'delivered', 'dispute'], delivered: [r === 'buyer' && 'received', 'dispute'] };
+      return (map[x.status] || []).filter(Boolean);
+    };
+    const item = (x) => `<div class="card card-pad stack" style="gap:6px;margin-bottom:10px">
+      <div class="row wrap" style="gap:6px"><b class="grow">#${x.id} · ${money(x.amount)}</b><span class="badge ${ESC_ST[x.status] || ''}">${esc(x.status_label)}</span></div>
+      <div class="small">${esc(x.description)}</div>
+      <div class="xs muted">Bạn là <b>${x.my_role === 'buyer' ? 'người mua' : 'người bán'}</b> · đối tác ${escWho(x.my_role === 'buyer' ? x.seller : x.buyer)} · ${x.my_role === 'buyer' ? `chuyển ${money(x.pay_total)}` : `nhận ${money(x.seller_gets)}`} · ${fmtDate(x.created_at, true)}</div>
+      ${x.status === 'pay' && x.my_role === 'buyer' ? `<div class="xs">💳 Chuyển <b>${money(x.pay_total - x.paid_amount)}</b>, nội dung <code>${esc(x.code)}</code> theo tin trong phòng.</div>` : ''}
+      <div class="row wrap" style="gap:6px">${x.invite ? `<a class="btn sm primary" href="${esc(x.invite)}" target="_blank" rel="noopener">🚪 Vào phòng</a><button class="btn sm ghost" data-copy="${esc(x.invite)}">${icon('copy', 'sm')}Copy link mời</button>` : ''}
+        ${myActs(x).map((a) => `<button class="btn sm ${a === 'cancel' || a === 'dispute' ? 'soft-danger' : 'soft'}" data-gact="${a}" data-id="${x.id}">${ACTS[a]}</button>`).join('')}
+        <button class="btn sm ghost" data-gview="${x.id}">Chi tiết</button></div></div>`;
+    return {
+      title: 'Giao dịch trung gian',
+      html: `
+      <div class="hero" style="margin-bottom:12px"><div class="muted small">🤝 Giao dịch trung gian (GDTG)</div>
+        <div class="small" style="margin-top:6px">Bot tạo <b>phòng riêng</b> cho người mua, người bán và trung gian. Người mua chuyển tiền cho trung gian giữ, người bán giao hàng, người mua xác nhận OK thì trung gian mới chuyển tiền cho người bán.</div>
+        <div class="xs muted" style="margin-top:6px">Phí ${String(d.fee_percent).replace('.', ',')}% (tối thiểu ${money(d.fee_min)}${d.fee_max ? ', tối đa ' + money(d.fee_max) : ''}) · ${esc(d.fee_payers[d.fee_payer])} · ${money(d.min_amount)} – ${money(d.max_amount)} · phòng trống: ${d.free_rooms}</div></div>
+      ${!d.enabled ? `<div class="alert info">${icon('info')}<div class="small">Giao dịch trung gian hiện chưa mở.</div></div>` : !d.linked ? `<div class="card">${empty('link', 'Liên kết Telegram ở trang <a href="#/account">Tài khoản</a> để tạo giao dịch.')}</div>` : `
+      <form class="card card-pad stack" id="fgd">
+        <div class="field"><span class="lbl">Bạn là</span><div class="segmented"><button type="button" data-grole="buy" class="active">🛒 Người mua</button><button type="button" data-grole="sell">🏪 Người bán</button></div></div>
+        <label class="field"><span class="lbl" data-glbl>@username hoặc ID người bán</span><input class="input" name="other" required placeholder="@doitac hoặc 123456789" autocomplete="off"></label>
+        <label class="field"><span class="lbl">Số tiền</span><input class="input" name="amount" required placeholder="VD 500k, 1.5tr, 500000" autocomplete="off"><div class="hint" data-gfee>Nhập số tiền để xem phí</div></label>
+        <label class="field"><span class="lbl">Nội dung giao dịch</span><textarea class="input" name="description" rows="2" required maxlength="300" placeholder="VD: Mua acc game lv80, có mail gốc"></textarea></label>
+        <button class="btn primary block">🤝 Tạo giao dịch & phòng</button>
+        <div class="xs muted">Hoặc gõ trong Telegram: <code>/gdtg mua @nguoiban 500k nội dung</code>${d.bot ? ` với <a href="https://t.me/${esc(d.bot)}" target="_blank" rel="noopener">@${esc(d.bot)}</a>` : ''}.</div>
+      </form>
+      ${d.rules ? `<details class="card" style="padding:10px 12px;margin-top:10px;box-shadow:none"><summary class="small" style="cursor:pointer;font-weight:600">📜 Nội quy GDTG</summary><div class="xs text-2" style="white-space:pre-line;margin-top:6px">${esc(d.rules)}</div></details>` : ''}`}
+      ${d.deals.length ? `<div class="section-title"><h2>Giao dịch của tôi</h2></div>${d.deals.map(item).join('')}` : ''}`,
+      mount: (root) => {
+        const f = $('#fgd', root);
+        root.addEventListener('click', async (e) => {
+          const r = e.target.closest('[data-grole]');
+          if (r) { role = r.dataset.grole; $$('[data-grole]', root).forEach((x) => x.classList.toggle('active', x === r)); $('[data-glbl]', root).textContent = role === 'buy' ? '@username hoặc ID người bán' : '@username hoặc ID người mua'; return; }
+          const v = e.target.closest('[data-gview]');
+          if (v) return escDealSheet(+v.dataset.gview, false);
+          const a = e.target.closest('[data-gact]');
+          if (a) {
+            let reason = '';
+            if (a.dataset.gact === 'dispute') { reason = prompt('Lý do khiếu nại:') || ''; if (!reason.trim()) return; }
+            else if (a.dataset.gact === 'cancel' && !(await confirmBox('Huỷ giao dịch?', 'Phòng sẽ đóng, giao dịch không tiếp tục.', { danger: true, ok: 'Huỷ' }))) return;
+            withBtn(a, async () => { try { const x = await api('gdtg/act', { id: +a.dataset.id, action: a.dataset.gact, reason }); toast(x.message); render(); } catch (err) { toast(err.message, 'err'); } });
+          }
+        });
+        if (!f) return;
+        f.amount.addEventListener('input', () => {
+          const n = parseVnd(f.amount.value);
+          const x = escFee(d, n);
+          $('[data-gfee]', root).innerHTML = n ? `${money(n)} · phí <b>${money(x.fee)}</b> → người mua chuyển <b>${money(x.pay)}</b>, người bán nhận <b>${money(x.gets)}</b>` : 'Nhập số tiền để xem phí';
+        });
+        f.onsubmit = (e) => {
+          e.preventDefault();
+          const v = formData(f);
+          withBtn(f.querySelector('button.primary'), async () => {
+            try {
+              const r = await api('gdtg/create', { role, other: v.other, amount: v.amount, description: v.description });
+              sheet(`<div class="sheet-head"><h2>Đã tạo GDTG #${r.deal.id}</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
+                ${r.invite ? `<div class="alert ok" style="margin-bottom:12px">${icon('check')}<div class="small">Phòng đã sẵn sàng. Vào phòng và <b>gửi link này cho đối tác</b> (chỉ 2 bên được duyệt vào).</div></div>
+                  <div class="card card-pad mono small" style="word-break:break-all;margin-bottom:12px">${esc(r.invite)}</div>
+                  <div class="grid grid-2"><button class="btn" data-copy="${esc(r.invite)}">${icon('copy', 'sm')}Copy link</button><a class="btn primary" href="${esc(r.invite)}" target="_blank" rel="noopener">🚪 Vào phòng</a></div>`
+                  : `<div class="alert info">${icon('info')}<div class="small">Hiện chưa có phòng trống. Bot sẽ nhắn riêng cho bạn khi có phòng (hãy Start bot).</div></div>`}`, () => {}, () => render());
+            } catch (err) { toast(err.message, 'err'); }
+          });
+        };
+      },
+    };
+  }, { title: 'Giao dịch trung gian' });
+
+  route('/escrow', async () => {
+    const st0 = sessionStorage.getItem('escSt') || 'open';
+    const d = await api('escrow', undefined, { query: { status: st0 } });
+    const c = d.config, s = d.stats;
+    const tab = sessionStorage.getItem('escTab') || 'deals';
+    const dealItem = (x) => `<button type="button" class="card card-pad stack" data-edeal="${x.id}" style="gap:4px;margin-bottom:10px;text-align:left;width:100%;cursor:pointer">
+      <div class="row wrap" style="gap:6px"><b class="grow">#${x.id} · ${money(x.amount)}</b><span class="badge ${ESC_ST[x.status] || ''}">${esc(x.status_label)}</span></div>
+      <div class="small ellipsis">${esc(x.description)}</div>
+      <div class="xs muted">🛒 ${escWho(x.buyer)}${x.buyer.ok ? '✅' : ''} · 🏪 ${escWho(x.seller)}${x.seller.ok ? '✅' : ''}${x.room ? ' · phòng ' + x.room : ''} · ${fmtDate(x.created_at, true)}</div>
+      ${x.paid_amount && x.status === 'pay' ? `<div class="xs" style="color:var(--success)">🏦 Ngân hàng báo nhận ${money(x.paid_amount)} — chờ bạn xác nhận</div>` : ''}
+      ${x.status === 'disputed' ? `<div class="xs" style="color:var(--danger)">⚠️ ${esc(x.dispute_reason || 'Khiếu nại')}</div>` : ''}</button>`;
+    const RST = { free: ['Trống', 'green'], busy: ['Đang dùng', 'amber'], closing: ['Đang đóng', 'blue'], off: ['Tạm ngừng', 'red'] };
+    const roomItem = (r) => `<div class="list-item" style="align-items:flex-start"><div class="feat-ico">🚪</div><div class="grow" style="min-width:0">
+      <div class="row wrap" style="gap:6px"><b>Phòng ${r.no}</b><span class="badge ${RST[r.status][1]}">${RST[r.status][0]}</span>${r.deal_id ? `<span class="xs muted">GDTG #${r.deal_id}</span>` : ''}</div>
+      <div class="xs muted ellipsis">${esc(r.title || '')}</div>
+      ${r.issues.length ? `<div class="xs" style="color:var(--danger)">${r.issues.map(esc).join('<br>')}</div>` : r.checked_at ? '<div class="xs" style="color:var(--success)">✅ Đủ điều kiện</div>' : ''}
+      <div class="row wrap" style="gap:6px;margin-top:6px"><button class="btn sm soft" data-rchk="${r.id}">Kiểm tra</button>
+        ${r.status === 'off' ? `<button class="btn sm" data-rmode="on" data-rid="${r.id}">Dùng lại</button><button class="btn sm soft-danger" data-rmode="delete" data-rid="${r.id}">Bỏ phòng</button>` : r.status === 'free' ? `<button class="btn sm ghost" data-rmode="off" data-rid="${r.id}">Tạm ngừng</button>` : `<button class="btn sm ghost" data-rmode="free" data-rid="${r.id}">Giải phóng</button>`}</div></div></div>`;
+    return {
+      title: 'Quản lý GDTG',
+      html: `
+      <div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:12px">
+        ${[['Đang chạy', num(s.open)], ['Đang giữ tiền', money(s.holding)], ['Khiếu nại', num(s.disputed)], ['Chờ phòng', num(s.queue)], ['Phí 30 ngày', money(s.fee_30) + ` <span class="xs muted">(${s.done_30} GD)</span>`], ['Phòng trống', `${s.free_rooms}/${s.rooms}`]]
+          .map(([l, v]) => `<div class="card stat" style="padding:12px"><div class="label">${l}</div><div class="value" style="font-size:19px">${v}</div></div>`).join('')}
+      </div>
+      ${!d.wallet.account_no ? `<div class="alert warn" style="margin-bottom:12px">${icon('alert')}<div class="xs">Chưa cài tài khoản nhận tiền: vào <a href="#/payments">Nạp tiền & ân xá</a> nhập ngân hàng / số tài khoản (dùng chung cho GDTG). Có link API thì bot báo khi tiền về để bạn đối chiếu.</div></div>` : ''}
+      <div class="tabs" data-etabs><button data-t="deals">Giao dịch</button><button data-t="rooms">Phòng (${s.rooms})</button><button data-t="settings">Cài đặt</button></div>
+      <div data-pane="deals">
+        <div class="chips" style="margin-bottom:10px">${[['open', 'Đang chạy'], ['disputed', 'Khiếu nại'], ['completed', 'Hoàn tất'], ['refunded', 'Hoàn tiền'], ['cancelled', 'Đã huỷ'], ['all', 'Tất cả']].map(([k, l]) => `<button class="chip ${st0 === k ? 'active' : ''}" data-est="${k}">${l}</button>`).join('')}</div>
+        ${d.deals.length ? d.deals.map(dealItem).join('') : `<div class="card">${empty('list', 'Không có giao dịch')}</div>`}
+        <div class="xs muted">Bạn có thể xử lý ở đây hoặc bấm nút trong phòng Telegram (chỉ các ID trung gian đã cài bấm được).</div>
+      </div>
+      <div class="hidden" data-pane="rooms">
+        <div class="list">${d.rooms.length ? d.rooms.map(roomItem).join('') : empty('lock', 'Chưa có phòng nào')}</div>
+        <div class="card card-pad stack" style="margin-top:12px">
+          <h3>➕ Thêm phòng</h3>
+          ${d.candidates.length ? `<div class="row" style="gap:8px"><select class="input grow" data-rnew>${d.candidates.map((g) => `<option value="${g.id}">${esc(g.title)}</option>`).join('')}</select><button class="btn primary" data-radd>Thêm</button></div>` : '<div class="xs muted">Chưa có nhóm nào để thêm: tạo nhóm mới rồi thêm bot vào trước.</div>'}
+          <details><summary class="small" style="cursor:pointer;font-weight:600">Cách tạo 1 phòng GDTG</summary><div class="xs text-2 stack" style="gap:4px;margin-top:6px">
+            <div>1. Trên Telegram tạo nhóm mới (VD "Phòng GDTG 01"), bạn là chủ nhóm.</div>
+            <div>2. Thêm <b>các trung gian</b> (ID đã cài) và <b>bot</b> vào nhóm.</div>
+            <div>3. Cấp quyền quản trị cho bot: Mời thành viên qua link, Cấm thành viên, Ghim tin, Xoá tin, Đổi thông tin nhóm.</div>
+            <div>4. Cài đặt nhóm → <b>Lịch sử chat cho thành viên mới: Ẩn</b> (để người sau không đọc được giao dịch trước).</div>
+            <div>5. Quay lại đây chọn nhóm → <b>Thêm</b>, bot sẽ kiểm tra đủ điều kiện. Lặp lại cho đủ 10 phòng.</div></div></details>
+        </div>
+      </div>
+      <form class="hidden stack" data-pane="settings" id="fesc">
+        <div class="card">${sw('enabled', c.enabled, 'Bật giao dịch trung gian', 'Cho phép tạo giao dịch bằng /gdtg và trên web')}</div>
+        <div class="card card-pad stack">
+          <label class="field"><span class="lbl">ID Telegram trung gian <span class="xs muted">(mỗi dòng: ID Tên)</span></span><textarea class="input mono" name="middlemen" rows="3" placeholder="123456789 Admin A">${esc(c.middlemen.map((m) => (m.id + ' ' + (m.name || '')).trim()).join('\n'))}</textarea>
+            <div class="hint">Chỉ các ID này được xác nhận tiền, giải ngân, hoàn tiền, huỷ. Họ phải có mặt trong mọi phòng.</div></label>
+        </div>
+        <div class="card card-pad stack"><h3>💰 Phí & giới hạn</h3>
+          <div class="grid grid-2">
+            <label class="field"><span class="lbl">Phí (%)</span><input class="input" name="fee_percent" inputmode="decimal" value="${c.fee_percent}"></label>
+            <label class="field"><span class="lbl">Ai trả phí</span><select class="input" name="fee_payer">${Object.entries(d.fee_payers).map(([k, l]) => `<option value="${k}" ${c.fee_payer === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+            <label class="field"><span class="lbl">Phí tối thiểu (đ)</span><input class="input" name="fee_min" inputmode="numeric" value="${c.fee_min}"></label>
+            <label class="field"><span class="lbl">Phí tối đa (đ, 0 = không)</span><input class="input" name="fee_max" inputmode="numeric" value="${c.fee_max}"></label>
+            <label class="field"><span class="lbl">Giao dịch tối thiểu (đ)</span><input class="input" name="min_amount" inputmode="numeric" value="${c.min_amount}"></label>
+            <label class="field"><span class="lbl">Giao dịch tối đa (đ)</span><input class="input" name="max_amount" inputmode="numeric" value="${c.max_amount}"></label>
+          </div></div>
+        <div class="card card-pad stack"><h3>⏱ Hạn giờ</h3>
+          <div class="grid grid-2">
+            <label class="field"><span class="lbl">Chờ chuyển tiền (phút)</span><input class="input" name="pay_minutes" inputmode="numeric" value="${c.pay_minutes}"><div class="hint">Quá hạn mà người mua chưa báo chuyển → tự huỷ.</div></label>
+            <label class="field"><span class="lbl">Nhắc giao hàng sau (giờ)</span><input class="input" name="deliver_hours" inputmode="numeric" value="${c.deliver_hours}"></label>
+            <label class="field"><span class="lbl">Nhắc người mua xác nhận sau (giờ)</span><input class="input" name="confirm_hours" inputmode="numeric" value="${c.confirm_hours}"></label>
+          </div><div class="xs muted">Bot chỉ nhắc và báo trung gian, <b>không tự chuyển tiền</b>. Tiền luôn do trung gian xác nhận thủ công.</div></div>
+        <div class="card card-pad stack"><h3>⚙️ Khác</h3>
+          <label class="field"><span class="lbl">Giải ngân</span><select class="input" name="payout"><option value="manual" ${c.payout === 'manual' ? 'selected' : ''}>Trung gian chuyển khoản tay cho người bán (theo /stk)</option><option value="wallet" ${c.payout === 'wallet' ? 'selected' : ''}>Cộng vào ví web của người bán</option></select></label>
+          <div class="grid grid-2">
+            <label class="field"><span class="lbl">Tiền tố nội dung CK</span><input class="input" name="prefix" value="${esc(c.prefix)}" maxlength="10"><div class="hint">VD <code>${esc(c.prefix)}123</code></div></label>
+            <label class="field"><span class="lbl">Tên phòng</span><input class="input" name="room_title" value="${esc(c.room_title)}" maxlength="40"></label>
+          </div>
+          <label class="field"><span class="lbl">Nội quy (gửi vào phòng khi bắt đầu)</span><textarea class="input" name="rules" rows="5">${esc(c.rules)}</textarea></label>
+        </div>
+        <button class="btn primary block">Lưu cài đặt</button>
+      </form>`,
+      mount: (root) => {
+        const setTab = (t) => { sessionStorage.setItem('escTab', t); $$('[data-etabs] [data-t]', root).forEach((b) => b.classList.toggle('active', b.dataset.t === t)); $$('[data-pane]', root).forEach((x) => x.classList.toggle('hidden', x.dataset.pane !== t)); };
+        setTab(tab);
+        $('[data-etabs]', root).onclick = (e) => { const b = e.target.closest('[data-t]'); if (b) setTab(b.dataset.t); };
+        root.addEventListener('click', async (e) => {
+          let b;
+          if ((b = e.target.closest('[data-est]'))) { sessionStorage.setItem('escSt', b.dataset.est); return render(); }
+          if ((b = e.target.closest('[data-edeal]'))) return escDealSheet(+b.dataset.edeal, true, () => render());
+          if ((b = e.target.closest('[data-radd]'))) return withBtn(b, async () => { try { const r = await api('escrow/room/add', { group_id: +$('[data-rnew]', root).value }); toast(r.check.ok ? 'Đã thêm phòng, đủ điều kiện ✅' : 'Đã thêm, còn lỗi: ' + r.check.issues.join('; '), r.check.ok ? undefined : 'err'); render(); } catch (err) { toast(err.message, 'err'); } });
+          if ((b = e.target.closest('[data-rchk]'))) return withBtn(b, async () => { try { const r = await api('escrow/room/check', { id: +b.dataset.rchk }); toast(r.ok ? 'Phòng đủ điều kiện ✅' : r.issues.join('; '), r.ok ? undefined : 'err'); render(); } catch (err) { toast(err.message, 'err'); } });
+          if ((b = e.target.closest('[data-rmode]'))) {
+            if (['delete', 'free'].includes(b.dataset.rmode) && !(await confirmBox(b.dataset.rmode === 'delete' ? 'Bỏ phòng này?' : 'Giải phóng phòng?', b.dataset.rmode === 'delete' ? 'Phòng sẽ không còn dùng cho GDTG (nhóm trên Telegram vẫn giữ).' : 'Chỉ dùng khi phòng bị kẹt sau khi giao dịch đã kết thúc.', { danger: true, ok: 'Đồng ý' }))) return;
+            return withBtn(b, async () => { try { await api('escrow/room/toggle', { id: +b.dataset.rid, mode: b.dataset.rmode }); toast('Xong'); render(); } catch (err) { toast(err.message, 'err'); } });
+          }
+        });
+        $('#fesc', root).onsubmit = (e) => {
+          e.preventDefault();
+          withBtn(e.target.querySelector('button.primary'), async () => { try { await api('escrow/save', { config: formData(e.target) }); toast('Đã lưu'); render(); } catch (err) { toast(err.message, 'err'); } });
+        };
+      },
+    };
+  }, { webAdmin: true, title: 'Quản lý GDTG', back: '/more' });
 
   // ================= Nhắn riêng thành viên qua bot =================
   const DM_ST = { queued: ['Đang chờ', 'blue'], sending: ['Đang gửi', 'amber'], done: ['Đã gửi xong', 'green'], stopped: ['Đã dừng', 'red'] };

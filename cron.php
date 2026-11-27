@@ -43,6 +43,7 @@ try { Captcha::sweep(50); } catch (Throwable $e) {}
 // VIP hết hạn: gỡ tag VIP, nhắn báo
 try { Vip::expire(); } catch (Throwable $e) {}
 try { Tenant::remind(); } catch (Throwable $e) {}
+try { Escrow::sweep(); } catch (Throwable $e) {}
 // Gỡ tag đã mua hết hạn
 try { MemberTag::expire(); } catch (Throwable $e) {}
 // Nạp tiền tự động: đọc lịch sử giao dịch ngân hàng, cộng tiền vào ví
