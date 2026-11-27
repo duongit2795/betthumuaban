@@ -83,6 +83,10 @@ class BotHandler
     private function onMyChatMember(array $cm): void
     {
         $chat = $cm['chat'];
+        if (($chat['type'] ?? '') === 'private') { // người dùng chặn / bỏ chặn bot
+            DmBroadcast::privateStatus((int)$this->bot['id'], $chat['id'], (string)($cm['new_chat_member']['status'] ?? ''));
+            return;
+        }
         if (!$this->isGroup($chat)) return;
         $group = Repo::upsertGroup($chat, (int)$this->bot['id']);
         $st = $cm['new_chat_member']['status'] ?? '';
@@ -621,6 +625,11 @@ class BotHandler
     {
         $text = trim((string)($msg['text'] ?? ''));
         $from = $msg['from'];
+        DmBroadcast::seen((int)$this->bot['id'], $from['id']); // đã nhắn riêng cho bot → nhận được tin nhắn riêng hàng loạt
+        if (preg_match('~^/start(?:@\w+)?\s+dm$~i', $text)) {
+            $this->reply($msg, "✅ Đã bật <b>nhận thông báo riêng</b> từ nhóm qua bot.\nBạn có thể tắt bất cứ lúc nào bằng cách chặn bot.");
+            return;
+        }
 
         // Lệnh gõ vào (tên gốc hoặc tên đặt trên web) → mã lệnh
         $key = null;

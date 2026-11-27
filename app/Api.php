@@ -155,6 +155,13 @@ class Api
             'features/username' => 'usernameFeature',
             'settings/export' => 'settingsExport',
             'settings/import' => 'settingsImport',
+            'dm' => 'dm',
+            'dm/count' => 'dmCount',
+            'dm/send' => 'dmSend',
+            'dm/test' => 'dmTest',
+            'dm/status' => 'dmStatus',
+            'dm/stop' => 'dmStop',
+            'dm/invite' => 'dmInvite',
             'unban' => 'unban',
             'unban/submit' => 'unbanSubmit',
             'unban/list' => 'unbanList',
@@ -206,7 +213,7 @@ class Api
         $writeRoutes = ['install', 'auth/login', 'auth/register', 'auth/logout', 'me/update', 'me/link-code', 'me/unlink'];
         if (!isset($map[$route])) fail('Không tìm thấy API', 404);
         $fn = $map[$route];
-        $isWrite = in_array($route, $writeRoutes, true) || str_contains($route, '/') && !in_array($route, ['system/check-update', 'chat/poll', 'ads/image', 'me/logs', 'amnesty/search', 'users/tx', 'chat/media', 'features/group', 'features/username', 'checkin/config', 'unban/list'], true);
+        $isWrite = in_array($route, $writeRoutes, true) || str_contains($route, '/') && !in_array($route, ['system/check-update', 'chat/poll', 'ads/image', 'me/logs', 'amnesty/search', 'users/tx', 'chat/media', 'features/group', 'features/username', 'checkin/config', 'unban/list', 'dm/status'], true);
         if ($isWrite && $this->method !== 'POST') fail('Phương thức không hợp lệ', 405);
         json_out(['ok' => true, 'data' => $this->$fn()]);
     }
@@ -2690,6 +2697,106 @@ class Api
         $g = $this->loadGroup();
         $this->gate('settings', $g);
         return ['features' => GroupFeature::summary($g)];
+    }
+
+    // ================= Nhắn riêng thành viên qua bot =================
+    /** Nhóm được nhắn: quyền "Gửi tin vào nhóm" + gói thuê có "Nhắn riêng thành viên" (nhóm khách thuê) */
+    private function dmGroups(array $u): array
+    {
+        $ids = Access::groupIds($u);
+        $out = [];
+        foreach (DB::all('SELECT * FROM tg_groups WHERE active = 1 AND bot_id IS NOT NULL AND ' . Access::sqlIn($ids, 'id') . ' ORDER BY title') as $g) {
+            if (!Access::can($u, 'send', (int)$g['id']) || !Tenant::allows($g, 'dm')) continue;
+            $out[(int)$g['id']] = $g;
+        }
+        return $out;
+    }
+
+    private function dmPick(array $u): array
+    {
+        $allowed = $this->dmGroups($u);
+        $ids = array_values(array_unique(array_filter(array_map('intval', (array)$this->in('group_ids', [])), fn($id) => isset($allowed[$id]))));
+        if (!$ids) fail('Chọn ít nhất 1 nhóm');
+        return $ids;
+    }
+
+    private function dmCampaigns(array $u): array
+    {
+        $botIds = array_unique(array_map(fn($g) => (int)$g['bot_id'], $this->dmGroups($u)));
+        if (!$botIds) return [];
+        return array_map([DmBroadcast::class, 'row'], DB::all('SELECT * FROM dm_campaigns WHERE bot_id IN (' . implode(',', $botIds) . ') ORDER BY id DESC LIMIT 30'));
+    }
+
+    private function dm(): array
+    {
+        $u = $this->gate('send');
+        return [
+            'groups' => array_values(array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title'], 'bot' => DB::val('SELECT username FROM tg_bots WHERE id = ?', [$g['bot_id']])] + DmBroadcast::groupStats($g), $this->dmGroups($u))),
+            'campaigns' => $this->dmCampaigns($u), 'vars' => DmBroadcast::VARS, 'me' => $u['tg_user_id'] ? (string)$u['tg_user_id'] : null, 'speed' => DmBroadcast::PER_SECOND,
+        ];
+    }
+
+    private function dmCount(): array
+    {
+        $u = $this->gate('send');
+        return ['count' => DmBroadcast::count($this->dmPick($u), (bool)$this->in('include_left'))];
+    }
+
+    private function dmImage(): ?string
+    {
+        $img = (string)$this->in('image', '');
+        return $img !== '' ? Ads::saveImage($img) : null;
+    }
+
+    private function dmSend(): array
+    {
+        $u = $this->gate('send');
+        $ids = DmBroadcast::create($this->dmPick($u), (string)$this->in('text', ''), $this->dmImage(), (string)$this->in('buttons', ''), (bool)$this->in('silent'), (bool)$this->in('include_left'), $u['display_name'] ?: $u['username']);
+        // Trả kết quả cho trình duyệt ngay, rồi gửi tiếp ở nền (cron mỗi phút sẽ gửi phần còn lại)
+        if (!Repo::$testApi) register_shutdown_function(function () {
+            if (session_status() === PHP_SESSION_ACTIVE) session_write_close();
+            if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
+            ignore_user_abort(true);
+            @set_time_limit(150);
+            try { DmBroadcast::run(110); } catch (Throwable $e) {}
+        });
+        return ['ids' => $ids];
+    }
+
+    private function dmTest(): array
+    {
+        $u = $this->gate('send');
+        if (!$u['tg_user_id']) fail('Liên kết Telegram ở trang Tài khoản để nhận tin gửi thử');
+        $ids = $this->dmPick($u);
+        $img = $this->dmImage();
+        try { DmBroadcast::test($ids[0], $u['tg_user_id'], (string)$this->in('text', ''), $img, (string)$this->in('buttons', '')); }
+        finally { if ($img) @unlink(Ads::imagePath($img)); }
+        return [];
+    }
+
+    private function dmStatus(): array
+    {
+        $u = $this->gate('send');
+        return ['campaigns' => $this->dmCampaigns($u)];
+    }
+
+    private function dmStop(): array
+    {
+        $u = $this->gate('send');
+        $c = DB::get('SELECT * FROM dm_campaigns WHERE id = ?', [$this->int('id')]) ?: fail('Không tìm thấy', 404);
+        if (!in_array((int)$c['bot_id'], array_map(fn($g) => (int)$g['bot_id'], $this->dmGroups($u)), true)) fail('Không tìm thấy', 404);
+        DmBroadcast::stop((int)$c['id']);
+        return [];
+    }
+
+    private function dmInvite(): array
+    {
+        $u = $this->gate('send');
+        $allowed = $this->dmGroups($u);
+        $g = $allowed[$this->int('group_id')] ?? fail('Chọn nhóm');
+        DmBroadcast::invite($g, (string)$this->in('text', ''), (string)$this->in('button', ''));
+        Repo::log((int)$g['id'], $u['username'], 'dm_send', null, 'Đăng lời mời Start bot để nhận tin riêng', ['source' => 'web']);
+        return [];
     }
 
     // ================= Yêu cầu mở band =================

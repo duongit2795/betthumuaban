@@ -56,6 +56,40 @@ class Telegram
         return $data['result'];
     }
 
+    /**
+     * Gọi song song nhiều request cùng 1 method (curl_multi) — dùng cho gửi tin hàng loạt.
+     * @return array mỗi phần tử: ['ok' => bool, 'result' => mixed, 'code' => ?int, 'error' => ?string, 'retry_after' => ?int]
+     */
+    public function multi(string $method, array $paramsList, int $timeout = 20): array
+    {
+        $mh = curl_multi_init();
+        $hs = [];
+        foreach ($paramsList as $i => $params) {
+            $ch = curl_init('https://api.telegram.org/bot' . $this->token . '/' . $method);
+            curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => json_encode($params, JSON_UNESCAPED_UNICODE),
+                CURLOPT_HTTPHEADER => ['Content-Type: application/json'], CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => $timeout, CURLOPT_CONNECTTIMEOUT => 8]);
+            curl_multi_add_handle($mh, $ch);
+            $hs[$i] = $ch;
+        }
+        do {
+            $st = curl_multi_exec($mh, $running);
+            if ($running) curl_multi_select($mh, 1.0);
+        } while ($running && $st === CURLM_OK);
+        $out = [];
+        foreach ($hs as $i => $ch) {
+            $body = curl_multi_getcontent($ch);
+            $err = curl_error($ch);
+            curl_multi_remove_handle($mh, $ch);
+            curl_close($ch);
+            $d = is_string($body) && $body !== '' ? json_decode($body, true) : null;
+            $out[$i] = is_array($d) && !empty($d['ok'])
+                ? ['ok' => true, 'result' => $d['result'], 'code' => null, 'error' => null, 'retry_after' => null]
+                : ['ok' => false, 'result' => null, 'code' => $d['error_code'] ?? null, 'error' => $d['description'] ?? ($err ?: 'Không kết nối được Telegram'), 'retry_after' => $d['parameters']['retry_after'] ?? null];
+        }
+        curl_multi_close($mh);
+        return $out;
+    }
+
     /** Ghi lại tin bot gửi / tin bị xoá / tin được ghim cho tab Chat */
     protected static function afterCall(string $method, array $params, $result): void
     {

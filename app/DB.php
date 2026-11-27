@@ -6,7 +6,7 @@ class DB
 {
     private static ?PDO $pdo = null;
     private static string $driver = 'sqlite';
-    const SCHEMA_VERSION = 23;
+    const SCHEMA_VERSION = 24;
 
     public static function connect(?array $c = null): PDO
     {
@@ -394,6 +394,42 @@ class DB
                 tg_user_id $big NOT NULL,
                 created_at INT NOT NULL
             )",
+            "CREATE TABLE IF NOT EXISTS bot_starts (
+                bot_id INT NOT NULL,
+                tg_user_id $big NOT NULL,
+                started_at INT NOT NULL,
+                blocked INT NOT NULL DEFAULT 0,
+                updated_at INT NOT NULL,
+                PRIMARY KEY (bot_id, tg_user_id)
+            )",
+            "CREATE TABLE IF NOT EXISTS dm_campaigns (
+                id $pk,
+                bot_id INT NOT NULL,
+                group_ids TEXT,
+                text TEXT,
+                image $str,
+                file_id $str,
+                buttons TEXT,
+                silent INT NOT NULL DEFAULT 0,
+                status VARCHAR(16) NOT NULL DEFAULT 'queued',
+                total INT NOT NULL DEFAULT 0,
+                sent INT NOT NULL DEFAULT 0,
+                failed INT NOT NULL DEFAULT 0,
+                blocked INT NOT NULL DEFAULT 0,
+                created_by $str,
+                last_error $str,
+                created_at INT NOT NULL,
+                started_at INT,
+                finished_at INT
+            )",
+            "CREATE TABLE IF NOT EXISTS dm_queue (
+                id $pk,
+                campaign_id INT NOT NULL,
+                tg_user_id $big NOT NULL,
+                group_id INT,
+                status VARCHAR(8) NOT NULL DEFAULT 'q',
+                error $str
+            )",
             "CREATE TABLE IF NOT EXISTS unban_requests (
                 id $pk,
                 group_id INT NOT NULL,
@@ -503,6 +539,7 @@ class DB
             'idx_join_req' => 'join_requests (group_id, status)',
             'idx_group_feat' => 'group_features (group_id, feature)',
             'idx_unban_req' => 'unban_requests (group_id, status)',
+            'idx_dm_queue' => 'dm_queue (campaign_id, status)',
             'idx_tenant_orders' => 'tenant_orders (user_id, created_at)',
         ];
         foreach ($indexes as $name => $def) {
@@ -554,6 +591,17 @@ class DB
         self::addColumn('app_users', 'balance', ($my ? 'BIGINT' : 'INTEGER') . ' NOT NULL DEFAULT 0');
         // Các migration theo phiên bản schema đặt ở đây trong tương lai
         $v = (int)(Settings::get('schema_version') ?? 0);
+        // v24: nhắn riêng thành viên — người đã đăng nhập / học qua bot chắc chắn đã Start bot của chủ web
+        if ($v > 0 && $v < 24) {
+            try {
+                foreach (DB::all('SELECT id FROM tg_bots WHERE owner_id IS NULL') as $b) {
+                    $tgs = array_merge(array_column(DB::all('SELECT tg_user_id FROM app_users WHERE tg_user_id IS NOT NULL'), 'tg_user_id'), array_column(DB::all('SELECT tg_user_id FROM learn_progress'), 'tg_user_id'));
+                    foreach (array_unique(array_map('strval', $tgs)) as $tg) {
+                        if (!DB::val('SELECT 1 FROM bot_starts WHERE bot_id = ? AND tg_user_id = ?', [$b['id'], $tg])) DB::insert('bot_starts', ['bot_id' => $b['id'], 'tg_user_id' => $tg, 'started_at' => now(), 'updated_at' => now()]);
+                    }
+                }
+            } catch (Throwable $e) { /* bỏ qua */ }
+        }
         // v13: nhật ký quảng cáo mặc định tắt → dọn các dòng cũ
         if ($v > 0 && $v < 13) $pdo->exec("DELETE FROM app_logs WHERE action = 'ad_post'");
         if ($v < self::SCHEMA_VERSION) Settings::set('schema_version', (string)self::SCHEMA_VERSION);
