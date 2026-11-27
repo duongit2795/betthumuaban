@@ -47,6 +47,9 @@ try { Tenant::remind(); } catch (Throwable $e) {}
 try { MemberTag::expire(); } catch (Throwable $e) {}
 // Nạp tiền tự động: đọc lịch sử giao dịch ngân hàng, cộng tiền vào ví
 try { Wallet::syncAll(); } catch (Throwable $e) { Settings::set('pay_last_error', mb_substr($e->getMessage(), 0, 300)); }
+// Nhắn riêng hàng loạt: còn hàng đợi thì chia thời gian với quảng cáo (cả 2 đều tiếp tục ở lần cron sau)
+$dmBusy = (bool)DB::val("SELECT 1 FROM dm_campaigns WHERE status IN ('queued','sending') LIMIT 1");
+if ($dmBusy) { try { DmBroadcast::run(28); } catch (Throwable $e) {} }
 // Quảng cáo xoay vòng: chạy liên tục ~55 giây (cron gọi lại mỗi phút)
-Ads::run(55);
+Ads::run($dmBusy ? 27 : 55);
 echo "ok\n";

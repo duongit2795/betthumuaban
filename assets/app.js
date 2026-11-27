@@ -355,20 +355,20 @@
     if (!isWebAdmin() && isTenant()) {
       return {
         tab: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/plan', 'star', 'Gói'], ['/more', 'grid', 'Thêm']],
-        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm của tôi'], ['/bots', 'bot', 'Bot của tôi'], ['/plan', 'star', 'Gói thuê'], ...(can('rules') ? [['/rules', 'terminal', 'Lệnh']] : []), ['/logs', 'list', 'Nhật ký'], ['/unbans', 'lock', 'Yêu cầu mở band'],
+        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm của tôi'], ['/bots', 'bot', 'Bot của tôi'], ['/plan', 'star', 'Gói thuê'], ...(can('rules') ? [['/rules', 'terminal', 'Lệnh']] : []), ['/logs', 'list', 'Nhật ký'], ['/unbans', 'lock', 'Yêu cầu mở band'], ['/dm', 'send', 'Nhắn riêng thành viên'],
           ['/payments', 'bank', 'Thanh toán'], [`/vip/${S.user.id}`, 'trophy', 'VIP nhóm tôi'], [`/exchange/${S.user.id}`, 'refresh', 'Đổi điểm nhóm tôi'], [`/giftcode/${S.user.id}`, 'star', 'Mã quà nhóm tôi'], ...payNav(), ['/account', 'user', 'Tài khoản']],
       };
     }
     if (!isWebAdmin() && isManager()) {
       return {
         tab: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/rules', 'terminal', 'Lệnh'], ...(can('logs') ? [['/logs', 'list', 'Nhật ký']] : []), ['/more', 'grid', 'Thêm']],
-        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm của tôi'], ...planNav, ['/rules', 'terminal', 'Lệnh'], ...(can('moderate') ? [['/unbans', 'lock', 'Yêu cầu mở band']] : []), ...(can('logs') ? [['/logs', 'list', 'Nhật ký']] : []), ['/me', 'star', 'Điểm của tôi'], ...(S.pay?.checkin ? [['/checkin', 'calendar', 'Điểm danh']] : []), ['/rank', 'trophy', 'Xếp hạng'], ...payNav(), ['/account', 'user', 'Tài khoản']],
+        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm của tôi'], ...planNav, ['/rules', 'terminal', 'Lệnh'], ...(can('moderate') ? [['/unbans', 'lock', 'Yêu cầu mở band']] : []), ...(can('send') ? [['/dm', 'send', 'Nhắn riêng thành viên']] : []), ...(can('logs') ? [['/logs', 'list', 'Nhật ký']] : []), ['/me', 'star', 'Điểm của tôi'], ...(S.pay?.checkin ? [['/checkin', 'calendar', 'Điểm danh']] : []), ['/rank', 'trophy', 'Xếp hạng'], ...payNav(), ['/account', 'user', 'Tài khoản']],
       };
     }
     if (isWebAdmin()) {
       return {
         tab: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/logs', 'list', 'Nhật ký'], ['/more', 'grid', 'Thêm']],
-        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh'], ['/ads', 'megaphone', 'Quảng cáo'], ['/learn', 'book', 'Học tập'], ['/antiraid', 'shield', 'Chống raid'], ['/captcha', 'shield', 'Captcha vào nhóm'], ['/watermark', 'image', 'Đóng dấu ảnh'], ['/nameguard', 'shield', 'Cấm tên chứa từ cấm'], ['/unbans', 'lock', 'Yêu cầu mở band'], ['/gates', 'lock', 'Điều kiện chat'], ['/tags', 'tagi', 'Tag thành viên'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/admin', 'star', 'Quản lý cho thuê'], ['/payments', 'bank', 'Nạp tiền & ân xá'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ['/checkin', 'calendar', 'Điểm danh'], ['/exchange', 'refresh', 'Đổi điểm'], ['/vip', 'trophy', 'Gói VIP'], ['/giftcode', 'star', 'Mã quà tặng'], ...payNav(), ['/account', 'user', 'Tài khoản']],
+        side: [['/', 'home', 'Tổng quan'], ['/groups', 'users', 'Nhóm'], ['/bots', 'bot', 'Bot'], ['/rules', 'terminal', 'Lệnh'], ['/ads', 'megaphone', 'Quảng cáo'], ['/learn', 'book', 'Học tập'], ['/antiraid', 'shield', 'Chống raid'], ['/captcha', 'shield', 'Captcha vào nhóm'], ['/watermark', 'image', 'Đóng dấu ảnh'], ['/nameguard', 'shield', 'Cấm tên chứa từ cấm'], ['/unbans', 'lock', 'Yêu cầu mở band'], ['/dm', 'send', 'Nhắn riêng thành viên'], ['/gates', 'lock', 'Điều kiện chat'], ['/tags', 'tagi', 'Tag thành viên'], ['/logs', 'list', 'Nhật ký'], ['/users', 'key', 'Tài khoản web'], ['/admin', 'star', 'Quản lý cho thuê'], ['/payments', 'bank', 'Nạp tiền & ân xá'], ['/system', 'settings', 'Hệ thống & cập nhật'], ['/me', 'star', 'Điểm của tôi'], ['/checkin', 'calendar', 'Điểm danh'], ['/exchange', 'refresh', 'Đổi điểm'], ['/vip', 'trophy', 'Gói VIP'], ['/giftcode', 'star', 'Mã quà tặng'], ...payNav(), ['/account', 'user', 'Tài khoản']],
       };
     }
     const ck = S.pay?.checkin ? [['/checkin', 'calendar', 'Điểm danh']] : [];
@@ -398,7 +398,7 @@
     const path = current();
     const direct = (p) => (p === '/' ? path === '/' : path === p || path.startsWith(p + '/') || (p === '/groups' && path.startsWith('/group/')) || (p === '/rules' && path === '/commands'));
     const inTabs = items.tab.some(([p]) => p !== '/more' && direct(p));
-    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments', '/learn', '/keyboard', '/gates', '/mylogs', '/checkin', '/tags', '/tagshop', '/exchange', '/giftcode', '/vip', '/captcha', '/antiraid', '/watermark', '/nameguard', '/admin', '/plan', '/username', '/unban'].some((x) => path.startsWith(x)));
+    const isActive = (p) => direct(p) || (p === '/more' && !inTabs && ['/users', '/system', '/account', '/me', '/rules', '/commands', '/rank', '/ads', '/wallet', '/amnesty', '/payments', '/learn', '/keyboard', '/gates', '/mylogs', '/checkin', '/tags', '/tagshop', '/exchange', '/giftcode', '/vip', '/captcha', '/antiraid', '/watermark', '/nameguard', '/admin', '/plan', '/username', '/unban', '/dm'].some((x) => path.startsWith(x)));
     $('#tabbar').innerHTML = items.tab.map(([p, ic, t]) => `<a href="#${p}" class="${isActive(p) ? 'active' : ''}">${icon(ic)}<span>${t}</span></a>`).join('');
     $('#sidebar').innerHTML = `<div class="brand"><img src="assets/icon.svg" alt="">${esc(S.site)}</div>`
       + items.side.map(([p, ic, t]) => `<a href="#${p}" class="nav ${isActive(p) && !(p === '/more') ? 'active' : ''}">${icon(ic)}${t}</a>`).join('')
@@ -2823,6 +2823,7 @@
         ${S.pay?.wallet || isWebAdmin() ? `<a class="list-item" href="#/wallet">${icon('wallet')}<div class="grow">Ví của tôi</div><span class="small muted">${money(S.user.balance || 0)}</span><span class="chev">${icon('chevron')}</span></a>` : ''}
         ${S.pay?.amnesty || isWebAdmin() ? `<a class="list-item" href="#/amnesty">${icon('heart')}<div class="grow">Ân xá thành viên</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         <a class="list-item" href="#/me">${icon('star')}<div class="grow">Điểm của tôi</div><span class="chev">${icon('chevron')}</span></a>
+        ${isManager() && can('send') ? `<a class="list-item" href="#/dm">${icon('send')}<div class="grow">Nhắn riêng thành viên qua bot</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         ${isManager() && can('moderate') ? `<a class="list-item" href="#/unbans">${icon('lock')}<div class="grow">Duyệt yêu cầu mở band</div><span class="chev">${icon('chevron')}</span></a>` : ''}
         <a class="list-item" href="#/unban">${icon('lock')}<div class="grow">Xin mở band</div><span class="chev">${icon('chevron')}</span></a>
         <a class="list-item" href="#/mylogs">${icon('list')}<div class="grow">Nhật ký của tôi</div><span class="chev">${icon('chevron')}</span></a>
@@ -4670,6 +4671,139 @@
       };
     });
   }
+
+  // ================= Nhắn riêng thành viên qua bot =================
+  const DM_ST = { queued: ['Đang chờ', 'blue'], sending: ['Đang gửi', 'amber'], done: ['Đã gửi xong', 'green'], stopped: ['Đã dừng', 'red'] };
+  route('/dm', async () => {
+    const d = await api('dm');
+    let sel = d.groups.length === 1 ? [d.groups[0].id] : [], image = null, timerOn = false;
+    const camp = (c) => {
+      const [l, cl] = DM_ST[c.status] || [c.status, ''];
+      const done = c.sent + c.failed, pct = c.total ? Math.round((done / c.total) * 100) : 0;
+      const secs = c.started_at ? Math.max(1, (c.finished_at || Date.now() / 1000) - c.started_at) : 0;
+      return `<div class="card card-pad stack" style="gap:6px;margin-bottom:10px" data-camp="${c.id}">
+        <div class="row" style="gap:6px"><b class="grow ellipsis">${esc(c.groups.join(', '))}</b><span class="badge ${cl}">${l}</span></div>
+        <div class="xs muted ellipsis">${c.image ? '🖼 ' : ''}${esc(c.text)}</div>
+        <div class="dm-bar"><i style="width:${pct}%"></i></div>
+        <div class="xs"><b>${num(c.sent)}</b> đã gửi · ${c.failed ? `<span style="color:var(--danger)">${num(c.failed)} lỗi</span>${c.blocked ? ` (${num(c.blocked)} đã chặn bot)` : ''} · ` : ''}${num(done)}/${num(c.total)} (${pct}%)${secs && done ? ` · ${Math.round(done / secs)} tin/giây` : ''}</div>
+        <div class="xs muted">${fmtDate(c.created_at, true)} · ${esc(c.created_by || '')}${c.last_error && c.status !== 'done' ? ' · ' + esc(c.last_error) : ''}</div>
+        ${['queued', 'sending'].includes(c.status) ? `<button class="btn sm soft-danger" data-dmstop="${c.id}" style="align-self:flex-start">⏹ Dừng gửi</button>` : ''}</div>`;
+    };
+    const campsHtml = (list) => list.length ? list.map(camp).join('') : `<div class="card">${empty('send', 'Chưa gửi lần nào')}</div>`;
+    return {
+      title: 'Nhắn riêng thành viên',
+      html: `
+      <div class="alert info" style="margin-bottom:12px">${icon('info')}<div class="xs">Bot nhắn <b>riêng</b> cho từng thành viên. Telegram chỉ cho bot nhắn người <b>đã bấm Start bot</b> (từng nhắn riêng cho bot), nên chỉ những người đó nhận được. Gửi nhanh khoảng <b>${d.speed} tin/giây</b>, chạy nền, đóng trang vẫn gửi tiếp. Người đã chặn bot tự được bỏ qua.</div></div>
+      ${d.groups.length ? `<div class="kb-layout"><form class="stack" id="fdm">
+        <div class="card card-pad stack">
+          <div class="field"><span class="lbl">Gửi cho thành viên nhóm</span>
+            <div class="stack" style="gap:6px">${d.groups.map((g) => `<div class="row dm-grp" style="gap:8px"><button type="button" class="chip grow ${sel.includes(g.id) ? 'active' : ''}" data-dmg="${g.id}" style="justify-content:space-between"><span class="ellipsis">${esc(g.title)}</span><b>${num(g.reachable)}/${num(g.members)}</b></button>
+              ${g.bot ? `<button type="button" class="btn sm ghost" data-dminv="${g.id}" title="Đăng lời mời Start bot vào nhóm">📢 Mời Start</button>` : ''}</div>`).join('')}</div>
+            <div class="hint">Số bên phải: <b>đã Start bot / thành viên</b>. Bấm <b>📢 Mời Start</b> để bot đăng nút “Nhận thông báo riêng” vào nhóm, tăng số người nhận.</div></div>
+          ${sw('include_left', false, 'Gửi cả người đã rời nhóm', 'Vẫn nhận được nếu chưa chặn bot')}
+        </div>
+        <div class="card card-pad stack">
+          <label class="field"><span class="lbl">Nội dung</span><textarea class="input" name="text" data-rich rows="6" placeholder="Chào {name}! Nhóm có thông báo mới…"></textarea>
+            <div class="chips" style="flex-wrap:wrap;margin-top:6px">${Object.entries(d.vars).map(([v, t]) => `<button type="button" class="chip var-chip" data-dmvar="${v}"><code>${v}</code><small>${esc(t)}</small></button>`).join('')}</div>
+            <div class="hint">Biến được thay theo từng người nhận. Hỗ trợ <b>đậm</b>, <i>nghiêng</i>, link.</div></label>
+          <div class="field"><span class="lbl">Ảnh <span class="xs muted">(không bắt buộc)</span></span>
+            <div class="row" style="gap:8px"><label class="btn sm" style="margin:0">${icon('image', 'sm')}Chọn ảnh<input type="file" accept="image/*" data-dmimg hidden></label><span class="xs muted grow" data-dmimgname>Chưa có ảnh</span><button type="button" class="btn sm ghost hidden" data-dmimgx>Bỏ ảnh</button></div></div>
+          <label class="field"><span class="lbl">Nút bấm <span class="xs muted">(mỗi dòng: Chữ | link)</span></span><textarea class="input" name="buttons" rows="2" placeholder="🔥 Xem ưu đãi | https://example.com"></textarea></label>
+          ${sw('silent', false, 'Gửi không tiếng', 'Người nhận không bị đổ chuông')}
+        </div>
+        <div class="grid grid-2"><button type="button" class="btn" data-dmtest>${icon('send', 'sm')}Gửi thử cho tôi</button><button class="btn primary" data-dmsend>Gửi cho <b data-dmcount>0</b> người</button></div>
+        ${d.me ? '' : '<div class="xs muted">Liên kết Telegram ở trang Tài khoản để dùng “Gửi thử cho tôi”.</div>'}
+      </form>
+      <div class="kb-side"><div class="pv-label">👁 Xem trước (tin riêng)</div><div class="ad-preview" style="padding:10px"><div class="tgpost" style="padding:0;overflow:hidden" data-dmpv></div></div></div></div>` : `<div class="card">${empty('send', 'Bạn chưa có nhóm nào có thể nhắn (cần quyền Gửi tin vào nhóm).')}</div>`}
+      <div class="section-title"><h2>Các lần gửi</h2></div>
+      <div data-dmcamps>${campsHtml(d.campaigns)}</div>`,
+      mount: (root) => {
+        const f = $('#fdm', root);
+        const poll = async () => {
+          try {
+            const r = await api('dm/status');
+            $('[data-dmcamps]', root).innerHTML = campsHtml(r.campaigns);
+            if (!r.campaigns.some((c) => ['queued', 'sending'].includes(c.status))) timerOn = false;
+          } catch {}
+        };
+        every(() => { if (timerOn) poll(); }, 1500);
+        if (d.campaigns.some((c) => ['queued', 'sending'].includes(c.status))) timerOn = true;
+        $('[data-dmcamps]', root).addEventListener('click', async (e) => {
+          const b = e.target.closest('[data-dmstop]');
+          if (b && (await confirmBox('Dừng gửi?', 'Những người chưa nhận sẽ không được gửi nữa.', { danger: true, ok: 'Dừng' }))) { await api('dm/stop', { id: +b.dataset.dmstop }); poll(); }
+        });
+        if (!f) return;
+        const vals = () => ({ ...formData(f), group_ids: sel, image });
+        const preview = () => {
+          const v = formData(f), g = d.groups.find((x) => sel.includes(x.id));
+          const t = (v.text || '<i>Nội dung tin nhắn…</i>').replace(/\{name\}|\{first_name\}/g, 'Minh Anh').replace(/\{username\}/g, '@minhanh').replace(/\{group\}/g, esc(g?.title || 'Nhóm'));
+          let btns = '';
+          try { btns = (v.buttons || '').split('\n').map((l) => l.split('|')[0].trim()).filter(Boolean).map((b) => `<div class="tgpost-btns" style="padding:0 8px 8px"><span class="tgpost-btn">${esc(b)}<i>↗</i></span></div>`).join(''); } catch {}
+          $('[data-dmpv]', root).innerHTML = `${image ? `<img src="${image}" alt="" style="display:block;width:100%;max-height:260px;object-fit:cover">` : ''}<div class="tgpost-cap" style="padding:8px 10px">${previewText(t)}</div>${btns}`;
+        };
+        const count = debounce(async () => {
+          if (!sel.length) { $('[data-dmcount]', root).textContent = '0'; return; }
+          try { const r = await api('dm/count', { group_ids: sel, include_left: f.include_left.checked }); $('[data-dmcount]', root).textContent = num(r.count); } catch {}
+        }, 250);
+        preview(); count();
+        f.addEventListener('input', preview);
+        f.addEventListener('change', (e) => { if (e.target.name === 'include_left') count(); preview(); });
+        f.addEventListener('click', async (e) => {
+          const g = e.target.closest('[data-dmg]');
+          if (g) { const id = +g.dataset.dmg; sel = sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id]; g.classList.toggle('active'); count(); preview(); return; }
+          const v = e.target.closest('[data-dmvar]');
+          if (v) { const ta = f.text; if (ta._rich) ta._rich.insert(v.dataset.dmvar); else ta.value += v.dataset.dmvar; preview(); return; }
+          if (e.target.closest('[data-dmimgx]')) { image = null; $('[data-dmimgname]', root).textContent = 'Chưa có ảnh'; e.target.closest('[data-dmimgx]').classList.add('hidden'); preview(); return; }
+          const inv = e.target.closest('[data-dminv]');
+          if (inv) {
+            const gid = +inv.dataset.dminv;
+            sheet(`<div class="sheet-head"><h2>Mời thành viên Start bot</h2><button class="btn icon ghost" data-close>${icon('x')}</button></div>
+              <form class="stack" id="finv"><div class="xs muted">Bot đăng 1 tin vào nhóm kèm nút mở chat riêng với bot. Ai bấm nút và Start sẽ nhận được tin nhắn riêng.</div>
+              <label class="field"><span class="lbl">Nội dung</span><textarea class="input" name="text" rows="3">📩 Bấm nút bên dưới để <b>nhận thông báo riêng</b> từ nhóm qua bot (chỉ cần bấm Start 1 lần).</textarea></label>
+              <label class="field"><span class="lbl">Chữ trên nút</span><input class="input" name="button" value="📩 Nhận thông báo riêng" maxlength="40"></label>
+              <button class="btn primary block">Đăng vào nhóm</button></form>`, (el, close) => {
+              $('#finv', el).onsubmit = (ev) => { ev.preventDefault(); withBtn(ev.target.querySelector('button'), async () => { try { await api('dm/invite', { group_id: gid, ...formData(ev.target) }); close(); toast('Đã đăng lời mời vào nhóm'); } catch (err) { toast(err.message, 'err'); } }); };
+            });
+            return;
+          }
+          const t = e.target.closest('[data-dmtest]');
+          if (t) {
+            if (!sel.length) return toast('Chọn nhóm', 'err');
+            withBtn(t, async () => { try { await api('dm/test', vals()); toast('Đã gửi thử, kiểm tra tin nhắn riêng từ bot'); } catch (err) { toast(err.message, 'err'); } });
+          }
+        });
+        $('[data-dmimg]', root).addEventListener('change', (e) => {
+          const file = e.target.files[0]; e.target.value = '';
+          if (!file) return;
+          const img = new Image();
+          img.onload = () => {
+            const k = Math.min(1, 1600 / Math.max(img.width, img.height));
+            const cv = document.createElement('canvas'); cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
+            const ctx = cv.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height); ctx.drawImage(img, 0, 0, cv.width, cv.height);
+            image = cv.toDataURL('image/jpeg', 0.88); URL.revokeObjectURL(img.src);
+            $('[data-dmimgname]', root).textContent = file.name; $('[data-dmimgx]', root).classList.remove('hidden'); preview();
+          };
+          img.onerror = () => toast('Không đọc được ảnh', 'err');
+          img.src = URL.createObjectURL(file);
+        });
+        f.onsubmit = async (e) => {
+          e.preventDefault();
+          if (!sel.length) return toast('Chọn nhóm', 'err');
+          const n = $('[data-dmcount]', root).textContent;
+          if (!(await confirmBox('Gửi tin nhắn riêng?', `Bot sẽ nhắn riêng cho <b>${n}</b> người. Không thu hồi được sau khi gửi.`, { ok: 'Gửi ngay' }))) return;
+          withBtn(e.target.querySelector('[data-dmsend]'), async () => {
+            try {
+              await api('dm/send', vals());
+              toast('Đang gửi… theo dõi tiến độ bên dưới');
+              f.text._rich ? f.text._rich.setValue('') : (f.text.value = ''); image = null; preview();
+              timerOn = true; poll();
+              $('[data-dmcamps]', root).scrollIntoView({ behavior: 'smooth' });
+            } catch (err) { toast(err.message, 'err'); }
+          });
+        };
+      },
+    };
+  }, { manage: true, perm: 'send', title: 'Nhắn riêng thành viên' });
 
   // ================= Yêu cầu mở band =================
   const UB_ST = { pending: ['Chờ duyệt', 'amber'], approved: ['Đã mở band', 'green'], rejected: ['Từ chối', 'red'], processing: ['Đang xử lý', 'blue'] };
