@@ -19,6 +19,7 @@ class Wallet
         'gift' => 'Mã quà tặng',
         'vip' => 'Mua VIP',
         'plan' => 'Thuê gói',
+        'escrow' => 'Giao dịch trung gian',
         'refund' => 'Hoàn tiền',
         'admin' => 'Admin điều chỉnh',
     ];
@@ -219,6 +220,16 @@ class Wallet
             $txid = $sp ? mb_substr("s$sp-" . $t['id'], 0, 64) : $t['id']; // mỗi khách 1 tài khoản ngân hàng: tránh trùng mã giữa các khách
             if (DB::val('SELECT id FROM bank_tx WHERE txid = ?', [$txid])) continue;
             $res['new']++;
+            // Tiền giao dịch trung gian (nội dung GDTG + mã) → ghi vào giao dịch, không cộng ví
+            if ($sp === 0 && class_exists('Escrow') && preg_match('/' . preg_quote(Escrow::config()['prefix'], '/') . '\d/', strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $t['description'])))) {
+                try {
+                    DB::insert('bank_tx', ['txid' => $txid, 'amount' => $t['amount'], 'description' => $t['description'], 'tx_date' => $t['date'], 'space_id' => 0, 'user_id' => null, 'status' => 'escrow', 'created_at' => now()]);
+                } catch (PDOException $e) { continue; }
+                if (Escrow::matchPayment(['id' => $txid] + $t)) continue;
+                DB::run("UPDATE bank_tx SET status = 'unmatched' WHERE txid = ?", [$txid]); // mã không tồn tại → để admin xử lý
+                $res['unmatched']++;
+                continue;
+            }
             $u = self::matchUser($t['description'], $sp);
             $ok = $u && !$u['disabled'] && $t['amount'] >= $c['min'];
             try {

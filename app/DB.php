@@ -6,7 +6,7 @@ class DB
 {
     private static ?PDO $pdo = null;
     private static string $driver = 'sqlite';
-    const SCHEMA_VERSION = 24;
+    const SCHEMA_VERSION = 25;
 
     public static function connect(?array $c = null): PDO
     {
@@ -394,6 +394,58 @@ class DB
                 tg_user_id $big NOT NULL,
                 created_at INT NOT NULL
             )",
+            "CREATE TABLE IF NOT EXISTS escrow_rooms (
+                id $pk,
+                group_id INT NOT NULL,
+                chat_id $big NOT NULL,
+                no INT NOT NULL DEFAULT 0,
+                status VARCHAR(12) NOT NULL DEFAULT 'free',
+                deal_id INT,
+                close_at INT,
+                invite_link $str,
+                check_note TEXT,
+                checked_at INT,
+                created_at INT NOT NULL
+            )",
+            "CREATE TABLE IF NOT EXISTS escrow_deals (
+                id $pk,
+                room_id INT,
+                status VARCHAR(12) NOT NULL DEFAULT 'queue',
+                creator_tg $big,
+                buyer_tg $big,
+                buyer_name $str,
+                buyer_username $str,
+                seller_tg $big,
+                seller_name $str,
+                seller_username $str,
+                buyer_ok INT NOT NULL DEFAULT 0,
+                seller_ok INT NOT NULL DEFAULT 0,
+                amount $big NOT NULL,
+                fee $big NOT NULL DEFAULT 0,
+                fee_payer VARCHAR(8) NOT NULL DEFAULT 'buyer',
+                pay_total $big NOT NULL,
+                seller_gets $big NOT NULL,
+                paid_amount $big NOT NULL DEFAULT 0,
+                description TEXT,
+                buyer_bank $str,
+                seller_bank $str,
+                bank_txid $str,
+                middleman $str,
+                dispute_by $str,
+                dispute_reason TEXT,
+                note $str,
+                card_msg_id $big,
+                reminded INT NOT NULL DEFAULT 0,
+                transcript TEXT,
+                source VARCHAR(8),
+                created_at INT NOT NULL,
+                room_at INT,
+                agreed_at INT,
+                paid_at INT,
+                delivered_at INT,
+                confirmed_at INT,
+                closed_at INT
+            )",
             "CREATE TABLE IF NOT EXISTS bot_starts (
                 bot_id INT NOT NULL,
                 tg_user_id $big NOT NULL,
@@ -540,6 +592,7 @@ class DB
             'idx_group_feat' => 'group_features (group_id, feature)',
             'idx_unban_req' => 'unban_requests (group_id, status)',
             'idx_dm_queue' => 'dm_queue (campaign_id, status)',
+            'idx_escrow_status' => 'escrow_deals (status)',
             'idx_tenant_orders' => 'tenant_orders (user_id, created_at)',
         ];
         foreach ($indexes as $name => $def) {
@@ -548,6 +601,8 @@ class DB
             } catch (PDOException $e) { /* đã tồn tại */ }
         }
 
+        // v25: GDTG — người mua đã báo chuyển tiền (không tự huỷ khi trung gian chưa kịp xác nhận)
+        self::addColumn('escrow_deals', 'claimed_at', 'INT');
         // v22: ví / ân xá / VIP / đổi điểm / mã quà riêng của từng khách thuê (space_id: 0 = chủ web)
         self::addColumn('wallet_tx', 'space_id', 'INT NOT NULL DEFAULT 0');
         self::addColumn('bank_tx', 'space_id', 'INT NOT NULL DEFAULT 0');

@@ -155,6 +155,16 @@ class Api
             'features/username' => 'usernameFeature',
             'settings/export' => 'settingsExport',
             'settings/import' => 'settingsImport',
+            'gdtg' => 'gdtg',
+            'gdtg/create' => 'gdtgCreate',
+            'gdtg/act' => 'gdtgAct',
+            'escrow' => 'escrow',
+            'escrow/deal' => 'escrowDeal',
+            'escrow/act' => 'escrowAct',
+            'escrow/save' => 'escrowSave',
+            'escrow/room/add' => 'escrowRoomAdd',
+            'escrow/room/check' => 'escrowRoomCheck',
+            'escrow/room/toggle' => 'escrowRoomToggle',
             'dm' => 'dm',
             'dm/count' => 'dmCount',
             'dm/send' => 'dmSend',
@@ -213,7 +223,7 @@ class Api
         $writeRoutes = ['install', 'auth/login', 'auth/register', 'auth/logout', 'me/update', 'me/link-code', 'me/unlink'];
         if (!isset($map[$route])) fail('Không tìm thấy API', 404);
         $fn = $map[$route];
-        $isWrite = in_array($route, $writeRoutes, true) || str_contains($route, '/') && !in_array($route, ['system/check-update', 'chat/poll', 'ads/image', 'me/logs', 'amnesty/search', 'users/tx', 'chat/media', 'features/group', 'features/username', 'checkin/config', 'unban/list', 'dm/status'], true);
+        $isWrite = in_array($route, $writeRoutes, true) || str_contains($route, '/') && !in_array($route, ['system/check-update', 'chat/poll', 'ads/image', 'me/logs', 'amnesty/search', 'users/tx', 'chat/media', 'features/group', 'features/username', 'checkin/config', 'unban/list', 'dm/status', 'escrow/deal'], true);
         if ($isWrite && $this->method !== 'POST') fail('Phương thức không hợp lệ', 405);
         json_out(['ok' => true, 'data' => $this->$fn()]);
     }
@@ -2697,6 +2707,144 @@ class Api
         $g = $this->loadGroup();
         $this->gate('settings', $g);
         return ['features' => GroupFeature::summary($g)];
+    }
+
+    // ================= Giao dịch trung gian =================
+    /** Trang thành viên: tạo giao dịch + giao dịch của tôi */
+    private function gdtg(): array
+    {
+        $u = Auth::requireUser();
+        $c = Escrow::config();
+        $tg = $u['tg_user_id'] ? (string)$u['tg_user_id'] : null;
+        return [
+            'enabled' => $c['enabled'], 'linked' => (bool)$tg, 'fee_percent' => $c['fee_percent'], 'fee_min' => $c['fee_min'], 'fee_max' => $c['fee_max'], 'fee_payer' => $c['fee_payer'],
+            'fee_payers' => Escrow::FEE_PAYER, 'min_amount' => $c['min_amount'], 'max_amount' => $c['max_amount'], 'pay_minutes' => $c['pay_minutes'], 'rules' => $c['rules'],
+            'bot' => DB::val('SELECT username FROM tg_bots WHERE enabled = 1 AND owner_id IS NULL ORDER BY id LIMIT 1'),
+            'free_rooms' => (int)DB::val("SELECT COUNT(*) FROM escrow_rooms WHERE status = 'free'"),
+            'deals' => $tg ? array_map(fn($d) => Escrow::row($d) + ['my_role' => (string)$d['buyer_tg'] === $tg ? 'buyer' : 'seller'],
+                DB::all('SELECT * FROM escrow_deals WHERE buyer_tg = ? OR seller_tg = ? ORDER BY id DESC LIMIT 30', [$tg, $tg])) : [],
+        ];
+    }
+
+    private function gdtgCreate(): array
+    {
+        $u = Auth::requireUser();
+        if (!$u['tg_user_id']) fail('Liên kết Telegram ở trang Tài khoản trước khi tạo giao dịch');
+        $m = DB::get('SELECT first_name, last_name, username FROM tg_members WHERE tg_user_id = ? ORDER BY last_active DESC', [$u['tg_user_id']]);
+        $from = ['id' => (string)$u['tg_user_id'], 'first_name' => $m['first_name'] ?? ($u['display_name'] ?: $u['username']), 'last_name' => $m['last_name'] ?? null, 'username' => $m['username'] ?? null];
+        $amount = Escrow::parseAmount((string)$this->in('amount', ''));
+        if ($amount <= 0) fail('Nhập số tiền hợp lệ');
+        [$d, $link] = Escrow::create($from, (string)$this->in('role'), (string)$this->in('other', ''), $amount, (string)$this->in('description', ''), 'web');
+        return ['deal' => Escrow::row($d), 'invite' => $link];
+    }
+
+    /** Người mua / người bán bấm nút từ web (giống nút trong phòng) */
+    private function gdtgAct(): array
+    {
+        $u = Auth::requireUser();
+        if (!$u['tg_user_id']) fail('Chưa liên kết Telegram');
+        $m = DB::get('SELECT first_name, username FROM tg_members WHERE tg_user_id = ? ORDER BY last_active DESC', [$u['tg_user_id']]);
+        $act = (string)$this->in('action');
+        if (!in_array($act, ['agree', 'claim', 'delivered', 'received', 'dispute', 'cancel'], true)) fail('Hành động không hợp lệ');
+        $msg = Escrow::act($this->int('id'), $act, ['id' => (string)$u['tg_user_id'], 'first_name' => $m['first_name'] ?? ($u['display_name'] ?: $u['username']), 'username' => $m['username'] ?? null], (string)$this->in('reason', ''));
+        return ['message' => $msg, 'deal' => Escrow::row(Escrow::deal($this->int('id')))];
+    }
+
+    /** Quản trị GDTG (admin web) */
+    private function escrow(): array
+    {
+        Auth::requireAdmin();
+        $c = Escrow::config();
+        $status = (string)$this->in('status', 'open');
+        $where = $status === 'open' ? "status IN ('" . implode("','", Escrow::OPEN) . "')" : (isset(Escrow::STATUS[$status]) ? "status = '$status'" : '1=1');
+        $rooms = DB::all('SELECT r.*, g.title FROM escrow_rooms r LEFT JOIN tg_groups g ON g.id = r.group_id ORDER BY r.no');
+        $roomGroups = array_column($rooms, 'group_id');
+        return [
+            'config' => $c, 'fee_payers' => Escrow::FEE_PAYER, 'statuses' => Escrow::STATUS,
+            'wallet' => ['account_no' => Wallet::config(0)['account_no'], 'has_api' => Wallet::config(0)['has_api']],
+            'stats' => [
+                'open' => (int)DB::val("SELECT COUNT(*) FROM escrow_deals WHERE status IN ('" . implode("','", Escrow::OPEN) . "')"),
+                'holding' => (int)DB::val("SELECT COALESCE(SUM(pay_total),0) FROM escrow_deals WHERE status IN ('paid','delivered','confirmed','disputed')"),
+                'disputed' => (int)DB::val("SELECT COUNT(*) FROM escrow_deals WHERE status = 'disputed'"),
+                'queue' => (int)DB::val("SELECT COUNT(*) FROM escrow_deals WHERE status = 'queue'"),
+                'fee_30' => (int)DB::val("SELECT COALESCE(SUM(fee),0) FROM escrow_deals WHERE status = 'completed' AND closed_at > ?", [now() - 30 * 86400]),
+                'done_30' => (int)DB::val("SELECT COUNT(*) FROM escrow_deals WHERE status = 'completed' AND closed_at > ?", [now() - 30 * 86400]),
+                'free_rooms' => count(array_filter($rooms, fn($r) => $r['status'] === 'free')), 'rooms' => count($rooms),
+            ],
+            'deals' => array_map(fn($d) => Escrow::row($d), DB::all("SELECT * FROM escrow_deals WHERE $where ORDER BY id DESC LIMIT 100")),
+            'rooms' => array_map(fn($r) => ['id' => (int)$r['id'], 'no' => (int)$r['no'], 'title' => $r['title'], 'status' => $r['status'], 'deal_id' => $r['deal_id'] ? (int)$r['deal_id'] : null,
+                'issues' => $r['check_note'] ? explode("\n", $r['check_note']) : [], 'checked_at' => $r['checked_at'] ? (int)$r['checked_at'] : null], $rooms),
+            'candidates' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title']],
+                array_values(array_filter(DB::all('SELECT g.id, g.title FROM tg_groups g WHERE g.active = 1 AND ' . Tenant::ownerGroupsSql('g') . ' ORDER BY g.title'), fn($g) => !in_array($g['id'], $roomGroups)))),
+        ];
+    }
+
+    private function escrowDeal(): array
+    {
+        $u = Auth::requireUser();
+        $d = Escrow::deal($this->int('id')) ?: fail('Không tìm thấy giao dịch', 404);
+        $tg = (string)$u['tg_user_id'];
+        if (!Access::isWebAdmin($u) && $tg !== (string)$d['buyer_tg'] && $tg !== (string)$d['seller_tg']) fail('Không tìm thấy giao dịch', 404);
+        $row = Escrow::row($d, true);
+        if (!$row['transcript'] && $d['room_id'] && $d['room_at']) { // đang mở: đọc trực tiếp tin nhắn trong phòng
+            $gid = (int)DB::val('SELECT group_id FROM escrow_rooms WHERE id = ?', [$d['room_id']]);
+            $row['transcript'] = array_map(fn($r) => ['n' => $r['name'], 'u' => $r['username'], 'id' => (string)$r['tg_user_id'], 'k' => $r['kind'], 'm' => $r['media'], 't' => $r['text'], 'del' => (int)$r['deleted'], 'at' => (int)$r['created_at']],
+                DB::all('SELECT * FROM tg_messages WHERE group_id = ? AND created_at >= ? ORDER BY id LIMIT 1000', [$gid, (int)$d['room_at'] - 5]));
+        }
+        $row['bank_txid'] = Access::isWebAdmin($u) ? $d['bank_txid'] : null;
+        return $row;
+    }
+
+    /** Admin web xử lý với vai trò trung gian */
+    private function escrowAct(): array
+    {
+        $u = Auth::requireAdmin();
+        $act = (string)$this->in('action');
+        if (!in_array($act, ['mmpaid', 'release', 'refund', 'cancel'], true)) fail('Hành động không hợp lệ');
+        $msg = Escrow::act($this->int('id'), $act, ['id' => (string)($u['tg_user_id'] ?: 0), 'first_name' => ($u['display_name'] ?: $u['username']) . ' (web)'], '', true);
+        return ['message' => $msg];
+    }
+
+    private function escrowSave(): array
+    {
+        $u = Auth::requireAdmin();
+        $c = Escrow::save((array)$this->in('config', []));
+        Repo::log(null, $u['username'], 'system', null, 'Giao dịch trung gian: ' . ($c['enabled'] ? 'bật · ' . count($c['middlemen']) . ' trung gian' : 'tắt'));
+        return ['config' => $c];
+    }
+
+    private function escrowRoomAdd(): array
+    {
+        Auth::requireAdmin();
+        $r = Escrow::addRoom($this->int('group_id'));
+        return ['check' => $r['check']];
+    }
+
+    private function escrowRoomCheck(): array
+    {
+        Auth::requireAdmin();
+        $room = DB::get('SELECT * FROM escrow_rooms WHERE id = ?', [$this->int('id')]) ?: fail('Không tìm thấy phòng', 404);
+        $res = Escrow::check($room);
+        if ($res['ok'] && $room['status'] === 'off') DB::run("UPDATE escrow_rooms SET status = 'free' WHERE id = ?", [$room['id']]);
+        return $res;
+    }
+
+    /** Tạm ngừng / dùng lại / bỏ phòng (chỉ khi phòng không có giao dịch đang chạy) */
+    private function escrowRoomToggle(): array
+    {
+        Auth::requireAdmin();
+        $room = DB::get('SELECT * FROM escrow_rooms WHERE id = ?', [$this->int('id')]) ?: fail('Không tìm thấy phòng', 404);
+        $mode = (string)$this->in('mode');
+        if (in_array($room['status'], ['busy', 'closing'], true) && $mode !== 'free') fail('Phòng đang có giao dịch');
+        if ($mode === 'off') DB::run("UPDATE escrow_rooms SET status = 'off' WHERE id = ?", [$room['id']]);
+        elseif ($mode === 'on') DB::run("UPDATE escrow_rooms SET status = 'free' WHERE id = ? AND status = 'off'", [$room['id']]);
+        elseif ($mode === 'delete') DB::run('DELETE FROM escrow_rooms WHERE id = ?', [$room['id']]);
+        elseif ($mode === 'free') { // giải phóng phòng bị kẹt (giao dịch đã kết thúc)
+            $d = $room['deal_id'] ? Escrow::deal((int)$room['deal_id']) : null;
+            if ($d && in_array($d['status'], Escrow::OPEN, true)) fail('Giao dịch #' . $d['id'] . ' vẫn đang chạy');
+            Escrow::freeRoom($room);
+        }
+        return [];
     }
 
     // ================= Nhắn riêng thành viên qua bot =================

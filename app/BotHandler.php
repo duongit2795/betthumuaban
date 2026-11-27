@@ -29,12 +29,14 @@ class BotHandler
             $jr = $u['chat_join_request'];
             if ($this->isGroup($jr['chat'])) {
                 $g = Repo::upsertGroup($jr['chat'], (int)$this->bot['id']);
+                if (Escrow::onJoinRequest($this->api, $g, $jr)) return; // phòng GDTG: chỉ duyệt người mua / người bán
                 if (!NameGuard::onRequest($this->api, $g, $jr)) AntiRaid::onRequest($this->api, $g, $jr); // tên chứa từ cấm → từ chối luôn
             }
         }
         elseif (isset($u['callback_query'])) {
             $cbq = $u['callback_query'];
             if (UnbanRequest::onCallback($this->api, $cbq)) return; // admin duyệt / từ chối yêu cầu mở band
+            if (Escrow::onCallback($this->api, $cbq)) return;       // nút trong phòng giao dịch trung gian
             if ($cap = Captcha::onCallback($this->api, $cbq)) { $this->afterCaptcha($cap); return; }
             if (!UsernameGuard::onCallback($this->api, $cbq) && !UpdateNotifier::onCallback($this->api, $cbq)) TgLogin::onCallback($this->api, $cbq);
         }
@@ -114,6 +116,7 @@ class BotHandler
     {
         if (!$this->isGroup($cm['chat'])) return;
         $group = Repo::upsertGroup($cm['chat'], (int)$this->bot['id']);
+        if (Escrow::isRoom((int)$group['id'])) return; // phòng GDTG: không áp dụng captcha / chống raid / cấm tên…
         $user = $cm['new_chat_member']['user'];
         $st = $cm['new_chat_member']['status'] ?? '';
         $map = ['kicked' => 'banned', 'left' => 'left', 'member' => 'member', 'restricted' => null, 'administrator' => 'member', 'creator' => 'member'];
@@ -193,6 +196,13 @@ class BotHandler
         } else {
             ChatLog::store($msg, $gid);
         }
+
+        // Phòng giao dịch trung gian: chỉ xử lý việc giao dịch (tin nhắn đã lưu làm bằng chứng ở trên)
+        if (Escrow::isRoom($gid)) {
+            if (!$edited) Escrow::onRoomMessage($this->api, $group, $msg);
+            return;
+        }
+        if (!$edited && preg_match('~^/gdtg(?:@\w+)?(?:\s|$)~i', (string)($msg['text'] ?? ''))) { $this->escrowCmd($msg); return; }
 
         if (!empty($msg['new_chat_members'])) {
             $this->onJoin($group, $s, $msg);
@@ -626,6 +636,7 @@ class BotHandler
         $text = trim((string)($msg['text'] ?? ''));
         $from = $msg['from'];
         DmBroadcast::seen((int)$this->bot['id'], $from['id']); // đã nhắn riêng cho bot → nhận được tin nhắn riêng hàng loạt
+        if (preg_match('~^/gdtg(?:@\w+)?(?:\s|$)~i', $text)) { $this->escrowCmd($msg); return; }
         if (preg_match('~^/start(?:@\w+)?\s+dm$~i', $text)) {
             $this->reply($msg, "✅ Đã bật <b>nhận thông báo riêng</b> từ nhóm qua bot.\nBạn có thể tắt bất cứ lúc nào bằng cách chặn bot.");
             return;
@@ -803,6 +814,28 @@ class BotHandler
     }
 
     /** Nội dung lệnh /anxa trong nhóm */
+    /** /gdtg mua|ban @doitac 500k nội dung — tạo giao dịch trung gian (chỉ bot của chủ web) */
+    private function escrowCmd(array $msg): void
+    {
+        if (Tenant::botOwner((int)$this->bot['id'])) return;
+        $c = Escrow::config();
+        $text = trim((string)$msg['text']);
+        $help = "🤝 <b>GIAO DỊCH TRUNG GIAN</b>\nCú pháp: <code>/gdtg mua @nguoiban 500k nội dung</code>\nhoặc: <code>/gdtg ban @nguoimua 1.5tr nội dung</code>\n\n"
+            . 'Phí: ' . rtrim(rtrim(number_format($c['fee_percent'], 2, ',', ''), '0'), ',') . '% (tối thiểu ' . Wallet::money($c['fee_min']) . ') · ' . mb_strtolower(Escrow::FEE_PAYER[$c['fee_payer']])
+            . "\nBot tạo <b>phòng riêng</b> cho 2 bên + trung gian, giữ tiền đến khi người mua nhận hàng OK." . (str_starts_with(site_url(), 'https://') ? "\n🌐 Tạo trên web: " . site_url() . '/#/gdtg' : '');
+        if (!$c['enabled']) { $this->reply($msg, '🤝 Giao dịch trung gian hiện chưa mở.'); return; }
+        if (!preg_match('~^/gdtg(?:@\w+)?\s+(mua|bán|ban|buy|sell)\s+(@?[A-Za-z0-9_]{4,32}|\d{4,15})\s+(\S+)\s+(.+)$~isu', $text, $m)) { $this->reply($msg, $help); return; }
+        $amount = Escrow::parseAmount($m[3]);
+        if ($amount <= 0) { $this->reply($msg, '❌ Số tiền không hợp lệ (VD 500k, 1.5tr, 500000).'); return; }
+        $role = in_array(mb_strtolower($m[1]), ['mua', 'buy'], true) ? 'buy' : 'sell';
+        try {
+            [$d, $link] = Escrow::create($msg['from'], $role, $m[2], $amount, $m[4], 'bot');
+        } catch (HttpError $e) { $this->reply($msg, '❌ ' . tg_esc($e->getMessage())); return; }
+        $t = "✅ Đã tạo <b>GDTG #{$d['id']}</b> · " . Wallet::money((int)$d['amount']) . ' · ' . tg_esc($d['description']) . "\n💸 Người mua chuyển: " . Wallet::money((int)$d['pay_total']) . ' · người bán nhận: ' . Wallet::money((int)$d['seller_gets']);
+        $t .= $link ? "\n\n👉 <b>Vào phòng giao dịch:</b> $link\n(Gửi link này cho đối tác. Chỉ 2 bên được duyệt vào phòng.)" : "\n\n⏳ Hiện chưa có phòng trống, bot sẽ nhắn riêng cho bạn khi có phòng (hãy Start bot).";
+        $this->reply($msg, $t, ['link_preview_options' => ['is_disabled' => true]]);
+    }
+
     /** Không gian tiền của bot này: bot khách thuê → ví / ân xá / VIP của khách đó */
     private function space(): int
     {
