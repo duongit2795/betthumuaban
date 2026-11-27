@@ -574,6 +574,7 @@ class Api
         return array_map(fn($b) => [
             'owner' => $b['owner_id'] ? ['id' => (int)$b['owner_id'], 'username' => $b['owner_name']] : null,
             'blocked' => Tenant::blockReason((int)$b['id'], null),
+            'escrow' => Escrow::isEscrowBot((int)$b['id']),
             'id' => (int)$b['id'],
             'username' => $b['username'],
             'name' => $b['name'],
@@ -2562,7 +2563,7 @@ class Api
         $out = ['mine' => array_map(fn($r) => ['code' => $r['code'], 'type' => $r['type'], 'amount' => (int)$r['amount'], 'created_at' => (int)$r['created_at']],
             DB::all('SELECT r.created_at, c.code, c.type, c.amount FROM gift_redemptions r JOIN gift_codes c ON c.id = r.code_id WHERE r.who = ? ORDER BY r.id DESC LIMIT 20', [$who])),
             'linked' => (bool)$u['tg_user_id'], 'cmd' => Commands::name('giftcode'),
-            'bot' => DB::val('SELECT username FROM tg_bots WHERE enabled = 1 AND ' . ($sp ? 'owner_id = ' . $sp : 'owner_id IS NULL') . ' ORDER BY id LIMIT 1'), 'space' => $this->spaceInfo($u, $sp)];
+            'bot' => DB::val('SELECT username FROM tg_bots WHERE enabled = 1 AND ' . ($sp ? 'owner_id = ' . $sp : 'owner_id IS NULL' . Escrow::notBotSql()) . ' ORDER BY id LIMIT 1'), 'space' => $this->spaceInfo($u, $sp)];
         if ($this->isSpaceAdmin($u, $sp)) {
             $out['admin'] = [
                 'codes' => array_map(function ($r) { $x = GiftCode::row($r); $x['group_title'] = $r['group_title']; $x['cond_text'] = GiftCode::describe($x['conditions']); return $x; },
@@ -2719,7 +2720,7 @@ class Api
         return [
             'enabled' => $c['enabled'], 'linked' => (bool)$tg, 'fee_percent' => $c['fee_percent'], 'fee_min' => $c['fee_min'], 'fee_max' => $c['fee_max'], 'fee_payer' => $c['fee_payer'],
             'fee_payers' => Escrow::FEE_PAYER, 'min_amount' => $c['min_amount'], 'max_amount' => $c['max_amount'], 'pay_minutes' => $c['pay_minutes'], 'rules' => $c['rules'],
-            'bot' => DB::val('SELECT username FROM tg_bots WHERE enabled = 1 AND owner_id IS NULL ORDER BY id LIMIT 1'),
+            'bot' => Escrow::botUsername(),
             'free_rooms' => (int)DB::val("SELECT COUNT(*) FROM escrow_rooms WHERE status = 'free'"),
             'deals' => $tg ? array_map(fn($d) => Escrow::row($d) + ['my_role' => (string)$d['buyer_tg'] === $tg ? 'buyer' : 'seller'],
                 DB::all('SELECT * FROM escrow_deals WHERE buyer_tg = ? OR seller_tg = ? ORDER BY id DESC LIMIT 30', [$tg, $tg])) : [],
@@ -2775,7 +2776,9 @@ class Api
             'rooms' => array_map(fn($r) => ['id' => (int)$r['id'], 'no' => (int)$r['no'], 'title' => $r['title'], 'status' => $r['status'], 'deal_id' => $r['deal_id'] ? (int)$r['deal_id'] : null,
                 'issues' => $r['check_note'] ? explode("\n", $r['check_note']) : [], 'checked_at' => $r['checked_at'] ? (int)$r['checked_at'] : null], $rooms),
             'candidates' => array_map(fn($g) => ['id' => (int)$g['id'], 'title' => $g['title']],
-                array_values(array_filter(DB::all('SELECT g.id, g.title FROM tg_groups g WHERE g.active = 1 AND ' . Tenant::ownerGroupsSql('g') . ' ORDER BY g.title'), fn($g) => !in_array($g['id'], $roomGroups)))),
+                array_values(array_filter(DB::all('SELECT g.id, g.title FROM tg_groups g WHERE g.active = 1 AND ' . (Escrow::botId() ? 'g.bot_id = ' . Escrow::botId() : Tenant::ownerGroupsSql('g')) . ' ORDER BY g.title'), fn($g) => !in_array($g['id'], $roomGroups)))),
+            'bots' => array_map(fn($b) => ['id' => (int)$b['id'], 'username' => $b['username'], 'name' => $b['name'], 'enabled' => (int)$b['enabled']], DB::all('SELECT id, username, name, enabled FROM tg_bots WHERE owner_id IS NULL ORDER BY id')),
+            'bot' => Escrow::botUsername(),
         ];
     }
 
@@ -2844,6 +2847,7 @@ class Api
             if ($d && in_array($d['status'], Escrow::OPEN, true)) fail('Giao dịch #' . $d['id'] . ' vẫn đang chạy');
             Escrow::freeRoom($room);
         }
+        Escrow::clearCache();
         return [];
     }
 

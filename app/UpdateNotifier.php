@@ -25,7 +25,7 @@ class UpdateNotifier
     private static function api(): ?Telegram
     {
         if (Repo::$testApi) return Repo::$testApi;
-        $b = DB::get('SELECT token FROM tg_bots WHERE enabled = 1 ORDER BY id LIMIT 1');
+        $b = DB::get('SELECT token FROM tg_bots WHERE enabled = 1' . Escrow::notBotSql() . ' ORDER BY id LIMIT 1');
         return $b ? new Telegram($b['token']) : null;
     }
 

@@ -127,7 +127,7 @@ class Ads
     {
         if (Repo::$testApi) return [Repo::$testApi, 'test'];
         if ($campaign['bot_mode'] === 'custom' && $campaign['bot_token']) return [new Telegram($campaign['bot_token']), 'c' . $campaign['id']];
-        $botId = $group['bot_id'] ?: DB::val('SELECT id FROM tg_bots WHERE enabled = 1 ORDER BY id LIMIT 1');
+        $botId = $group['bot_id'] ?: DB::val('SELECT id FROM tg_bots WHERE enabled = 1' . Escrow::notBotSql() . ' ORDER BY id LIMIT 1');
         $tok = $botId ? DB::val('SELECT token FROM tg_bots WHERE id = ?', [$botId]) : null;
         return [$tok ? new Telegram($tok) : null, 'b' . $botId];
     }

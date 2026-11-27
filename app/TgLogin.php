@@ -19,7 +19,7 @@ class TgLogin
 
     public static function bots(): array
     {
-        return array_map(fn($b) => $b['username'], DB::all('SELECT username FROM tg_bots WHERE enabled = 1 AND username IS NOT NULL ORDER BY id'));
+        return array_map(fn($b) => $b['username'], DB::all('SELECT username FROM tg_bots WHERE enabled = 1 AND username IS NOT NULL' . Escrow::notBotSql() . ' ORDER BY id'));
     }
 
     private static function sess(): string
