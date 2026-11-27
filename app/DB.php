@@ -603,6 +603,8 @@ class DB
 
         // v25: GDTG — người mua đã báo chuyển tiền (không tự huỷ khi trung gian chưa kịp xác nhận)
         self::addColumn('escrow_deals', 'claimed_at', 'INT');
+        self::addColumn('escrow_deals', 'buyer_in', 'INT NOT NULL DEFAULT 0');  // đã vào phòng
+        self::addColumn('escrow_deals', 'seller_in', 'INT NOT NULL DEFAULT 0');
         // v22: ví / ân xá / VIP / đổi điểm / mã quà riêng của từng khách thuê (space_id: 0 = chủ web)
         self::addColumn('wallet_tx', 'space_id', 'INT NOT NULL DEFAULT 0');
         self::addColumn('bank_tx', 'space_id', 'INT NOT NULL DEFAULT 0');

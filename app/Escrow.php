@@ -262,13 +262,8 @@ class Escrow
             DB::run("UPDATE escrow_deals SET room_id = ?, status = 'agree', room_at = ? WHERE id = ?", [$room['id'], now(), $dealId]);
             $d = self::deal($dealId);
             self::setTitle($room, $d);
-            $sent = $api->tryCall('sendMessage', ['chat_id' => $room['chat_id'], 'text' => self::cardText($d), 'parse_mode' => 'HTML', 'reply_markup' => self::buttons($d)]);
-            if (!empty($sent['message_id'])) {
-                DB::run('UPDATE escrow_deals SET card_msg_id = ? WHERE id = ?', [$sent['message_id'], $dealId]);
-                $api->tryCall('pinChatMessage', ['chat_id' => $room['chat_id'], 'message_id' => $sent['message_id'], 'disable_notification' => true]);
-            }
-            $rules = trim(self::config()['rules']);
-            if ($rules !== '') $api->tryCall('sendMessage', ['chat_id' => $room['chat_id'], 'text' => "📜 <b>Nội quy phòng GDTG</b>\n" . tg_esc($rules), 'parse_mode' => 'HTML']);
+            // Thẻ giao dịch + nội quy chỉ gửi khi CẢ 2 BÊN đã vào phòng (phòng ẩn lịch sử với người mới)
+            $api->tryCall('sendMessage', ['chat_id' => $room['chat_id'], 'text' => "🆕 <b>GDTG #$dealId</b> · " . self::vnd((int)$d['amount']) . ' · ' . tg_esc((string)$d['description']) . "\n⏳ Đang chờ người mua và người bán vào phòng.", 'parse_mode' => 'HTML']);
             return true;
         }
         return false;
@@ -614,10 +609,17 @@ class Escrow
         DB::insert('tg_rule_hits', ['rule_id' => -8, 'group_id' => $group['id'], 'tg_user_id' => $u['id'], 'last_at' => now()]);
         $d = self::deal((int)$d['id']);
         if (!in_array($d['status'], self::OPEN, true)) return;
-        if ($role !== 'mm') {
-            $rules = trim(self::config()['rules']);
-            self::say($d, '👋 ' . ($role === 'buyer' ? 'Người mua' : 'Người bán') . ' ' . self::who($d, $role) . ' đã vào phòng.' . ($rules !== '' ? "\n\n📜 <b>Nội quy phòng GDTG</b>\n" . tg_esc($rules) : ''));
+        if ($role !== 'mm') DB::run("UPDATE escrow_deals SET {$role}_in = 1 WHERE id = ?", [$d['id']]);
+        $d = self::deal((int)$d['id']);
+        $label = fn($r) => ($r === 'buyer' ? 'Người mua' : 'Người bán') . ' ' . self::who($d, $r);
+        if (!$d['buyer_in'] || !$d['seller_in']) { // mới 1 bên → báo chờ bên còn lại, chưa gửi thẻ
+            if ($role !== 'mm') self::say($d, '👋 ' . $label($role) . ' đã vào phòng.' . "\n⏳ Đang chờ " . ($d['buyer_in'] ? 'người bán' : 'người mua') . ' vào phòng, khi đủ 2 bên bot sẽ gửi thẻ giao dịch.');
+            return;
         }
+        // Đủ 2 bên: lần đầu gửi nội quy + thẻ; người vào lại sau đó → gửi lại thẻ để họ thấy
+        $first = !$d['card_msg_id'];
+        $rules = trim(self::config()['rules']);
+        if ($role !== 'mm') self::say($d, '👋 ' . $label($role) . ' đã vào phòng.' . ($first ? ' <b>Đã đủ 2 bên</b>.' : '') . ($rules !== '' && ($first || $role !== 'mm') ? "\n\n📜 <b>Nội quy phòng GDTG</b>\n" . tg_esc($rules) : ''));
         self::repostCard($d);
         if ($d['status'] === 'pay' && $role === 'buyer') self::payInfo($d);
     }
