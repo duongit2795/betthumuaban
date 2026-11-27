@@ -116,7 +116,10 @@ class BotHandler
     {
         if (!$this->isGroup($cm['chat'])) return;
         $group = Repo::upsertGroup($cm['chat'], (int)$this->bot['id']);
-        if (Escrow::isRoom((int)$group['id'])) return; // phòng GDTG: không áp dụng captcha / chống raid / cấm tên…
+        if (Escrow::isRoom((int)$group['id'])) { // phòng GDTG: không áp dụng captcha / chống raid / cấm tên…
+            Escrow::onChatMember($this->api, $group, $cm);
+            return;
+        }
         $user = $cm['new_chat_member']['user'];
         $st = $cm['new_chat_member']['status'] ?? '';
         $map = ['kicked' => 'banned', 'left' => 'left', 'member' => 'member', 'restricted' => null, 'administrator' => 'member', 'creator' => 'member'];
