@@ -321,6 +321,9 @@ class BotHandler
             }
         }
 
+        // Điểm tối thiểu để gửi ảnh / media: chưa đủ điểm → xoá + nhắc (không tính vi phạm)
+        if (!$edited && empty($msg['sender_chat']) && empty($from['is_bot']) && !$isAdmin && $this->mediaGate($group, $s, $msg, $member)) return;
+
         if ($edited) return;
 
         // Tên / @username chứa từ cấm (người đổi tên sau khi vào, thành viên cũ)
@@ -522,6 +525,37 @@ class BotHandler
     }
 
     // ---------- Lệnh ----------
+    /** Chưa đủ điểm mà gửi loại media bị giới hạn → xoá tin, nhắc (tối đa 1 lần / phút / người, tự xoá sau 20 giây). */
+    private function mediaGate(array $group, array $s, array $msg, array $member): bool
+    {
+        $min = (int)($s['media_min_points'] ?? 0);
+        if ($min <= 0) return false;
+        $map = ['photo' => [['photo'], 'ảnh'], 'video' => [['video', 'video_note'], 'video'], 'gif' => [['animation'], 'GIF'], 'sticker' => [['sticker'], 'sticker'], 'voice' => [['voice', 'audio'], 'âm thanh']];
+        $label = null;
+        foreach ((array)($s['media_min_types'] ?? ['photo']) as $t) {
+            if ($t === 'document' && isset($msg['document']) && !isset($msg['animation'])) { $label = 'tệp'; break; }
+            if (isset($map[$t]) && array_intersect($map[$t][0], array_keys($msg))) { $label = $map[$t][1]; break; }
+        }
+        if (!$label) return false;
+        $pts = (int)($member['points'] ?? 0);
+        if ($pts >= $min) return false;
+        $chat = $group['chat_id'];
+        $gid = (int)$group['id'];
+        $this->del($chat, $msg['message_id']);
+        $why = "Cần $min điểm để gửi $label (đang có $pts)";
+        ChatLog::markDeleted($chat, $msg['message_id'], $why);
+        Repo::log($gid, 'Bot', 'delete', $member, $why, ['source' => 'bot', 'reason' => $why]);
+        $uid = (int)$member['tg_user_id'];
+        $last = (int)DB::val('SELECT last_at FROM tg_rule_hits WHERE rule_id = -9 AND group_id = ? AND tg_user_id = ?', [$gid, $uid]);
+        if (now() - $last >= 60) {
+            DB::run('DELETE FROM tg_rule_hits WHERE rule_id = -9 AND group_id = ? AND tg_user_id = ?', [$gid, $uid]);
+            DB::insert('tg_rule_hits', ['rule_id' => -9, 'group_id' => $gid, 'tg_user_id' => $uid, 'last_at' => now()]);
+            $r = $this->api->trySend($chat, '🖼 ' . Repo::mention($member) . " cần ít nhất <b>$min điểm</b> mới được gửi $label trong nhóm (bạn đang có <b>$pts</b> điểm). Hãy tích cực trò chuyện để tích điểm nhé!");
+            if (!empty($r['message_id'])) DelQueue::add($this->api, (int)$this->bot['id'], $chat, [$r['message_id']], 20);
+        }
+        return true;
+    }
+
     private function onCommand(array $group, array $s, array $msg, array $member, bool $isAdmin, string $text): void
     {
         if (!preg_match('~^/([a-zA-Z0-9_]+)(?:@([a-zA-Z0-9_]+))?(?:\s+(.*))?$~s', $text, $mm)) return;

@@ -26,6 +26,8 @@ class Repo
         'lock_document' => false,
         'lock_voice' => false,
         'lock_poll' => false,
+        'media_min_points' => 0,          // điểm tối thiểu để gửi ảnh / media (0 = tắt)
+        'media_min_types' => ['photo'],   // loại áp dụng: photo, video, gif, document, sticker, voice
         'violation_warn' => true,
 
         'mod_notify' => true,
@@ -70,6 +72,7 @@ class Repo
             } else $out[$k] = mb_substr((string)$v, 0, 4000);
         }
         if (isset($out['warn_action']) && !in_array($out['warn_action'], ['mute', 'kick', 'ban'], true)) $out['warn_action'] = 'mute';
+        if (isset($out['media_min_types'])) $out['media_min_types'] = array_values(array_intersect((array)$out['media_min_types'], ['photo', 'video', 'gif', 'document', 'sticker', 'voice']));
         return $out;
     }
 
