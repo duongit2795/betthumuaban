@@ -415,7 +415,7 @@ class Escrow
         $rows = match ($d['status']) {
             'agree' => array_values(array_filter([
                 (!$d['seller_info'] || !$d['buyer_req']) ? [$b('📝 Cách gửi thông tin / yêu cầu', 'howinfo')] : null,
-                [$b('✅ Tôi đồng ý điều khoản', 'agree')],
+                !($d['buyer_ok'] && $d['seller_ok']) ? [$b('✅ Tôi đồng ý điều khoản', 'agree')] : null,
                 self::config()['mm_approve'] && $d['buyer_ok'] && $d['seller_ok'] ? [$b('🛡 TG duyệt điều khoản & bắt đầu', 'mmok')] : null,
                 [$b('❌ Huỷ giao dịch', 'cancel')],
             ])),
@@ -438,7 +438,7 @@ class Escrow
         $api = $room ? self::api($room) : null;
         if (!$api) return;
         if ($d['card_msg_id']) {
-            $api->tryCall('editMessageText', ['chat_id' => $room['chat_id'], 'message_id' => $d['card_msg_id'], 'text' => self::cardText($d), 'parse_mode' => 'HTML', 'reply_markup' => self::buttons($d)]);
+            $api->tryCall('editMessageText', ['chat_id' => $room['chat_id'], 'message_id' => $d['card_msg_id'], 'text' => self::cardText($d), 'parse_mode' => 'HTML', 'reply_markup' => ['inline_keyboard' => []]]);
         }
     }
 
@@ -581,6 +581,13 @@ class Escrow
     /** Thực hiện 1 hành động (nút trong phòng hoặc trên web). Trả về lời nhắn ngắn. */
     public static function act(int $id, string $action, array $from, string $extra = '', bool $asMiddleman = false): string
     {
+        $r = self::actRun($id, $action, $from, $extra, $asMiddleman);
+        if ($action !== 'howinfo') self::step($id); // tin "việc cần làm" mới ở cuối phòng
+        return $r;
+    }
+
+    private static function actRun(int $id, string $action, array $from, string $extra = '', bool $asMiddleman = false): string
+    {
         $d = self::deal($id) ?: throw new HttpError('Không tìm thấy giao dịch');
         $role = $asMiddleman ? 'mm' : self::roleOf($d, $from);
         if (!$role) throw new HttpError('Bạn không thuộc giao dịch này');
@@ -691,11 +698,10 @@ class Escrow
         $d = self::deal($id);
         $label = $kind === 'info' ? '📝 Người bán đã ' . ($changed || $fromWeb ? 'cập nhật' : 'gửi') . ' <b>thông tin hàng</b>' : '📋 Người mua đã ' . ($changed || $fromWeb ? 'cập nhật' : 'gửi') . ' <b>yêu cầu giao dịch</b>';
         $full = $d['seller_info'] && $d['buyer_req'];
-        self::say($d, $label . ":\n" . tg_esc($text) . ($changed ? "\n\n⚠️ Điều khoản thay đổi: 2 bên cần bấm <b>Tôi đồng ý</b> lại." : '') . ($full ? "\n\n👉 Đã đủ thông tin. Hai bên đọc kỹ thẻ giao dịch bên dưới rồi bấm <b>Tôi đồng ý điều khoản</b>." : ''));
-        if ($full) { // gửi thẻ mới xuống cuối + ghim, xoá thẻ cũ → khỏi phải kéo lên tìm nút
-            self::repostCard($d);
-            self::notifyMiddlemen($d, '🧾 #' . $id . ': 2 bên đã gửi đủ thông tin / yêu cầu');
-        } else self::refresh($id);
+        self::say($d, $label . ":\n" . tg_esc($text) . ($changed ? "\n\n⚠️ Điều khoản thay đổi: 2 bên cần bấm <b>Tôi đồng ý</b> lại." : '') . ($full ? "\n\n👉 Đã đủ thông tin. Hai bên đọc kỹ tin đã ghim rồi bấm <b>Tôi đồng ý điều khoản</b> bên dưới." : ''));
+        self::refresh($id); // thẻ thông tin đã ghim cập nhật tại chỗ
+        if ($full) self::notifyMiddlemen($d, '🧾 #' . $id . ': 2 bên đã gửi đủ thông tin / yêu cầu');
+        self::step($id);
         return $kind === 'info' ? 'Đã lưu thông tin hàng' : 'Đã lưu yêu cầu';
     }
 
@@ -726,6 +732,7 @@ class Escrow
         $icon = ['completed' => '🎉', 'refunded' => '↩️', 'cancelled' => '❌'][$status];
         $msg = "$icon <b>GDTG #$id: " . self::STATUS[$status] . "</b>\n$why · bởi " . tg_esc($by) . ($d['room_id'] ? "\n\n🔒 Phòng sẽ đóng sau 5 phút, 2 bên sẽ được mời ra. Cảm ơn đã dùng dịch vụ!" : '');
         self::refresh($id);
+        self::step($id); // giao dịch kết thúc → xoá tin "việc cần làm"
         self::say($d, $msg);
         foreach (['buyer', 'seller'] as $r) if ($d[$r . '_tg']) self::dm($d, $d[$r . '_tg'], $msg);
         Repo::log(null, $by, 'escrow', null, "GDTG #$id: " . self::STATUS[$status] . " · $why", ['source' => 'bot']);
@@ -811,6 +818,7 @@ class Escrow
         $rules = trim(self::config()['rules']);
         if ($role !== 'mm') self::say($d, '👋 ' . $label($role) . ' đã vào phòng.' . ($first ? ' <b>Đã đủ 2 bên</b>.' : '') . ($rules !== '' && ($first || $role !== 'mm') ? "\n\n📜 <b>Nội quy phòng GDTG</b>\n" . tg_esc($rules) : ''));
         self::repostCard($d);
+        self::step((int)$d['id']);
         if ($d['status'] === 'pay' && $role === 'buyer' && self::config()['bot_pay_info']) self::payInfo($d);
     }
 
@@ -835,11 +843,59 @@ class Escrow
         $room = self::room($d);
         $api = $room ? self::api($room) : null;
         if (!$api) return;
-        $sent = $api->tryCall('sendMessage', ['chat_id' => $room['chat_id'], 'text' => self::cardText($d), 'parse_mode' => 'HTML', 'reply_markup' => self::buttons($d)]);
+        $sent = $api->tryCall('sendMessage', ['chat_id' => $room['chat_id'], 'text' => self::cardText($d), 'parse_mode' => 'HTML']);
         if (empty($sent['message_id'])) return;
         if ($d['card_msg_id']) $api->tryCall('deleteMessage', ['chat_id' => $room['chat_id'], 'message_id' => $d['card_msg_id']]);
         DB::run('UPDATE escrow_deals SET card_msg_id = ? WHERE id = ?', [$sent['message_id'], $d['id']]);
         $api->tryCall('pinChatMessage', ['chat_id' => $room['chat_id'], 'message_id' => $sent['message_id'], 'disable_notification' => true]);
+    }
+
+    /** Nội dung ngắn "việc cần làm" theo bước hiện tại */
+    private static function stepText(array $d): string
+    {
+        $c = self::config();
+        $h = "📌 <b>GDTG #{$d['id']}</b> · " . (self::STATUS[$d['status']] ?? $d['status']) . "\n";
+        $wait = fn(array $who) => implode(', ', array_keys(array_filter($who)));
+        switch ($d['status']) {
+            case 'agree':
+                if (!$d['seller_info'] || !$d['buyer_req']) {
+                    return $h . "👉 <b>Việc cần làm:</b>\n" . implode("\n", array_filter([
+                        !$d['seller_info'] ? '• Người bán gửi thông tin hàng: <code>/thongtin nội dung</code>' : null,
+                        !$d['buyer_req'] ? '• Người mua gửi yêu cầu: <code>/yeucau nội dung</code>' : null,
+                    ]));
+                }
+                if (!$d['buyer_ok'] || !$d['seller_ok']) return $h . "👉 Đọc kỹ thông tin ở <b>tin đã ghim</b> rồi bấm <b>Tôi đồng ý điều khoản</b>.\n⏳ Còn chờ: " . $wait(['người mua' => !$d['buyer_ok'], 'người bán' => !$d['seller_ok']]);
+                return $h . '👉 Hai bên đã đồng ý. Chờ <b>trung gian duyệt điều khoản</b>.';
+            case 'pay':
+                return $h . ($d['claimed_at'] ? '⏳ Người mua đã báo chuyển tiền. Chờ <b>trung gian xác nhận</b> đã nhận.'
+                    : '👉 Người mua chuyển <b>' . self::vnd((int)$d['pay_total'] - (int)$d['paid_amount']) . '</b>, nội dung <code>' . self::code($d) . '</code> theo thông tin nhận tiền ' . ($c['bot_pay_info'] ? 'bot đã gửi' : 'trung gian gửi') . ', rồi bấm <b>Tôi đã chuyển tiền</b>.');
+            case 'paid':
+                return $h . '👉 Người bán giao hàng cho người mua rồi bấm <b>Đã giao hàng</b>.' . ($d['seller_bank'] ? '' : "\n• Người bán gửi STK nhận tiền: <code>/stk Ngân hàng Số TK Tên</code>");
+            case 'delivered':
+                return $h . '👉 Người mua kiểm tra hàng, bấm <b>Đã nhận hàng OK</b> hoặc <b>Khiếu nại</b> nếu có vấn đề.';
+            case 'confirmed':
+                return $h . '👉 Trung gian chuyển <b>' . self::vnd((int)$d['seller_gets']) . '</b> cho người bán' . ($d['seller_bank'] ? ' (' . tg_esc((string)$d['seller_bank']) . ')' : ' (người bán gửi <code>/stk</code>)') . ' rồi bấm <b>Giải ngân</b>.';
+            case 'disputed':
+                return $h . '⚠️ Đang khiếu nại. Hai bên trình bày & gửi bằng chứng trong phòng, <b>trung gian</b> sẽ quyết định.';
+        }
+        return $h;
+    }
+
+    /** Gửi tin "việc cần làm" mới ở cuối phòng (kèm nút của bước này), xoá tin cũ. Giao dịch kết thúc → chỉ xoá. */
+    public static function step(int $id): void
+    {
+        $d = self::deal($id);
+        if (!$d) return;
+        $room = self::room($d);
+        $api = $room ? self::api($room) : null;
+        if (!$api) return;
+        if ($d['action_msg_id']) $api->tryCall('deleteMessage', ['chat_id' => $room['chat_id'], 'message_id' => $d['action_msg_id']]);
+        $mid = null;
+        if (in_array($d['status'], self::OPEN, true) && $d['status'] !== 'queue' && $d['buyer_in'] && $d['seller_in']) {
+            $sent = $api->tryCall('sendMessage', ['chat_id' => $room['chat_id'], 'text' => self::stepText($d), 'parse_mode' => 'HTML', 'reply_markup' => self::buttons($d)]);
+            $mid = $sent['message_id'] ?? null;
+        }
+        DB::run('UPDATE escrow_deals SET action_msg_id = ? WHERE id = ?', [$mid, $id]);
     }
 
     /** Tin nhắn trong phòng (đã lưu làm bằng chứng ở ChatLog). Xử lý người lạ, /stk, /gd. */
@@ -871,10 +927,12 @@ class Escrow
             if (!in_array($role, ['buyer', 'seller'], true)) { $api->tryCall('sendMessage', ['chat_id' => $group['chat_id'], 'text' => 'Chỉ người mua / người bán gửi STK.', 'reply_parameters' => ['message_id' => $msg['message_id']]]); return; }
             DB::run("UPDATE escrow_deals SET {$role}_bank = ? WHERE id = ?", [mb_substr(trim(preg_replace('/\s+/u', ' ', $m[1])), 0, 190), $d['id']]);
             self::refresh((int)$d['id']);
+            self::step((int)$d['id']);
             $api->tryCall('sendMessage', ['chat_id' => $group['chat_id'], 'text' => '✅ Đã lưu STK ' . ($role === 'buyer' ? 'người mua (dùng khi hoàn tiền)' : 'người bán (dùng khi giải ngân)') . '.', 'reply_parameters' => ['message_id' => $msg['message_id']]]);
             if (in_array($d['status'], ['confirmed', 'disputed'], true)) self::notifyMiddlemen(self::deal((int)$d['id']), '🏦 ' . ($role === 'buyer' ? 'Người mua' : 'Người bán') . ' gửi STK #' . $d['id'] . ': ' . tg_esc(trim($m[1])));
         } elseif (preg_match('~^/(gd|gdtg)(?:@\w+)?$~i', $text)) {
             self::repostCard($d);
+            self::step((int)$d['id']);
         }
     }
 

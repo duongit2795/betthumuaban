@@ -609,6 +609,7 @@ class DB
         self::addColumn('escrow_deals', 'seller_info', 'TEXT');
         self::addColumn('escrow_deals', 'buyer_req', 'TEXT');
         self::addColumn('escrow_deals', 'mm_ok', 'INT NOT NULL DEFAULT 0');
+        self::addColumn('escrow_deals', 'action_msg_id', $my ? 'BIGINT' : 'INTEGER');   // tin "việc cần làm" ở cuối phòng
         // v22: ví / ân xá / VIP / đổi điểm / mã quà riêng của từng khách thuê (space_id: 0 = chủ web)
         self::addColumn('wallet_tx', 'space_id', 'INT NOT NULL DEFAULT 0');
         self::addColumn('bank_tx', 'space_id', 'INT NOT NULL DEFAULT 0');
