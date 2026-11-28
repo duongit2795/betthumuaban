@@ -4,6 +4,7 @@ defined('APP') or exit;
 class TelegramException extends Exception
 {
     public ?int $tgCode;
+    public $migrateTo = null; // nhóm đã nâng lên siêu nhóm → ID mới
     public function __construct(string $msg, ?int $code = null)
     {
         parent::__construct($msg);
@@ -50,7 +51,9 @@ class Telegram
         if ($body === false) throw new TelegramException('Không kết nối được Telegram: ' . $err);
         $data = json_decode($body, true);
         if (!is_array($data) || empty($data['ok'])) {
-            throw new TelegramException($data['description'] ?? 'Telegram lỗi', $data['error_code'] ?? null);
+            $ex = new TelegramException($data['description'] ?? 'Telegram lỗi', $data['error_code'] ?? null);
+            $ex->migrateTo = $data['parameters']['migrate_to_chat_id'] ?? null;
+            throw $ex;
         }
         self::afterCall($method, $params, $data['result']);
         return $data['result'];

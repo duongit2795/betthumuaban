@@ -187,15 +187,41 @@ class Escrow
     }
 
     /** Kiểm tra phòng đủ điều kiện: siêu nhóm, ẩn lịch sử với người mới, bot đủ quyền, trung gian có trong phòng */
+    /** Nhóm thường được nâng lên siêu nhóm → Telegram đổi ID: cập nhật nhóm + phòng */
+    public static function migrate($oldChatId, $newChatId): void
+    {
+        if (!$newChatId || (string)$oldChatId === (string)$newChatId) return;
+        if (DB::val('SELECT id FROM tg_groups WHERE chat_id = ?', [$newChatId])) { // đã có bản ghi nhóm mới (bot nhận tin từ nhóm mới trước) → bỏ bản cũ
+            $newId = (int)DB::val('SELECT id FROM tg_groups WHERE chat_id = ?', [$newChatId]);
+            $oldId = (int)DB::val('SELECT id FROM tg_groups WHERE chat_id = ?', [$oldChatId]);
+            if ($oldId) { DB::run('UPDATE escrow_rooms SET group_id = ? WHERE group_id = ?', [$newId, $oldId]); DB::run('UPDATE tg_groups SET active = 0 WHERE id = ?', [$oldId]); }
+        } else {
+            DB::run("UPDATE tg_groups SET chat_id = ?, type = 'supergroup' WHERE chat_id = ?", [$newChatId, $oldChatId]);
+        }
+        DB::run('UPDATE escrow_rooms SET chat_id = ? WHERE chat_id = ?', [$newChatId, $oldChatId]);
+        self::clearCache();
+    }
+
     public static function check(array $room): array
     {
         $issues = [];
         $api = self::api($room);
         if (!$api) return ['ok' => false, 'issues' => ['Nhóm chưa có bot hoạt động']];
-        $chat = $api->tryCall('getChat', ['chat_id' => $room['chat_id']]);
+        // ID nhóm có thể đã đổi (nâng lên siêu nhóm): lấy theo bảng nhóm, hoặc theo Telegram báo
+        $gChat = DB::val('SELECT chat_id FROM tg_groups WHERE id = ?', [$room['group_id']]);
+        if ($gChat && (string)$gChat !== (string)$room['chat_id']) { DB::run('UPDATE escrow_rooms SET chat_id = ? WHERE id = ?', [$gChat, $room['id']]); $room['chat_id'] = $gChat; }
+        $chat = null;
+        try { $chat = $api->call('getChat', ['chat_id' => $room['chat_id']]); }
+        catch (TelegramException $e) {
+            if ($e->migrateTo) {
+                self::migrate($room['chat_id'], $e->migrateTo);
+                $room['chat_id'] = $e->migrateTo;
+                $chat = $api->tryCall('getChat', ['chat_id' => $room['chat_id']]);
+            }
+        }
         if (!is_array($chat)) $issues[] = 'Bot không truy cập được nhóm (bot đã bị xoá khỏi nhóm?)';
         else {
-            if (($chat['type'] ?? '') !== 'supergroup') $issues[] = 'Nhóm cần là siêu nhóm (supergroup): bật “Lịch sử chat cho thành viên mới” → Ẩn sẽ tự nâng cấp';
+            if (($chat['type'] ?? '') !== 'supergroup') $issues[] = 'Nhóm đang là nhóm thường, cần nâng lên siêu nhóm: mở nhóm → bấm tên nhóm → Sửa → “Lịch sử chat cho thành viên mới” → chọn Ẩn → Lưu (Telegram tự nâng cấp), rồi bấm Kiểm tra lại';
             if (!empty($chat['has_visible_history'])) $issues[] = 'Chưa ẩn lịch sử chat: Cài đặt nhóm → Lịch sử chat cho thành viên mới → Ẩn';
         }
         $botId = explode(':', $api->token)[0];
