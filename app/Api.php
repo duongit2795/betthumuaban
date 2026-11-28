@@ -158,6 +158,7 @@ class Api
             'gdtg' => 'gdtg',
             'gdtg/create' => 'gdtgCreate',
             'gdtg/act' => 'gdtgAct',
+            'gdtg/terms' => 'gdtgTerms',
             'escrow' => 'escrow',
             'escrow/deal' => 'escrowDeal',
             'escrow/act' => 'escrowAct',
@@ -2751,6 +2752,17 @@ class Api
         return ['message' => $msg, 'deal' => Escrow::row(Escrow::deal($this->int('id')))];
     }
 
+    /** Người bán gửi thông tin hàng / người mua gửi yêu cầu từ web */
+    private function gdtgTerms(): array
+    {
+        $u = Auth::requireUser();
+        if (!$u['tg_user_id']) fail('Chưa liên kết Telegram');
+        $m = DB::get('SELECT first_name, username FROM tg_members WHERE tg_user_id = ? ORDER BY last_active DESC', [$u['tg_user_id']]);
+        $kind = $this->in('kind') === 'info' ? 'info' : 'req';
+        $msg = Escrow::setTerms($this->int('id'), ['id' => (string)$u['tg_user_id'], 'first_name' => $m['first_name'] ?? ($u['display_name'] ?: $u['username']), 'username' => $m['username'] ?? null], $kind, (string)$this->in('text', ''), true);
+        return ['message' => $msg];
+    }
+
     /** Quản trị GDTG (admin web) */
     private function escrow(): array
     {
@@ -2803,7 +2815,7 @@ class Api
     {
         $u = Auth::requireAdmin();
         $act = (string)$this->in('action');
-        if (!in_array($act, ['mmpaid', 'release', 'refund', 'cancel'], true)) fail('Hành động không hợp lệ');
+        if (!in_array($act, ['mmok', 'mmpaid', 'release', 'refund', 'cancel'], true)) fail('Hành động không hợp lệ');
         $msg = Escrow::act($this->int('id'), $act, ['id' => (string)($u['tg_user_id'] ?: 0), 'first_name' => ($u['display_name'] ?: $u['username']) . ' (web)'], '', true);
         return ['message' => $msg];
     }

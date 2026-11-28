@@ -24,13 +24,14 @@ class Escrow
         'deliver_hours' => 24,      // nhắc người bán giao hàng
         'confirm_hours' => 24,      // nhắc người mua xác nhận
         'payout' => 'manual',       // manual: trung gian chuyển khoản tay · wallet: cộng vào ví web của người bán
+        'mm_approve' => true,       // trung gian duyệt điều khoản (thông tin hàng + yêu cầu) rồi mới cho chuyển tiền
         'prefix' => 'GDTG',
         'room_title' => 'Phòng GDTG',
         'bot_id' => 0,              // bot riêng phụ trách GDTG (0 = dùng bot quản lý nhóm)
         'rules' => "• Chỉ giao dịch trong phòng này, không nhắn riêng ngoài.\n• Người mua chỉ chuyển tiền vào tài khoản bot gửi trong phòng, đúng nội dung.\n• Trung gian không bao giờ nhắn riêng xin tiền.\n• Có vấn đề hãy bấm Khiếu nại, trung gian sẽ xử lý.",
     ];
     const STATUS = [
-        'queue' => 'Chờ phòng trống', 'agree' => 'Chờ 2 bên đồng ý', 'pay' => 'Chờ người mua chuyển tiền', 'paid' => 'Đã nhận tiền · chờ giao hàng',
+        'queue' => 'Chờ phòng trống', 'agree' => 'Chốt điều khoản (thông tin hàng, yêu cầu, đồng ý)', 'pay' => 'Chờ người mua chuyển tiền', 'paid' => 'Đã nhận tiền · chờ giao hàng',
         'delivered' => 'Đã giao · chờ người mua xác nhận', 'confirmed' => 'Người mua đã nhận · chờ giải ngân', 'disputed' => 'Đang khiếu nại',
         'completed' => 'Hoàn tất (đã giải ngân)', 'refunded' => 'Đã hoàn tiền người mua', 'cancelled' => 'Đã huỷ',
     ];
@@ -48,6 +49,7 @@ class Escrow
     {
         $c = self::config();
         if (array_key_exists('enabled', $in)) $c['enabled'] = !empty($in['enabled']);
+        if (array_key_exists('mm_approve', $in)) $c['mm_approve'] = !empty($in['mm_approve']);
         if (isset($in['middlemen'])) {
             $list = [];
             foreach (is_array($in['middlemen']) ? $in['middlemen'] : preg_split('/\r?\n/', (string)$in['middlemen']) as $row) {
@@ -378,7 +380,18 @@ class Escrow
             . "💸 Người mua chuyển: <b>" . self::vnd((int)$d['pay_total']) . "</b> · Người bán nhận: <b>" . self::vnd((int)$d['seller_gets']) . "</b>\n"
             . "📍 Trạng thái: <b>" . (self::STATUS[$d['status']] ?? $d['status']) . '</b>';
         if ($d['paid_amount'] > 0 && $d['status'] === 'pay') $t .= "\n🏦 Ngân hàng báo đã nhận " . self::vnd((int)$d['paid_amount']) . ((int)$d['paid_amount'] < (int)$d['pay_total'] ? ', còn thiếu ' . self::vnd((int)$d['pay_total'] - (int)$d['paid_amount']) : ' · chờ trung gian xác nhận');
-        if ($d['status'] === 'agree') $t .= "\n\n👉 Hai bên đọc kỹ điều khoản rồi bấm <b>Tôi đồng ý</b>." . (!$d['buyer_ok'] || !$d['seller_ok'] ? ' Còn chờ: ' . implode(', ', array_filter([!$d['buyer_ok'] ? 'người mua' : null, !$d['seller_ok'] ? 'người bán' : null])) . '.' : '');
+        $t .= "\n\n📝 <b>Thông tin hàng (người bán):</b> " . ($d['seller_info'] ? "\n" . tg_esc((string)$d['seller_info']) : '<i>chưa gửi</i>')
+            . "\n📋 <b>Yêu cầu giao dịch (người mua):</b> " . ($d['buyer_req'] ? "\n" . tg_esc((string)$d['buyer_req']) : '<i>chưa gửi</i>');
+        if ($d['status'] === 'agree') {
+            $ck = fn($ok, $l) => ($ok ? '✅' : '⬜') . ' ' . $l;
+            $t .= "\n\n🧾 <b>Chốt điều khoản trước khi chuyển tiền</b>\n" . implode("\n", array_filter([
+                $ck((bool)$d['seller_info'], 'Người bán gửi thông tin hàng: <code>/thongtin nội dung</code>'),
+                $ck((bool)$d['buyer_req'], 'Người mua gửi yêu cầu: <code>/yeucau nội dung</code>'),
+                $ck((bool)$d['buyer_ok'], 'Người mua bấm Tôi đồng ý'),
+                $ck((bool)$d['seller_ok'], 'Người bán bấm Tôi đồng ý'),
+                $c['mm_approve'] ? $ck((bool)$d['mm_ok'], 'Trung gian duyệt điều khoản') : null,
+            ])) . "\n<i>Sửa thông tin / yêu cầu thì 2 bên phải đồng ý lại.</i>";
+        }
         if ($d['status'] === 'pay') $t .= "\n\n👉 Trung gian xác nhận thủ công khi nhận được tiền. Người mua chuyển đúng <b>" . self::vnd((int)$d['pay_total'] - (int)$d['paid_amount']) . "</b>, nội dung <code>" . self::code($d) . "</code> (xem tin hướng dẫn chuyển khoản). Hạn: " . date('H:i d/m', (int)$d['agreed_at'] + $c['pay_minutes'] * 60) . '.';
         if ($d['status'] === 'paid') $t .= "\n\n👉 Tiền đang được trung gian giữ. Người bán giao hàng rồi bấm <b>Đã giao hàng</b>.";
         if ($d['status'] === 'delivered') $t .= "\n\n👉 Người mua kiểm tra hàng rồi bấm <b>Đã nhận hàng OK</b>, có vấn đề bấm <b>Khiếu nại</b>.";
@@ -395,7 +408,12 @@ class Escrow
         $b = fn($text, $act) => ['text' => $text, 'callback_data' => "esc:{$d['id']}:$act"];
         $mmRow = [$b('💰 Đã chuyển cho người bán (giải ngân)', 'release')];
         $rows = match ($d['status']) {
-            'agree' => [[$b('✅ Tôi đồng ý', 'agree')], [$b('❌ Huỷ giao dịch', 'cancel')]],
+            'agree' => array_values(array_filter([
+                (!$d['seller_info'] || !$d['buyer_req']) ? [$b('📝 Cách gửi thông tin / yêu cầu', 'howinfo')] : null,
+                [$b('✅ Tôi đồng ý điều khoản', 'agree')],
+                self::config()['mm_approve'] && $d['buyer_ok'] && $d['seller_ok'] ? [$b('🛡 TG duyệt điều khoản & bắt đầu', 'mmok')] : null,
+                [$b('❌ Huỷ giao dịch', 'cancel')],
+            ])),
             'pay' => [[$b('💸 Tôi đã chuyển tiền', 'claim')], [$b('🛡 TG xác nhận đã nhận tiền', 'mmpaid')], [$b('❌ Huỷ giao dịch', 'cancel')]],
             'paid' => [[$b('📦 Đã giao hàng', 'delivered')], [$b('⚠️ Khiếu nại', 'dispute')], $mmRow, [$b('↩️ Đã hoàn tiền người mua', 'refund')]],
             'delivered' => [[$b('👍 Đã nhận hàng OK', 'received')], [$b('⚠️ Khiếu nại', 'dispute')], $mmRow, [$b('↩️ Đã hoàn tiền người mua', 'refund')]],
@@ -515,7 +533,7 @@ class Escrow
     {
         if (!preg_match('/^esc:(\d+):(\w+)$/', (string)($cb['data'] ?? ''), $m)) return false;
         $ans = fn(string $t, bool $alert = false) => $api->tryCall('answerCallbackQuery', ['callback_query_id' => $cb['id'], 'text' => $t, 'show_alert' => $alert]);
-        try { $ans(self::act((int)$m[1], $m[2], $cb['from'])); }
+        try { $ans(self::act((int)$m[1], $m[2], $cb['from']), $m[2] === 'howinfo'); }
         catch (HttpError $e) { $ans($e->getMessage(), true); }
         return true;
     }
@@ -533,18 +551,30 @@ class Escrow
             if (!in_array($role, $roles, true)) throw new HttpError(['buyer' => 'Chỉ người mua', 'seller' => 'Chỉ người bán', 'mm' => 'Chỉ trung gian'][$roles[0]] . ' bấm được nút này');
         };
         switch ($action) {
+            case 'howinfo':
+                return "Người bán gõ trong phòng:\n/thongtin hàng gì, chi tiết, bảo hành, cách & thời gian giao\n\nNgười mua gõ:\n/yeucau cần kiểm tra gì, điều kiện nhận hàng (không có thì ghi: không)";
             case 'agree':
                 $need(['buyer', 'seller'], ['agree']);
+                if (!$d['seller_info'] || !$d['buyer_req']) throw new HttpError('Chờ ' . implode(' và ', array_filter([!$d['seller_info'] ? 'người bán gửi thông tin hàng (/thongtin)' : null, !$d['buyer_req'] ? 'người mua gửi yêu cầu (/yeucau)' : null])) . ' rồi mới đồng ý được');
                 DB::run("UPDATE escrow_deals SET {$role}_ok = 1 WHERE id = ?", [$id]);
                 $d = self::deal($id);
                 if ($d['buyer_ok'] && $d['seller_ok'] && $d['buyer_tg'] && $d['seller_tg']) {
-                    DB::run("UPDATE escrow_deals SET status = 'pay', agreed_at = ? WHERE id = ? AND status = 'agree'", [now(), $id]);
-                    self::refresh($id);
-                    self::payInfo(self::deal($id));
-                    return 'Hai bên đã đồng ý, chờ người mua chuyển tiền';
+                    if (self::config()['mm_approve']) {
+                        self::refresh($id);
+                        self::say($d, '🤝 Hai bên đã đồng ý điều khoản. Chờ <b>trung gian duyệt</b> rồi bot gửi thông tin chuyển tiền.');
+                        self::notifyMiddlemen($d, '🧾 #' . $id . ': 2 bên đã chốt điều khoản — vào phòng xem & bấm "TG duyệt điều khoản & bắt đầu"');
+                        return 'Đã đồng ý, chờ trung gian duyệt';
+                    }
+                    return self::startPay($id);
                 }
                 self::refresh($id);
                 return 'Đã ghi nhận, chờ bên còn lại đồng ý';
+            case 'mmok':
+                $need(['mm'], ['agree']);
+                if (!$d['buyer_ok'] || !$d['seller_ok']) throw new HttpError('Chờ 2 bên đồng ý điều khoản trước');
+                DB::run('UPDATE escrow_deals SET mm_ok = 1, middleman = ? WHERE id = ?', [$name, $id]);
+                self::say($d, '🛡 Trung gian <b>' . tg_esc($name) . '</b> đã duyệt điều khoản. Bắt đầu giao dịch!');
+                return self::startPay($id);
             case 'claim':
                 $need(['buyer'], ['pay']);
                 DB::run('UPDATE escrow_deals SET claimed_at = ? WHERE id = ?', [now(), $id]);
@@ -591,6 +621,35 @@ class Escrow
                 return 'Đã huỷ giao dịch';
         }
         throw new HttpError('Hành động không hợp lệ');
+    }
+
+    /** Điều khoản đã chốt → chuyển sang bước chuyển tiền */
+    private static function startPay(int $id): string
+    {
+        DB::run("UPDATE escrow_deals SET status = 'pay', agreed_at = ? WHERE id = ? AND status = 'agree'", [now(), $id]);
+        self::refresh($id);
+        self::payInfo(self::deal($id));
+        return 'Đã chốt điều khoản, chờ người mua chuyển tiền';
+    }
+
+    /** Người bán gửi thông tin hàng / người mua gửi yêu cầu (trong phòng hoặc trên web). Sửa sau khi đồng ý → 2 bên đồng ý lại. */
+    public static function setTerms(int $id, array $from, string $kind, string $text, bool $fromWeb = false): string
+    {
+        $d = self::deal($id) ?: throw new HttpError('Không tìm thấy giao dịch');
+        $role = self::roleOf($d, $from);
+        $need = $kind === 'info' ? 'seller' : 'buyer';
+        if ($role !== $need) throw new HttpError($kind === 'info' ? 'Chỉ người bán gửi thông tin hàng' : 'Chỉ người mua gửi yêu cầu giao dịch');
+        if ($d['status'] !== 'agree') throw new HttpError('Đã chốt điều khoản, không sửa được nữa');
+        $text = trim(mb_substr($text, 0, 1500));
+        if (mb_strlen($text) < 2) throw new HttpError('Nội dung quá ngắn');
+        $col = $kind === 'info' ? 'seller_info' : 'buyer_req';
+        $changed = $d['buyer_ok'] || $d['seller_ok'];
+        DB::run("UPDATE escrow_deals SET $col = ?, buyer_ok = 0, seller_ok = 0, mm_ok = 0 WHERE id = ?", [$text, $id]);
+        $d = self::deal($id);
+        $label = $kind === 'info' ? '📝 Người bán đã ' . ($changed || $fromWeb ? 'cập nhật' : 'gửi') . ' <b>thông tin hàng</b>' : '📋 Người mua đã ' . ($changed || $fromWeb ? 'cập nhật' : 'gửi') . ' <b>yêu cầu giao dịch</b>';
+        self::say($d, $label . ":\n" . tg_esc($text) . ($changed ? "\n\n⚠️ Điều khoản thay đổi: 2 bên cần bấm <b>Tôi đồng ý</b> lại." : '') . ($d['seller_info'] && $d['buyer_req'] ? "\n\n👉 Đã đủ thông tin. Hai bên đọc kỹ trên thẻ ghim rồi bấm <b>Tôi đồng ý điều khoản</b>." : ''));
+        self::refresh($id);
+        return $kind === 'info' ? 'Đã lưu thông tin hàng' : 'Đã lưu yêu cầu';
     }
 
     /** Trung gian giải ngân (người bán) hoặc hoàn tiền (người mua) */
@@ -750,6 +809,12 @@ class Escrow
         }
         if (!$d) return;
         $text = trim((string)($msg['text'] ?? ''));
+        if (preg_match('~^/(thongtin|yeucau)(?:@\w+)?(?:\s+(.+))?$~su', $text, $tm)) {
+            if (trim($tm[2] ?? '') === '') { $api->tryCall('sendMessage', ['chat_id' => $group['chat_id'], 'text' => $tm[1] === 'thongtin' ? 'Cú pháp: /thongtin hàng gì, chi tiết, bảo hành, cách & thời gian giao' : 'Cú pháp: /yeucau cần kiểm tra gì, điều kiện nhận hàng (không có thì ghi: không)', 'reply_parameters' => ['message_id' => $msg['message_id']]]); return; }
+            try { self::setTerms((int)$d['id'], $msg['from'], $tm[1] === 'thongtin' ? 'info' : 'req', $tm[2]); }
+            catch (HttpError $e) { $api->tryCall('sendMessage', ['chat_id' => $group['chat_id'], 'text' => '❌ ' . $e->getMessage(), 'reply_parameters' => ['message_id' => $msg['message_id']]]); }
+            return;
+        }
         if (preg_match('~^/stk(?:@\w+)?\s+(.{6,})$~su', $text, $m)) {
             $role = self::roleOf($d, $msg['from']);
             if (!in_array($role, ['buyer', 'seller'], true)) { $api->tryCall('sendMessage', ['chat_id' => $group['chat_id'], 'text' => 'Chỉ người mua / người bán gửi STK.', 'reply_parameters' => ['message_id' => $msg['message_id']]]); return; }
@@ -798,6 +863,7 @@ class Escrow
             'buyer' => ['tg' => $d['buyer_tg'] ? (string)$d['buyer_tg'] : null, 'name' => $d['buyer_name'], 'username' => $d['buyer_username'], 'ok' => (bool)$d['buyer_ok'], 'bank' => $d['buyer_bank']],
             'seller' => ['tg' => $d['seller_tg'] ? (string)$d['seller_tg'] : null, 'name' => $d['seller_name'], 'username' => $d['seller_username'], 'ok' => (bool)$d['seller_ok'], 'bank' => $d['seller_bank']],
             'room' => $d['room_id'] ? (int)DB::val('SELECT no FROM escrow_rooms WHERE id = ?', [$d['room_id']]) : null, 'invite' => in_array($d['status'], self::OPEN, true) ? self::invite($d) : null,
+            'seller_info' => $d['seller_info'] ?? null, 'buyer_req' => $d['buyer_req'] ?? null, 'mm_ok' => (bool)($d['mm_ok'] ?? 0),
             'middleman' => $d['middleman'], 'dispute_by' => $d['dispute_by'], 'dispute_reason' => $d['dispute_reason'], 'note' => $d['note'], 'code' => self::code($d),
             'created_at' => (int)$d['created_at'], 'paid_at' => $d['paid_at'] ? (int)$d['paid_at'] : null, 'closed_at' => $d['closed_at'] ? (int)$d['closed_at'] : null];
         if ($full) $r['transcript'] = json_decode((string)$d['transcript'], true) ?: null;

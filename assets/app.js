@@ -4695,13 +4695,15 @@
   }
   function escDealSheet(id, admin, onDone) {
     api('escrow/deal', undefined, { query: { id } }).then((d) => {
-      const acts = admin ? [['mmpaid', '🛡 Xác nhận đã nhận tiền', ['agree', 'pay']], ['release', '💰 Đã chuyển cho người bán (giải ngân)', ['paid', 'delivered', 'confirmed', 'disputed']],
+      const acts = admin ? [...(d.buyer.ok && d.seller.ok && !d.mm_ok ? [['mmok', '🛡 Duyệt điều khoản & bắt đầu', ['agree']]] : []), ['mmpaid', '🛡 Xác nhận đã nhận tiền', ['agree', 'pay']], ['release', '💰 Đã chuyển cho người bán (giải ngân)', ['paid', 'delivered', 'confirmed', 'disputed']],
         ['refund', '↩️ Đã hoàn tiền người mua', ['paid', 'delivered', 'confirmed', 'disputed']], ['cancel', '❌ Huỷ giao dịch', ['queue', 'agree', 'pay']]].filter(([, , st]) => st.includes(d.status)) : [];
       sheet(`<div class="sheet-head"><h2>GDTG #${d.id}</h2><span class="badge ${ESC_ST[d.status] || ''}">${esc(d.status_label)}</span><button class="btn icon ghost" data-close>${icon('x')}</button></div>
         <div class="card card-pad stack" style="gap:4px;margin-bottom:12px">
           <div class="small">🛒 Người mua: <b>${escWho(d.buyer)}</b>${d.buyer.ok ? ' ✅' : ''}${d.buyer.bank ? ` · 🏦 ${esc(d.buyer.bank)}` : ''}</div>
           <div class="small">🏪 Người bán: <b>${escWho(d.seller)}</b>${d.seller.ok ? ' ✅' : ''}${d.seller.bank ? ` · 🏦 ${esc(d.seller.bank)}` : ''}</div>
           <div class="small">📦 ${esc(d.description)}</div>
+          <div class="small" style="white-space:pre-line">📝 <b>Thông tin hàng (người bán):</b> ${d.seller_info ? esc(d.seller_info) : '<i class="muted">chưa gửi</i>'}</div>
+          <div class="small" style="white-space:pre-line">📋 <b>Yêu cầu (người mua):</b> ${d.buyer_req ? esc(d.buyer_req) : '<i class="muted">chưa gửi</i>'}</div>
           <div class="small">💰 ${money(d.amount)} · phí ${money(d.fee)} · người mua chuyển <b>${money(d.pay_total)}</b> · người bán nhận <b>${money(d.seller_gets)}</b></div>
           ${d.paid_amount ? `<div class="small">🏦 Ngân hàng báo đã nhận: <b>${money(d.paid_amount)}</b>${d.bank_txid ? ` <span class="xs muted mono">${esc(d.bank_txid)}</span>` : ''}</div>` : ''}
           <div class="xs muted">Nội dung CK: <code>${esc(d.code)}</code> · tạo ${fmtDate(d.created_at, true)}${d.room ? ' · phòng ' + d.room : ''}${d.middleman ? ' · xử lý: ' + esc(d.middleman) : ''}</div>
@@ -4726,7 +4728,7 @@
   route('/gdtg', async () => {
     const d = await api('gdtg');
     let role = 'buy';
-    const ACTS = { agree: '✅ Tôi đồng ý', claim: '💸 Tôi đã chuyển tiền', delivered: '📦 Đã giao hàng', received: '👍 Đã nhận hàng OK', dispute: '⚠️ Khiếu nại', cancel: '❌ Huỷ' };
+    const ACTS = { agree: '✅ Tôi đồng ý điều khoản', claim: '💸 Tôi đã chuyển tiền', delivered: '📦 Đã giao hàng', received: '👍 Đã nhận hàng OK', dispute: '⚠️ Khiếu nại', cancel: '❌ Huỷ' };
     const myActs = (x) => {
       const r = x.my_role;
       const map = { agree: [(r === 'buyer' ? !x.buyer.ok : !x.seller.ok) && 'agree', 'cancel'], pay: [r === 'buyer' && 'claim', 'cancel'], paid: [r === 'seller' && 'delivered', 'dispute'], delivered: [r === 'buyer' && 'received', 'dispute'] };
@@ -4736,6 +4738,13 @@
       <div class="row wrap" style="gap:6px"><b class="grow">#${x.id} · ${money(x.amount)}</b><span class="badge ${ESC_ST[x.status] || ''}">${esc(x.status_label)}</span></div>
       <div class="small">${esc(x.description)}</div>
       <div class="xs muted">Bạn là <b>${x.my_role === 'buyer' ? 'người mua' : 'người bán'}</b> · đối tác ${escWho(x.my_role === 'buyer' ? x.seller : x.buyer)} · ${x.my_role === 'buyer' ? `chuyển ${money(x.pay_total)}` : `nhận ${money(x.seller_gets)}`} · ${fmtDate(x.created_at, true)}</div>
+      ${x.status === 'agree' ? `<div class="card" style="box-shadow:none;padding:10px;background:var(--primary-soft)">
+        <div class="xs" style="white-space:pre-line">📝 <b>Thông tin hàng:</b> ${x.seller_info ? esc(x.seller_info) : '<i>chưa gửi</i>'}
+📋 <b>Yêu cầu người mua:</b> ${x.buyer_req ? esc(x.buyer_req) : '<i>chưa gửi</i>'}</div>
+        <form class="stack" data-gterms="${x.id}" data-kind="${x.my_role === 'seller' ? 'info' : 'req'}" style="gap:6px;margin-top:8px">
+          <textarea class="input" name="text" rows="2" maxlength="1500" placeholder="${x.my_role === 'seller' ? 'Thông tin hàng: hàng gì, chi tiết, bảo hành, cách & thời gian giao' : 'Yêu cầu: cần kiểm tra gì, điều kiện nhận hàng (không có thì ghi: không)'}">${esc((x.my_role === 'seller' ? x.seller_info : x.buyer_req) || '')}</textarea>
+          <button class="btn sm soft" style="align-self:flex-start">${x.my_role === 'seller' ? '📝 Lưu thông tin hàng' : '📋 Lưu yêu cầu'}</button></form>
+        <div class="xs muted" style="margin-top:4px">Đủ thông tin 2 bên mới bấm đồng ý được. Sửa sau khi đồng ý thì 2 bên phải đồng ý lại.</div></div>` : ''}
       ${x.status === 'pay' && x.my_role === 'buyer' ? `<div class="xs">💳 Chuyển <b>${money(x.pay_total - x.paid_amount)}</b>, nội dung <code>${esc(x.code)}</code> theo tin trong phòng.</div>` : ''}
       <div class="row wrap" style="gap:6px">${x.invite ? `<a class="btn sm primary" href="${esc(x.invite)}" target="_blank" rel="noopener">🚪 Vào phòng</a><button class="btn sm ghost" data-copy="${esc(x.invite)}">${icon('copy', 'sm')}Copy link mời</button>` : ''}
         ${myActs(x).map((a) => `<button class="btn sm ${a === 'cancel' || a === 'dispute' ? 'soft-danger' : 'soft'}" data-gact="${a}" data-id="${x.id}">${ACTS[a]}</button>`).join('')}
@@ -4759,6 +4768,12 @@
       ${d.deals.length ? `<div class="section-title"><h2>Giao dịch của tôi</h2></div>${d.deals.map(item).join('')}` : ''}`,
       mount: (root) => {
         const f = $('#fgd', root);
+        root.addEventListener('submit', (e) => {
+          const t = e.target.closest('[data-gterms]');
+          if (!t) return;
+          e.preventDefault();
+          withBtn(t.querySelector('button'), async () => { try { const r = await api('gdtg/terms', { id: +t.dataset.gterms, kind: t.dataset.kind, text: t.text.value }); toast(r.message); render(); } catch (err) { toast(err.message, 'err'); } });
+        });
         root.addEventListener('click', async (e) => {
           const r = e.target.closest('[data-grole]');
           if (r) { role = r.dataset.grole; $$('[data-grole]', root).forEach((x) => x.classList.toggle('active', x === r)); $('[data-glbl]', root).textContent = role === 'buy' ? '@username hoặc ID người bán' : '@username hoặc ID người mua'; return; }
@@ -4843,7 +4858,7 @@
         </div>
       </div>
       <form class="hidden stack" data-pane="settings" id="fesc">
-        <div class="card">${sw('enabled', c.enabled, 'Bật giao dịch trung gian', 'Cho phép tạo giao dịch bằng /gdtg và trên web')}</div>
+        <div class="card">${sw('enabled', c.enabled, 'Bật giao dịch trung gian', 'Cho phép tạo giao dịch bằng /gdtg và trên web')}${sw('mm_approve', c.mm_approve, 'Trung gian duyệt điều khoản trước khi chuyển tiền', 'Sau khi người bán gửi thông tin hàng, người mua gửi yêu cầu và 2 bên đồng ý, trung gian bấm duyệt thì bot mới gửi thông tin chuyển tiền')}</div>
         <div class="card card-pad stack">
           <label class="field"><span class="lbl">🤖 Bot phụ trách GDTG</span><select class="input" name="bot_id"><option value="0" ${!c.bot_id ? 'selected' : ''}>Dùng bot quản lý nhóm (không tách riêng)</option>${d.bots.map((b) => `<option value="${b.id}" ${c.bot_id === b.id ? 'selected' : ''}>@${esc(b.username || '?')}${b.name ? ' · ' + esc(b.name) : ''}${b.enabled ? '' : ' (đang tắt)'}</option>`).join('')}</select>
             <div class="hint">Nên dùng <b>1 bot riêng</b> (thêm token ở trang <a href="#/bots">Bot</a>): bot này chỉ làm GDTG (lệnh /gdtg, phòng, nút, nhắn riêng); bot quản lý nhóm sẽ không đụng vào phòng GDTG. Phòng chỉ cần bot GDTG làm quản trị. Trung gian cần bấm Start bot GDTG để nhận thông báo.</div></label>
