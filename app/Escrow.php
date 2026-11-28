@@ -730,7 +730,7 @@ class Escrow
         DB::run('UPDATE escrow_deals SET status = ?, closed_at = ?, note = ? WHERE id = ?', [$status, now(), mb_substr($why, 0, 190), $id]);
         $d = self::deal($id);
         $icon = ['completed' => '🎉', 'refunded' => '↩️', 'cancelled' => '❌'][$status];
-        $msg = "$icon <b>GDTG #$id: " . self::STATUS[$status] . "</b>\n$why · bởi " . tg_esc($by) . ($d['room_id'] ? "\n\n🔒 Phòng sẽ đóng sau 5 phút, 2 bên sẽ được mời ra. Cảm ơn đã dùng dịch vụ!" : '');
+        $msg = "$icon <b>GDTG #$id: " . self::STATUS[$status] . "</b>\n$why · bởi " . tg_esc($by) . ($d['room_id'] ? "\n\n🔒 Sau 5 phút phòng sẽ được dọn (tin nhắn được lưu làm bằng chứng) và 2 bên được mời ra. Cảm ơn đã dùng dịch vụ!" : '');
         self::refresh($id);
         self::step($id); // giao dịch kết thúc → xoá tin "việc cần làm"
         self::say($d, $msg);
@@ -740,13 +740,76 @@ class Escrow
     }
 
     /** Đóng phòng: lưu tin nhắn làm bằng chứng, mời 2 bên ra, đổi tên, trả phòng trống */
+    const FILE_DIR = DATA_DIR . '/escrow';
+    const MAX_FILE = 20 * 1024 * 1024;
+
+    /** Vai trò người gửi trong giao dịch: buyer / seller / mm / bot / sys */
+    private static function roleOfId(array $d, array $r): string
+    {
+        if ($r['kind'] === 'service') return 'sys';
+        $id = (string)$r['tg_user_id'];
+        if ($d['buyer_tg'] && $id === (string)$d['buyer_tg']) return 'buyer';
+        if ($d['seller_tg'] && $id === (string)$d['seller_tg']) return 'seller';
+        if (self::isMiddleman($id)) return 'mm';
+        return !empty($r['is_bot']) ? 'bot' : 'other';
+    }
+
+    /**
+     * Tin nhắn trong phòng của giao dịch, dạng gọn để lưu / hiển thị.
+     * $saveFiles = true: tải ảnh / tệp về data/escrow/<mã GD>/ để xem lại cả khi tin đã bị xoá trên Telegram.
+     */
+    public static function transcriptRows(array $d, int $groupId, bool $saveFiles = false): array
+    {
+        $rows = DB::all('SELECT * FROM tg_messages WHERE group_id = ? AND created_at >= ? ORDER BY message_id LIMIT 2000', [$groupId, (int)$d['room_at'] - 5]);
+        $group = $saveFiles ? Repo::group($groupId) : null;
+        $out = [];
+        $saved = 0;
+        foreach ($rows as $r) {
+            $x = ['mid' => (int)$r['message_id'], 'r' => self::roleOfId($d, $r), 'n' => $r['name'], 'u' => $r['username'], 'id' => (string)$r['tg_user_id'], 'k' => $r['kind'], 'm' => $r['media'],
+                't' => $r['text'], 'del' => (int)$r['deleted'], 'ed' => (int)$r['edited'], 'at' => (int)$r['created_at']];
+            if ($r['reply_to']) { $x['rn'] = $r['reply_name']; $x['rt'] = $r['reply_text']; }
+            if ($r['file_id']) {
+                $x['fn'] = $r['file_name']; $x['mime'] = $r['mime']; $x['size'] = (int)$r['file_size'];
+                if ($saveFiles && $group && $saved < 60 && (int)$r['file_size'] <= self::MAX_FILE && $r['mime'] !== 'application/x-tgsticker') {
+                    try {
+                        [$path, $mime] = ChatLog::download($group, $r, false);
+                        $dir = self::FILE_DIR . '/' . (int)$d['id'];
+                        if (!is_dir($dir)) @mkdir($dir, 0755, true);
+                        @file_put_contents(self::FILE_DIR . '/index.html', '');
+                        $ext = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif', 'video/mp4' => 'mp4', 'application/pdf' => 'pdf'][$mime] ?? 'bin';
+                        $name = $r['message_id'] . '.' . $ext;
+                        if (@copy($path, "$dir/$name")) { $x['f'] = $name; $x['mime'] = $mime; $saved++; }
+                    } catch (Throwable $e) { $x['ferr'] = mb_substr($e->getMessage(), 0, 120); }
+                }
+            }
+            $out[] = $x;
+        }
+        return $out;
+    }
+
+    /** Xoá toàn bộ tin nhắn của giao dịch trong phòng (Telegram chỉ cho bot xoá tin dưới 48 giờ). Trả về số tin đã gửi lệnh xoá. */
+    private static function wipeRoom(Telegram $api, array $room, array $d): int
+    {
+        $ids = array_map('intval', array_column(DB::all('SELECT message_id FROM tg_messages WHERE group_id = ? AND created_at >= ?', [$room['group_id'], (int)$d['room_at'] - 5]), 'message_id'));
+        foreach (['card_msg_id', 'action_msg_id'] as $k) if ($d[$k]) $ids[] = (int)$d[$k];
+        if (!$ids) return 0;
+        // Gồm cả tin bot không ghi lại (VD tin "đã ghim"): xoá theo dải id từ tin đầu tới tin cuối
+        $all = range(min($ids), max($ids) + 5);
+        if (count($all) > 3000) $all = $ids; // dải quá lớn → chỉ xoá các tin đã biết
+        foreach (array_chunk($all, 100) as $chunk) $api->tryCall('deleteMessages', ['chat_id' => $room['chat_id'], 'message_ids' => $chunk]);
+        DB::run("UPDATE tg_messages SET deleted = 1, note = 'Dọn phòng GDTG' WHERE group_id = ? AND created_at >= ?", [$room['group_id'], (int)$d['room_at'] - 5]);
+        return count($all);
+    }
+
     public static function freeRoom(array $room): void
     {
         $d = $room['deal_id'] ? self::deal((int)$room['deal_id']) : null;
         $api = self::api($room);
         if ($d) {
-            $rows = DB::all('SELECT name, username, tg_user_id, kind, media, text, deleted, created_at FROM tg_messages WHERE group_id = ? AND created_at >= ? ORDER BY id LIMIT 1000', [$room['group_id'], (int)$d['room_at'] - 5]);
-            DB::run('UPDATE escrow_deals SET transcript = ? WHERE id = ?', [json_encode(array_map(fn($r) => ['n' => $r['name'], 'u' => $r['username'], 'id' => (string)$r['tg_user_id'], 'k' => $r['kind'], 'm' => $r['media'], 't' => $r['text'], 'del' => (int)$r['deleted'], 'at' => (int)$r['created_at']], $rows), JSON_UNESCAPED_UNICODE), $d['id']]);
+            // 1. Lưu bằng chứng (kèm ảnh / tệp) TRƯỚC khi dọn phòng
+            @set_time_limit(120);
+            $rows = self::transcriptRows($d, (int)$room['group_id'], true);
+            DB::run('UPDATE escrow_deals SET transcript = ? WHERE id = ?', [json_encode($rows, JSON_UNESCAPED_UNICODE), $d['id']]);
             if ($api) {
                 foreach (['buyer', 'seller'] as $r) {
                     if (!$d[$r . '_tg'] || self::isMiddleman($d[$r . '_tg'])) continue;
@@ -759,7 +822,7 @@ class Escrow
         if ($api) {
             if ($room['invite_link']) $api->tryCall('revokeChatInviteLink', ['chat_id' => $room['chat_id'], 'invite_link' => $room['invite_link']]);
             $api->tryCall('unpinAllChatMessages', ['chat_id' => $room['chat_id']]);
-            $api->tryCall('sendMessage', ['chat_id' => $room['chat_id'], 'text' => '🔒 Phòng đã đóng' . ($d ? ' (GDTG #' . $d['id'] . ')' : '') . '. Phòng sẵn sàng cho giao dịch tiếp theo.']);
+            if ($d) self::wipeRoom($api, $room, $d); // 2. Dọn phòng: xoá tin nhắn cũ của giao dịch
         }
         DB::run("UPDATE escrow_rooms SET status = 'free', deal_id = NULL, close_at = NULL, invite_link = NULL WHERE id = ?", [$room['id']]);
         self::setTitle($room, null);

@@ -4689,9 +4689,44 @@
     const mul = { k: 1e3, tr: 1e6, m: 1e6 }[m[2]] || 1;
     return Math.round(parseFloat(mul > 1 ? m[1].replace(',', '.') : m[1].replace(/[.,]/g, '')) * mul);
   };
-  function escTranscript(t) {
+  const ESC_ROLE = { buyer: ['Người mua', 'esc-buyer'], seller: ['Người bán', 'esc-seller'], mm: ['Trung gian', 'esc-mm'], bot: ['Bot', 'esc-bot'], other: ['Khác', 'esc-other'] };
+  const escRole = (m, d) => m.r || (m.k === 'service' ? 'sys' : d && m.id && m.id === d.buyer.tg ? 'buyer' : d && m.id && m.id === d.seller.tg ? 'seller' : 'other');
+  /** Bằng chứng: khung chat dễ đọc, màu theo vai trò, ảnh / tệp đã lưu */
+  function escTranscript(t, d) {
     if (!t || !t.length) return '<div class="xs muted">Chưa có tin nhắn</div>';
-    return `<div class="esc-chat">${t.map((m) => `<div class="esc-msg"><b>${esc(m.n || '?')}</b>${m.u ? ` <span class="muted">@${esc(m.u)}</span>` : ''} <span class="muted xs">${fmtDate(m.at, true)}</span>${m.del ? ' <span class="badge red">đã xoá</span>' : ''}<div>${m.m ? `<i>${esc(m.m)}</i> ` : ''}${esc(m.t || '')}</div></div>`).join('')}</div>`;
+    let day = '';
+    const fileUrl = (m, dl) => m.f ? `api.php?r=escrow/file&id=${d.id}&f=${encodeURIComponent(m.f)}${dl ? '&dl=1' : ''}`
+      : d.live && m.mid ? `api.php?r=chat/media&group_id=${d.live}&message_id=${m.mid}${dl ? '&dl=1' : ''}` : null;
+    return `<div class="esc-chat">${t.map((m) => {
+      const dt = new Date(m.at * 1000), dd = dt.toLocaleDateString('vi-VN');
+      const sep = dd !== day ? ((day = dd), `<div class="esc-day">${dd}</div>`) : '';
+      const time = dt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+      const role = escRole(m, d);
+      if (role === 'sys') return `${sep}<div class="esc-sys">${esc(m.t || m.m || '')} · ${time}</div>`;
+      const [rl, rc] = ESC_ROLE[role] || ESC_ROLE.other;
+      const url = (m.fn !== undefined || m.f || m.mime) ? fileUrl(m) : null;
+      const isImg = url && /^image\//.test(m.mime || '') ;
+      const media = url ? (isImg ? `<a href="${url}" target="_blank" rel="noopener"><img class="esc-img" src="${url}" alt="" loading="lazy"></a>` : `<a class="esc-file" href="${fileUrl(m, true)}">📎 ${esc(m.fn || m.m || 'Tệp đính kèm')}</a>`)
+        : m.m ? `<div class="esc-media">${esc(m.m)}${m.ferr ? ' · không lưu được tệp' : ''}</div>` : '';
+      return `${sep}<div class="esc-row ${rc}"><div class="esc-bubble">
+        <div class="esc-who"><b>${esc(m.n || '?')}</b>${m.u ? ` <span class="muted">@${esc(m.u)}</span>` : ''} <span class="esc-tag">${rl}</span></div>
+        ${m.rt ? `<div class="esc-quote"><b>${esc(m.rn || '')}</b> ${esc(m.rt)}</div>` : ''}
+        ${media}${m.t ? `<div class="esc-text">${esc(m.t)}</div>` : ''}
+        <div class="esc-time">${time}${m.ed ? ' · đã sửa' : ''}${m.del && !d.transcript_saved ? ' · <span style="color:var(--danger)">đã xoá</span>' : ''}</div></div></div>`;
+    }).join('')}</div>`;
+  }
+  /** Tải bằng chứng dạng văn bản */
+  function escExport(d) {
+    const lines = [`GIAO DỊCH TRUNG GIAN #${d.id}`, `Nội dung: ${d.description}`, `Người mua: ${d.buyer.username ? '@' + d.buyer.username : d.buyer.name || d.buyer.tg} (${d.buyer.tg || ''})`,
+      `Người bán: ${d.seller.username ? '@' + d.seller.username : d.seller.name || d.seller.tg} (${d.seller.tg || ''})`, `Số tiền: ${money(d.amount)} · phí ${money(d.fee)} · người mua chuyển ${money(d.pay_total)} · người bán nhận ${money(d.seller_gets)}`,
+      `Thông tin hàng: ${d.seller_info || ''}`, `Yêu cầu: ${d.buyer_req || ''}`, `Trạng thái: ${d.status_label}${d.note ? ' · ' + d.note : ''}`, '', '===== TIN NHẮN ====='];
+    (d.transcript || []).forEach((m) => {
+      const role = escRole(m, d), t = new Date(m.at * 1000).toLocaleString('vi-VN');
+      lines.push(role === 'sys' ? `[${t}] --- ${m.t || m.m || ''}` : `[${t}] ${m.n || '?'}${m.u ? ' @' + m.u : ''} (${(ESC_ROLE[role] || ESC_ROLE.other)[0]}): ${m.rt ? `[trả lời ${m.rn}: ${m.rt}] ` : ''}${m.m ? `<${m.m}${m.fn ? ': ' + m.fn : ''}> ` : ''}${m.t || ''}`);
+    });
+    const url = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' }));
+    const a = document.createElement('a'); a.href = url; a.download = `bang-chung-GDTG-${d.id}.txt`; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
   }
   function escDealSheet(id, admin, onDone) {
     api('escrow/deal', undefined, { query: { id } }).then((d) => {
@@ -4713,8 +4748,9 @@
         </div>
         ${acts.length ? `<div class="stack" style="gap:8px;margin-bottom:12px">${acts.map(([a, l]) => `<button class="btn ${a === 'release' ? 'primary' : a === 'cancel' || a === 'refund' ? 'soft-danger' : 'soft'} block" data-escact="${a}">${l}</button>`).join('')}
           <div class="xs muted">Giải ngân / hoàn tiền: bấm <b>sau khi</b> bạn đã chuyển khoản. Phòng sẽ tự đóng sau 5 phút.</div></div>` : ''}
-        <div class="pv-label">💬 Tin nhắn trong phòng (bằng chứng)</div>${escTranscript(d.transcript)}`, (el, close) => {
+        <div class="row" style="gap:8px;align-items:center;margin-bottom:6px"><div class="pv-label grow" style="margin:0">💬 Tin nhắn trong phòng (bằng chứng${d.live ? ', đang diễn ra' : ''})</div>${d.transcript && d.transcript.length ? '<button class="btn sm ghost" data-escexp>⬇ Tải bằng chứng</button>' : ''}</div>${escTranscript(d.transcript, d)}`, (el, close) => {
         el.addEventListener('click', async (e) => {
+          if (e.target.closest('[data-escexp]')) return escExport(d);
           const b = e.target.closest('[data-escact]');
           if (!b) return;
           const a = b.dataset.escact;
