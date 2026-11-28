@@ -161,6 +161,7 @@ class Api
             'gdtg/terms' => 'gdtgTerms',
             'escrow' => 'escrow',
             'escrow/deal' => 'escrowDeal',
+            'escrow/file' => 'escrowFile',
             'escrow/act' => 'escrowAct',
             'escrow/save' => 'escrowSave',
             'escrow/room/add' => 'escrowRoomAdd',
@@ -224,7 +225,7 @@ class Api
         $writeRoutes = ['install', 'auth/login', 'auth/register', 'auth/logout', 'me/update', 'me/link-code', 'me/unlink'];
         if (!isset($map[$route])) fail('Không tìm thấy API', 404);
         $fn = $map[$route];
-        $isWrite = in_array($route, $writeRoutes, true) || str_contains($route, '/') && !in_array($route, ['system/check-update', 'chat/poll', 'ads/image', 'me/logs', 'amnesty/search', 'users/tx', 'chat/media', 'features/group', 'features/username', 'checkin/config', 'unban/list', 'dm/status', 'escrow/deal'], true);
+        $isWrite = in_array($route, $writeRoutes, true) || str_contains($route, '/') && !in_array($route, ['system/check-update', 'chat/poll', 'ads/image', 'me/logs', 'amnesty/search', 'users/tx', 'chat/media', 'features/group', 'features/username', 'checkin/config', 'unban/list', 'dm/status', 'escrow/deal', 'escrow/file'], true);
         if ($isWrite && $this->method !== 'POST') fail('Phương thức không hợp lệ', 405);
         json_out(['ok' => true, 'data' => $this->$fn()]);
     }
@@ -2801,13 +2802,34 @@ class Api
         $tg = (string)$u['tg_user_id'];
         if (!Access::isWebAdmin($u) && $tg !== (string)$d['buyer_tg'] && $tg !== (string)$d['seller_tg']) fail('Không tìm thấy giao dịch', 404);
         $row = Escrow::row($d, true);
+        $row['live'] = false;
         if (!$row['transcript'] && $d['room_id'] && $d['room_at']) { // đang mở: đọc trực tiếp tin nhắn trong phòng
             $gid = (int)DB::val('SELECT group_id FROM escrow_rooms WHERE id = ?', [$d['room_id']]);
-            $row['transcript'] = array_map(fn($r) => ['n' => $r['name'], 'u' => $r['username'], 'id' => (string)$r['tg_user_id'], 'k' => $r['kind'], 'm' => $r['media'], 't' => $r['text'], 'del' => (int)$r['deleted'], 'at' => (int)$r['created_at']],
-                DB::all('SELECT * FROM tg_messages WHERE group_id = ? AND created_at >= ? ORDER BY id LIMIT 1000', [$gid, (int)$d['room_at'] - 5]));
+            $row['transcript'] = Escrow::transcriptRows($d, $gid);
+            $row['live'] = Access::isWebAdmin($u) ? $gid : false; // admin xem ảnh trực tiếp qua tab Chat
         }
         $row['bank_txid'] = Access::isWebAdmin($u) ? $d['bank_txid'] : null;
         return $row;
+    }
+
+    /** Ảnh / tệp bằng chứng đã lưu của giao dịch (admin web hoặc người mua / bán của giao dịch) */
+    private function escrowFile(): void
+    {
+        $u = Auth::requireUser();
+        $d = Escrow::deal($this->int('id')) ?: fail('Không tìm thấy', 404);
+        $tg = (string)$u['tg_user_id'];
+        if (!Access::isWebAdmin($u) && ($tg === '' || ($tg !== (string)$d['buyer_tg'] && $tg !== (string)$d['seller_tg']))) fail('Không tìm thấy', 404);
+        $name = basename((string)$this->in('f', ''));
+        $path = Escrow::FILE_DIR . '/' . (int)$d['id'] . '/' . $name;
+        if ($name === '' || !is_file($path)) fail('Không tìm thấy tệp', 404);
+        session_write_close();
+        header('Content-Type: ' . (file_mime($path) ?: 'application/octet-stream'));
+        header('Cache-Control: private, max-age=604800');
+        header('X-Content-Type-Options: nosniff');
+        if ($this->in('dl')) header('Content-Disposition: attachment; filename="GDTG' . (int)$d['id'] . '_' . $name . '"');
+        header('Content-Length: ' . filesize($path));
+        readfile($path);
+        exit;
     }
 
     /** Admin web xử lý với vai trò trung gian */
