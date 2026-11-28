@@ -1027,6 +1027,13 @@
           ${sw('lock_document', s.lock_document, 'Tệp tin')}${sw('lock_voice', s.lock_voice, 'Ghi âm / âm thanh')}${sw('lock_poll', s.lock_poll, 'Bình chọn')}
         </div></div>
 
+        <div><div class="section-title"><h2>🖼 Điểm tối thiểu để gửi ảnh / media</h2></div>
+        <div class="card card-pad stack">
+          <label class="field"><span class="lbl">Cần ít nhất (điểm)</span><input class="input" type="number" min="0" name="media_min_points" value="${esc(s.media_min_points || 0)}">
+            <div class="hint">0 = tắt. Thành viên chưa đủ điểm gửi loại bên dưới sẽ bị xoá tin và được nhắc (không tính vi phạm). Quản trị viên được bỏ qua.</div></label>
+          <div class="field"><span class="lbl">Áp dụng cho</span><div class="chips" style="flex-wrap:wrap">${[['photo', 'Ảnh'], ['video', 'Video'], ['gif', 'GIF'], ['document', 'Tệp'], ['sticker', 'Sticker'], ['voice', 'Âm thanh']].map(([k, l]) => { const on = (s.media_min_types || ['photo']).includes(k); return `<label class="chip ${on ? 'active' : ''}" style="cursor:pointer"><input type="checkbox" data-mmt="${k}" ${on ? 'checked' : ''} hidden>${l}</label>`; }).join('')}</div></div>
+        </div></div>
+
         <div><div class="section-title"><h2>📣 Thông báo xử lý</h2></div>
         <div class="card">
           ${sw('mod_notify', s.mod_notify, 'Bot thông báo khi xử lý', 'Gửi tin vào nhóm khi cảnh cáo, cấm chat, cấm, đuổi, gỡ cấm…')}
@@ -1060,10 +1067,12 @@
         <div style="position:sticky;bottom:calc(var(--nav-h) + var(--safe-b) + 10px);z-index:5"><button class="btn primary block" style="height:48px">${icon('check')}Lưu cài đặt</button></div>
       </form>`;
     const mount = (root) => {
+      root.addEventListener('change', (e) => { const c = e.target.closest('[data-mmt]'); if (c) c.parentElement.classList.toggle('active', c.checked); });
       $('#fs', root).onsubmit = async (e) => {
         e.preventDefault();
         const data = formData(e.target);
         const bot_id = data.__bot; delete data.__bot;
+        data.media_min_types = $$('[data-mmt]', e.target).filter((x) => x.checked).map((x) => x.dataset.mmt);
         await withBtn(e.target.querySelector('button.primary'), async () => {
           try { await api('group/settings', { id: g.id, settings: data, bot_id }); toast('Đã lưu cài đặt'); } catch (err) { toast(err.message, 'err'); }
         });
