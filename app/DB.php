@@ -605,6 +605,10 @@ class DB
         self::addColumn('escrow_deals', 'claimed_at', 'INT');
         self::addColumn('escrow_deals', 'buyer_in', 'INT NOT NULL DEFAULT 0');  // đã vào phòng
         self::addColumn('escrow_deals', 'seller_in', 'INT NOT NULL DEFAULT 0');
+        // Chốt điều khoản trước khi chuyển tiền: thông tin hàng (người bán), yêu cầu (người mua), trung gian duyệt
+        self::addColumn('escrow_deals', 'seller_info', 'TEXT');
+        self::addColumn('escrow_deals', 'buyer_req', 'TEXT');
+        self::addColumn('escrow_deals', 'mm_ok', 'INT NOT NULL DEFAULT 0');
         // v22: ví / ân xá / VIP / đổi điểm / mã quà riêng của từng khách thuê (space_id: 0 = chủ web)
         self::addColumn('wallet_tx', 'space_id', 'INT NOT NULL DEFAULT 0');
         self::addColumn('bank_tx', 'space_id', 'INT NOT NULL DEFAULT 0');
