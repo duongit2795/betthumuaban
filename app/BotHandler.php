@@ -127,6 +127,8 @@ class BotHandler
                 return;
             }
             if (!$this->isGroup($chat)) return;
+            if (isset($msg['migrate_to_chat_id'])) { Escrow::migrate($chat['id'], $msg['migrate_to_chat_id']); return; } // nhóm nâng lên siêu nhóm
+            if (isset($msg['migrate_from_chat_id'])) { Escrow::migrate($msg['migrate_from_chat_id'], $chat['id']); return; }
             $gid = (int)DB::val('SELECT id FROM tg_groups WHERE chat_id = ?', [$chat['id']]);
             if ($gid && Escrow::isRoom($gid)) { $this->onMessage($msg, isset($u['edited_message'])); return; } // lưu bằng chứng + xử lý trong phòng
             if (!isset($u['edited_message']) && preg_match('~^/gdtg(?:@\w+)?(?:\s|$)~i', (string)($msg['text'] ?? ''))) $this->escrowCmd($msg);
@@ -242,6 +244,7 @@ class BotHandler
 
         if (isset($msg['migrate_to_chat_id'])) {
             DB::run('UPDATE tg_groups SET chat_id = ?, type = ? WHERE chat_id = ?', [$msg['migrate_to_chat_id'], 'supergroup', $chat['id']]);
+            Escrow::migrate($chat['id'], $msg['migrate_to_chat_id']); // phòng GDTG theo ID mới
             return;
         }
         if (isset($msg['migrate_from_chat_id'])) return;
