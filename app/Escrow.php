@@ -24,11 +24,13 @@ class Escrow
         'deliver_hours' => 24,      // nhắc người bán giao hàng
         'confirm_hours' => 24,      // nhắc người mua xác nhận
         'payout' => 'manual',       // manual: trung gian chuyển khoản tay · wallet: cộng vào ví web của người bán
-        'mm_approve' => true,       // trung gian duyệt điều khoản (thông tin hàng + yêu cầu) rồi mới cho chuyển tiền
+        'mm_approve' => true,
+        'bot_pay_info' => false,    // bot tự gửi QR / số tài khoản sau khi duyệt (tắt: trung gian tự gửi)
+        'tags' => true,             // đổi tag người mua / người bán trong phòng       // trung gian duyệt điều khoản (thông tin hàng + yêu cầu) rồi mới cho chuyển tiền
         'prefix' => 'GDTG',
         'room_title' => 'Phòng GDTG',
         'bot_id' => 0,              // bot riêng phụ trách GDTG (0 = dùng bot quản lý nhóm)
-        'rules' => "• Chỉ giao dịch trong phòng này, không nhắn riêng ngoài.\n• Người mua chỉ chuyển tiền vào tài khoản bot gửi trong phòng, đúng nội dung.\n• Trung gian không bao giờ nhắn riêng xin tiền.\n• Có vấn đề hãy bấm Khiếu nại, trung gian sẽ xử lý.",
+        'rules' => "• Chỉ giao dịch trong phòng này, không nhắn riêng ngoài.\n• Người mua chỉ chuyển tiền theo thông tin nhận tiền được gửi trong phòng này, đúng nội dung.\n• Trung gian không bao giờ nhắn riêng xin tiền.\n• Có vấn đề hãy bấm Khiếu nại, trung gian sẽ xử lý.",
     ];
     const STATUS = [
         'queue' => 'Chờ phòng trống', 'agree' => 'Chốt điều khoản (thông tin hàng, yêu cầu, đồng ý)', 'pay' => 'Chờ người mua chuyển tiền', 'paid' => 'Đã nhận tiền · chờ giao hàng',
@@ -50,6 +52,8 @@ class Escrow
         $c = self::config();
         if (array_key_exists('enabled', $in)) $c['enabled'] = !empty($in['enabled']);
         if (array_key_exists('mm_approve', $in)) $c['mm_approve'] = !empty($in['mm_approve']);
+        if (array_key_exists('bot_pay_info', $in)) $c['bot_pay_info'] = !empty($in['bot_pay_info']);
+        if (array_key_exists('tags', $in)) $c['tags'] = !empty($in['tags']);
         if (isset($in['middlemen'])) {
             $list = [];
             foreach (is_array($in['middlemen']) ? $in['middlemen'] : preg_split('/\r?\n/', (string)$in['middlemen']) as $row) {
@@ -230,7 +234,8 @@ class Escrow
         $me = $api->tryCall('getChatMember', ['chat_id' => $room['chat_id'], 'user_id' => $botId]);
         if (!is_array($me) || ($me['status'] ?? '') !== 'administrator') $issues[] = 'Bot chưa là quản trị viên';
         else {
-            foreach (['can_invite_users' => 'Mời thành viên qua link', 'can_restrict_members' => 'Cấm thành viên', 'can_pin_messages' => 'Ghim tin', 'can_delete_messages' => 'Xoá tin', 'can_change_info' => 'Đổi thông tin nhóm'] as $k => $l) {
+            foreach (['can_invite_users' => 'Mời thành viên qua link', 'can_restrict_members' => 'Cấm thành viên', 'can_pin_messages' => 'Ghim tin', 'can_delete_messages' => 'Xoá tin', 'can_change_info' => 'Đổi thông tin nhóm']
+                + (self::config()['tags'] ? ['can_manage_tags' => 'Đổi tag thành viên'] : []) as $k => $l) {
                 if (empty($me[$k])) $issues[] = "Bot thiếu quyền: $l";
             }
         }
@@ -392,7 +397,7 @@ class Escrow
                 $c['mm_approve'] ? $ck((bool)$d['mm_ok'], 'Trung gian duyệt điều khoản') : null,
             ])) . "\n<i>Sửa thông tin / yêu cầu thì 2 bên phải đồng ý lại.</i>";
         }
-        if ($d['status'] === 'pay') $t .= "\n\n👉 Trung gian xác nhận thủ công khi nhận được tiền. Người mua chuyển đúng <b>" . self::vnd((int)$d['pay_total'] - (int)$d['paid_amount']) . "</b>, nội dung <code>" . self::code($d) . "</code> (xem tin hướng dẫn chuyển khoản). Hạn: " . date('H:i d/m', (int)$d['agreed_at'] + $c['pay_minutes'] * 60) . '.';
+        if ($d['status'] === 'pay') $t .= "\n\n👉 Trung gian xác nhận thủ công khi nhận được tiền. Người mua chuyển đúng <b>" . self::vnd((int)$d['pay_total'] - (int)$d['paid_amount']) . "</b>, nội dung <code>" . self::code($d) . "</code> (theo thông tin trung gian gửi trong phòng). Hạn: " . date('H:i d/m', (int)$d['agreed_at'] + $c['pay_minutes'] * 60) . '.';
         if ($d['status'] === 'paid') $t .= "\n\n👉 Tiền đang được trung gian giữ. Người bán giao hàng rồi bấm <b>Đã giao hàng</b>.";
         if ($d['status'] === 'delivered') $t .= "\n\n👉 Người mua kiểm tra hàng rồi bấm <b>Đã nhận hàng OK</b>, có vấn đề bấm <b>Khiếu nại</b>.";
         if (in_array($d['status'], ['confirmed', 'disputed'], true)) $t .= "\n\n👉 Trung gian đang xử lý." . ($d['status'] === 'disputed' && $d['dispute_reason'] ? "\n⚠️ Khiếu nại: " . tg_esc((string)$d['dispute_reason']) : '');
@@ -449,17 +454,52 @@ class Escrow
         if ($room && ($api = self::api($room))) $api->tryCall('sendMessage', ['chat_id' => $room['chat_id'], 'text' => $text, 'parse_mode' => 'HTML'] + $extra);
     }
 
-    private static function dm(array $d, $tgId, string $text): void
+    private static function dm(array $d, $tgId, string $text, array $extra = []): void
     {
         $room = self::room($d);
         $api = $room ? self::api($room) : self::botApi();
-        if ($api && $tgId) $api->tryCall('sendMessage', ['chat_id' => $tgId, 'text' => $text, 'parse_mode' => 'HTML', 'link_preview_options' => ['is_disabled' => true]]);
+        if ($api && $tgId) $api->tryCall('sendMessage', ['chat_id' => $tgId, 'text' => $text, 'parse_mode' => 'HTML', 'link_preview_options' => ['is_disabled' => true]] + $extra);
+    }
+
+    /** Link mở phòng (cho người đã ở trong phòng, VD trung gian): nhóm công khai → t.me/username; nhóm riêng → t.me/c/… tới thẻ giao dịch */
+    public static function roomLink(array $d): ?string
+    {
+        $room = self::room($d);
+        if (!$room) return null;
+        $un = DB::val('SELECT username FROM tg_groups WHERE id = ?', [$room['group_id']]);
+        if ($un) return 'https://t.me/' . $un . ($d['card_msg_id'] ? '/' . $d['card_msg_id'] : '');
+        $cid = (string)$room['chat_id'];
+        if (!str_starts_with($cid, '-100')) return null;
+        return 'https://t.me/c/' . substr($cid, 4) . '/' . ($d['card_msg_id'] ?: 1);
     }
 
     public static function notifyMiddlemen(array $d, string $title): void
     {
-        $text = "🛡 <b>$title</b>\n#{$d['id']} · " . self::vnd((int)$d['amount']) . ' · ' . tg_esc((string)$d['description']) . "\n📍 " . (self::STATUS[$d['status']] ?? $d['status']);
-        foreach (self::config()['middlemen'] as $mm) self::dm($d, $mm['id'], $text);
+        $d = self::deal((int)$d['id']) ?: $d;
+        $room = self::room($d);
+        $text = "🛡 <b>$title</b>\n"
+            . "📦 " . tg_esc((string)$d['description']) . "\n"
+            . "💰 " . self::vnd((int)$d['amount']) . ' · phí ' . self::vnd((int)$d['fee']) . ' · người mua chuyển <b>' . self::vnd((int)$d['pay_total']) . '</b> · người bán nhận ' . self::vnd((int)$d['seller_gets']) . "\n"
+            . "🛒 Người mua: " . self::who($d, 'buyer') . ($d['buyer_ok'] ? ' ✅' : '') . "\n"
+            . "🏪 Người bán: " . self::who($d, 'seller') . ($d['seller_ok'] ? ' ✅' : '') . "\n"
+            . ($d['seller_info'] ? "📝 Thông tin hàng: " . tg_esc(mb_substr((string)$d['seller_info'], 0, 300)) . "\n" : '')
+            . ($d['buyer_req'] ? "📋 Yêu cầu: " . tg_esc(mb_substr((string)$d['buyer_req'], 0, 300)) . "\n" : '')
+            . ($d['paid_amount'] ? "🏦 Ngân hàng báo: " . self::vnd((int)$d['paid_amount']) . "\n" : '')
+            . ($d['seller_bank'] ? "🏦 STK người bán: " . tg_esc((string)$d['seller_bank']) . "\n" : '')
+            . "📍 " . (self::STATUS[$d['status']] ?? $d['status']) . ($room ? ' · Phòng ' . $room['no'] : ' · chưa có phòng')
+            . "\n🔖 Mã: <code>#{$d['id']}</code> · Nội dung CK: <code>" . self::code($d) . '</code>';
+        $link = self::roomLink($d);
+        $extra = $link ? ['reply_markup' => ['inline_keyboard' => [[['text' => '🚪 Mở phòng GDTG #' . $d['id'], 'url' => $link]]]]] : [];
+        foreach (self::config()['middlemen'] as $mm) self::dm($d, $mm['id'], $text, $extra);
+    }
+
+    /** Đổi tag thành viên trong phòng (Bot API setChatMemberTag; tối đa 16 ký tự). '' = gỡ tag. */
+    private static function tag(array $d, $tgId, string $tag): void
+    {
+        if (!self::config()['tags'] || !$tgId) return;
+        $room = self::room($d);
+        $api = $room ? self::api($room) : null;
+        if ($api) $api->tryCall('setChatMemberTag', ['chat_id' => $room['chat_id'], 'user_id' => $tgId, 'tag' => $tag]);
     }
 
     // ================= Thanh toán =================
@@ -561,7 +601,7 @@ class Escrow
                 if ($d['buyer_ok'] && $d['seller_ok'] && $d['buyer_tg'] && $d['seller_tg']) {
                     if (self::config()['mm_approve']) {
                         self::refresh($id);
-                        self::say($d, '🤝 Hai bên đã đồng ý điều khoản. Chờ <b>trung gian duyệt</b> rồi bot gửi thông tin chuyển tiền.');
+                        self::say($d, '🤝 Hai bên đã đồng ý điều khoản. Chờ <b>trung gian duyệt</b> để bắt đầu bước chuyển tiền.');
                         self::notifyMiddlemen($d, '🧾 #' . $id . ': 2 bên đã chốt điều khoản — vào phòng xem & bấm "TG duyệt điều khoản & bắt đầu"');
                         return 'Đã đồng ý, chờ trung gian duyệt';
                     }
@@ -627,8 +667,11 @@ class Escrow
     private static function startPay(int $id): string
     {
         DB::run("UPDATE escrow_deals SET status = 'pay', agreed_at = ? WHERE id = ? AND status = 'agree'", [now(), $id]);
+        $d = self::deal($id);
         self::refresh($id);
-        self::payInfo(self::deal($id));
+        if (self::config()['bot_pay_info']) self::payInfo($d);
+        else self::say($d, "💳 <b>Trung gian sẽ gửi thông tin nhận tiền (QR / số tài khoản) ngay trong phòng.</b>\n🛒 Người mua chuyển đúng <b>" . self::vnd((int)$d['pay_total']) . "</b>, nội dung <code>" . self::code($d) . "</code>, rồi bấm <b>💸 Tôi đã chuyển tiền</b>.\n⚠️ Chỉ chuyển theo thông tin trung gian gửi trong phòng này.");
+        self::notifyMiddlemen($d, '💳 #' . $id . ': đã duyệt điều khoản — gửi QR / STK nhận tiền cho người mua trong phòng');
         return 'Đã chốt điều khoản, chờ người mua chuyển tiền';
     }
 
@@ -647,8 +690,12 @@ class Escrow
         DB::run("UPDATE escrow_deals SET $col = ?, buyer_ok = 0, seller_ok = 0, mm_ok = 0 WHERE id = ?", [$text, $id]);
         $d = self::deal($id);
         $label = $kind === 'info' ? '📝 Người bán đã ' . ($changed || $fromWeb ? 'cập nhật' : 'gửi') . ' <b>thông tin hàng</b>' : '📋 Người mua đã ' . ($changed || $fromWeb ? 'cập nhật' : 'gửi') . ' <b>yêu cầu giao dịch</b>';
-        self::say($d, $label . ":\n" . tg_esc($text) . ($changed ? "\n\n⚠️ Điều khoản thay đổi: 2 bên cần bấm <b>Tôi đồng ý</b> lại." : '') . ($d['seller_info'] && $d['buyer_req'] ? "\n\n👉 Đã đủ thông tin. Hai bên đọc kỹ trên thẻ ghim rồi bấm <b>Tôi đồng ý điều khoản</b>." : ''));
-        self::refresh($id);
+        $full = $d['seller_info'] && $d['buyer_req'];
+        self::say($d, $label . ":\n" . tg_esc($text) . ($changed ? "\n\n⚠️ Điều khoản thay đổi: 2 bên cần bấm <b>Tôi đồng ý</b> lại." : '') . ($full ? "\n\n👉 Đã đủ thông tin. Hai bên đọc kỹ thẻ giao dịch bên dưới rồi bấm <b>Tôi đồng ý điều khoản</b>." : ''));
+        if ($full) { // gửi thẻ mới xuống cuối + ghim, xoá thẻ cũ → khỏi phải kéo lên tìm nút
+            self::repostCard($d);
+            self::notifyMiddlemen($d, '🧾 #' . $id . ': 2 bên đã gửi đủ thông tin / yêu cầu');
+        } else self::refresh($id);
         return $kind === 'info' ? 'Đã lưu thông tin hàng' : 'Đã lưu yêu cầu';
     }
 
@@ -696,6 +743,7 @@ class Escrow
             if ($api) {
                 foreach (['buyer', 'seller'] as $r) {
                     if (!$d[$r . '_tg'] || self::isMiddleman($d[$r . '_tg'])) continue;
+                    self::tag($d, $d[$r . '_tg'], '');
                     $api->tryCall('banChatMember', ['chat_id' => $room['chat_id'], 'user_id' => $d[$r . '_tg'], 'until_date' => now() + 60]);
                     $api->tryCall('unbanChatMember', ['chat_id' => $room['chat_id'], 'user_id' => $d[$r . '_tg'], 'only_if_banned' => true]);
                 }
@@ -748,7 +796,10 @@ class Escrow
         DB::insert('tg_rule_hits', ['rule_id' => -8, 'group_id' => $group['id'], 'tg_user_id' => $u['id'], 'last_at' => now()]);
         $d = self::deal((int)$d['id']);
         if (!in_array($d['status'], self::OPEN, true)) return;
-        if ($role !== 'mm') DB::run("UPDATE escrow_deals SET {$role}_in = 1 WHERE id = ?", [$d['id']]);
+        if ($role !== 'mm') {
+            DB::run("UPDATE escrow_deals SET {$role}_in = 1 WHERE id = ?", [$d['id']]);
+            self::tag($d, $u['id'], $role === 'buyer' ? 'Người mua' : 'Người bán');
+        }
         $d = self::deal((int)$d['id']);
         $label = fn($r) => ($r === 'buyer' ? 'Người mua' : 'Người bán') . ' ' . self::who($d, $r);
         if (!$d['buyer_in'] || !$d['seller_in']) { // mới 1 bên → báo chờ bên còn lại, chưa gửi thẻ
@@ -760,7 +811,7 @@ class Escrow
         $rules = trim(self::config()['rules']);
         if ($role !== 'mm') self::say($d, '👋 ' . $label($role) . ' đã vào phòng.' . ($first ? ' <b>Đã đủ 2 bên</b>.' : '') . ($rules !== '' && ($first || $role !== 'mm') ? "\n\n📜 <b>Nội quy phòng GDTG</b>\n" . tg_esc($rules) : ''));
         self::repostCard($d);
-        if ($d['status'] === 'pay' && $role === 'buyer') self::payInfo($d);
+        if ($d['status'] === 'pay' && $role === 'buyer' && self::config()['bot_pay_info']) self::payInfo($d);
     }
 
     /** chat_member trong phòng: người mua / bán vào → gửi lại thẻ (phòng có thể đang ẩn tin "đã vào nhóm") */
